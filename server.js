@@ -4,6 +4,7 @@ const path = require('path');
 const cors = require('cors');
 const multer = require('multer');
 const { exec } = require('child_process');
+const marked = require('marked'); // 💡 移到顶层引入
 
 const app = express();
 app.use(cors());
@@ -24,9 +25,8 @@ const ASSETS_DIR = path.join(PUBLIC_DIR, 'assets');
 const FONTS_DIR = path.join(PUBLIC_DIR, 'fonts');
 const LIBRARY_DIR = path.join(__dirname, 'library');
 
-// 💡 前端小说相关目录
-const NOVEL_FRONTEND_DIR = path.join(DOCS_DIR, 'novel'); // 用户手写组件的地方
-const NOVEL_CHAPTERS_DIR = path.join(NOVEL_FRONTEND_DIR, 'chapters'); // 专门用来同步小说 md 文件的地方
+const NOVEL_FRONTEND_DIR = path.join(DOCS_DIR, 'novel'); 
+const NOVEL_CHAPTERS_DIR = path.join(NOVEL_FRONTEND_DIR, 'chapters'); 
 
 fs.ensureDirSync(PUBLIC_DIR);
 fs.ensureDirSync(ASSETS_DIR);
@@ -38,7 +38,6 @@ fs.ensureDirSync(NOVEL_CHAPTERS_DIR);
 app.use('/public', express.static(PUBLIC_DIR));
 app.use('/assets', express.static(path.join(DOCS_DIR, 'assets')));
 
-// 💡 全局系统黑名单：在后台文件树、搜索、统计中绝对不显示这些文件夹
 const IGNORE_DIRS = ['assets', 'public', 'components', 'node_modules', '.vitepress', 'website', 'novel', 'chapters'];
 
 // ================= 图片上传配置 =================
@@ -234,7 +233,6 @@ app.get('/api/finance', async (req, res) => {
       stocks: [
         { symbol: 'TMC', name: '秋月商会 (The Moonvale Co.)', basePrice: 100, currentPrice: 100, history: [] }
       ],
-      // 💡 新金本位汇率数据：基准设为 Gold（黄金）
       currencies: [
         { symbol: 'Gold', name: '黄金 (基准)', basePrice: 1, currentPrice: 1 },
         { symbol: 'GC', name: '帝国金币', basePrice: 0.1, currentPrice: 0.1 },
@@ -487,6 +485,118 @@ app.post('/api/library/rename', async (req, res) => {
   }
 });
 
+// 💡 核心升级：一键导出多格式
+app.get('/api/library/export', async (req, res) => {
+  try {
+    const bookName = req.query.book;
+    const format = req.query.format || 'html'; // 'html', 'txt', 'novel'
+    if (!bookName) return res.status(400).send('缺少书籍名称');
+
+    const bookDir = path.join(LIBRARY_DIR, bookName);
+    if (!fs.existsSync(bookDir)) return res.status(404).send('找不到该书籍文件夹');
+
+    const files = fs.readdirSync(bookDir).filter(f => f.endsWith('.md') && !f.startsWith('.'));
+    files.sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+
+    if (format === 'txt' || format === 'novel') {
+      let allText = '';
+      for (const file of files) {
+        const title = file.replace('.md', '');
+        const rawContent = fs.readFileSync(path.join(bookDir, file), 'utf-8');
+        
+        // 去除 HTML 标签，转回纯文本
+        let cleanText = rawContent
+          .replace(/<br\s*\/?>/gi, '\n')
+          .replace(/<\/div>/gi, '\n')
+          .replace(/<\/p>/gi, '\n')
+          .replace(/<[^>]+>/g, '')
+          .replace(/&#12288;/g, '　')
+          .replace(/&nbsp;/g, ' ')
+          .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+
+        // 清理多余空行，去除行首尾空白
+        cleanText = cleanText.split('\n').map(line => line.trim()).filter(line => line !== '').join('\n');
+
+        if (format === 'novel') {
+          // 网文格式：章节标题独占一行，正文首行全角缩进
+          const paragraphs = cleanText.split('\n').filter(p => p.trim() !== '');
+          allText += `\n\n${title}\n\n`;
+          paragraphs.forEach(p => {
+             // 如果已经有缩进就不重复加了
+             if (p.startsWith('　　')) allText += `${p}\n`;
+             else allText += `　　${p}\n`;
+          });
+        } else {
+          // 纯 TXT 格式
+          allText += `\n\n===== ${title} =====\n\n${cleanText}\n`;
+        }
+      }
+
+      res.setHeader('Content-Type', 'text/plain; charset=utf-8');
+      res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(bookName)}.txt"`);
+      return res.send(allText);
+    }
+
+    // 默认 HTML 格式
+    let tocHtml = '<ul>';
+    let contentHtml = '';
+
+    for (const file of files) {
+      const title = file.replace('.md', '');
+      const rawContent = fs.readFileSync(path.join(bookDir, file), 'utf-8');
+      const parsedHtml = marked.parse(rawContent);
+
+      tocHtml += `<li><a href="#chapter-${title}">${title}</a></li>`;
+      contentHtml += `<div class="chapter" id="chapter-${title}">${parsedHtml}</div><div class="page-break"></div>`;
+    }
+    tocHtml += '</ul>';
+
+    const htmlTemplate = `
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>${bookName} - 幻想域小说集</title>
+  <style>
+    body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background-color: #f4f4f4; color: #333; line-height: 2; margin: 0; padding: 0; font-size: 18px; }
+    .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 60px 80px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-radius: 8px; margin-top: 40px; margin-bottom: 40px; }
+    h1.book-title { text-align: center; font-size: 36px; color: #111; margin-bottom: 10px; }
+    .book-subtitle { text-align: center; color: #888; font-size: 16px; margin-bottom: 50px; border-bottom: 1px solid #eee; padding-bottom: 20px; }
+    .toc { background: #f9f9f9; padding: 30px; border-radius: 8px; margin-bottom: 50px; }
+    .toc h2 { margin-top: 0; font-size: 24px; color: #222; }
+    .toc ul { list-style: none; padding: 0; }
+    .toc li { margin-bottom: 15px; }
+    .toc a { color: #0e639c; text-decoration: none; font-size: 16px; font-weight: bold; transition: color 0.2s; }
+    .toc a:hover { color: #1177bb; text-decoration: underline; }
+    .chapter { margin-bottom: 40px; }
+    .chapter h1 { font-size: 28px; text-align: center; margin-bottom: 30px; color: #111; }
+    .chapter h2, .chapter h3 { color: #333; margin-top: 30px; }
+    .chapter p { text-indent: 2em; margin: 15px 0; text-align: justify; }
+    .chapter div { text-indent: 2em; margin: 10px 0; }
+    .page-break { page-break-after: always; border-bottom: 1px dashed #ccc; margin: 40px 0; }
+    @media print { body { background: #fff; } .container { box-shadow: none; margin: 0; padding: 0; max-width: 100%; } .toc { background: transparent; border-bottom: 1px solid #000; padding: 0; } .page-break { page-break-after: always; border: none; margin: 0; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1 class="book-title">${bookName}</h1>
+    <div class="book-subtitle">幻想域小说集 · 一键成书</div>
+    <div class="toc"><h2>📖 目录</h2>${tocHtml}</div>
+    <div class="main-content">${contentHtml}</div>
+    <div style="text-align: center; color: #999; font-size: 14px; margin-top: 60px;">— 全书完 —</div>
+  </div>
+</body>
+</html>`;
+
+    res.setHeader('Content-Type', 'text/html; charset=utf-8');
+    res.setHeader('Content-Disposition', `attachment; filename="${encodeURIComponent(bookName)}.html"`);
+    res.send(htmlTemplate);
+
+  } catch (error) {
+    res.status(500).send('导出失败: ' + error.message);
+  }
+});
+
 // ================= 仪表盘与全局搜索接口 =================
 const INBOX_FILE = path.join(LIBRARY_DIR, 'inbox.json');
 
@@ -673,9 +783,8 @@ app.post('/api/git/push', async (req, res) => {
   logs.push(`[INFO] 开始配置并执行 Git 推送...\n`);
 
   try {
-    // 💡 安全同步：只操作 chapters 目录，绝不删除你的 index.md 和 NovelPage.vue
     logs.push(`> 正在自动同步小说书架到前台...\n`);
-    await fs.emptyDir(NOVEL_CHAPTERS_DIR); // 只清空 chapters
+    await fs.emptyDir(NOVEL_CHAPTERS_DIR); 
     
     const bookcase = []; 
 
@@ -707,7 +816,6 @@ app.post('/api/git/push', async (req, res) => {
           currentBookcase.push({ 
             title: item.replace('.md', ''), 
             type: 'file', 
-            // 💡 注意这里路径加上了 chapters
             link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
           });
         }
@@ -716,7 +824,6 @@ app.post('/api/git/push', async (req, res) => {
 
     copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
     
-    // 保存书架结构
     await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
     logs.push(`> 小说同步完成。\n`);
 
@@ -782,7 +889,6 @@ app.get('/api/audit/check', async (req, res) => {
       return res.json({ conflicts: [], message: '没有已标记死亡且填写了死亡章节的角色。' });
     }
 
-    // 1. 获取所有章节文件
     const allChapters = [];
     const collectChapters = (dir) => {
       if (!fs.existsSync(dir)) return;
@@ -803,53 +909,37 @@ app.get('/api/audit/check', async (req, res) => {
     };
     collectChapters(LIBRARY_DIR);
     
-    // 按文件名自然排序
     allChapters.sort((a, b) => a.fileName.localeCompare(b.fileName, 'zh-CN', { numeric: true }));
 
-    // 辅助函数：从字符串中提取数字（比如“第10章”提取出 10，“10.md”也提取出 10）
-    // 💡 终极辅助函数：同时提取阿拉伯数字和中文数字（一、二、三...十）
-const extractNumber = (str) => {
-  if (!str) return null;
-  // 1. 优先匹配阿拉伯数字
-  const match = str.match(/\d+/);
-  if (match) return parseInt(match[0], 10);
-  
-  // 2. 兼容中文数字（简单映射 1-10）
-  const cnNums = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
-  for (let key in cnNums) {
-    if (str.includes(key)) {
-      // 如果包含“十”，且不是“十”开头，可能是“二十”这种（简单处理）
-      if (key === '十' && str.indexOf('十') > 0) {
-         // 比如"二十"，暂时按 20 处理（如果要完美可以写更复杂的逻辑）
-         return 20; 
-      }
-      return cnNums[key];
-    }
-  }
-  return null;
-};
-
-    // 2. 遍历已死角色
-    deadCharacters.forEach(char => {
-      const deathNum = extractNumber(char.deathChapter); // 提取用户输入的死亡章节数字
+    const extractNumber = (str) => {
+      if (!str) return null;
+      const match = str.match(/\d+/);
+      if (match) return parseInt(match[0], 10);
       
-      // 寻找死亡章节的索引
+      const cnNums = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
+      for (let key in cnNums) {
+        if (str.includes(key)) {
+          if (key === '十' && str.indexOf('十') > 0) return 20; 
+          return cnNums[key];
+        }
+      }
+      return null;
+    };
+
+    deadCharacters.forEach(char => {
+      const deathNum = extractNumber(char.deathChapter);
       let deathIdx = -1;
 
       if (deathNum !== null) {
-        // 如果有数字，优先用数字去比对文件名里的数字
         deathIdx = allChapters.findIndex(ch => extractNumber(ch.fileName) === deathNum);
       } 
       
-      // 如果没找到数字，或者没提取到数字，退化为直接文本比对
       if (deathIdx === -1) {
         deathIdx = allChapters.findIndex(ch => ch.fileName.includes(char.deathChapter));
       }
 
-      // 如果还是没找到，说明填错了或者文件不存在，直接跳过
       if (deathIdx === -1) return; 
 
-      // 3. 检查死亡章节之后的所有章节
       for (let i = deathIdx + 1; i < allChapters.length; i++) {
         const chapter = allChapters[i];
         const content = fs.readFileSync(chapter.fullPath, 'utf-8');
