@@ -1,0 +1,13 @@
+[
+  {
+    "title": "测试",
+    "type": "folder",
+    "children": [
+      {
+        "title": "目录",
+        "type": "file",
+        "link": "/novel/测试/目录"
+      }
+    ]
+  }
+]

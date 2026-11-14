@@ -4,6 +4,15 @@
 
 <div class="nav-grid">
 
+  <!-- 小说入口 -->
+  <a href="/novel/" class="nav-card">
+    <div class="nav-icon">📖</div>
+    <div class="nav-content">
+      <h3>幻想域小说</h3>
+      <p>阅读主角穿越后在幻想域的奇妙冒险与故事。</p>
+    </div>
+  </a>
+
   <!-- 小组件 1 -->
   <a href="/graph" class="nav-card">
     <div class="nav-icon">🕸️</div>
