@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#1e1e1e" />
+      <stop offset="100%" stop-color="#121212" />
+    </linearGradient>
+    <linearGradient id="border" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0e639c" />
+      <stop offset="100%" stop-color="#2ea043" />
+    </linearGradient>
+  </defs>
+  
+  <!-- 圆角深色背景 -->
+  <rect width="256" height="256" rx="56" fill="url(#bg)" stroke="url(#border)" stroke-width="8"/>
+  
+  <!-- 魔法阵外圈 -->
+  <circle cx="128" cy="128" r="84" fill="none" stroke="#2ea043" stroke-width="3" stroke-dasharray="8 8" opacity="0.6"/>
+  
+  <!-- 星芒/六芒星轮廓 -->
+  <path d="M128 30 L150 100 L220 128 L150 156 L128 226 L106 156 L36 128 L106 100 Z" fill="none" stroke="#0e639c" stroke-width="3" opacity="0.3"/>
+  
+  <!-- 中间的羽毛笔（代表写作） -->
+  <text x="128" y="142" font-size="100" text-anchor="middle" dominant-baseline="middle">🪶</text>
+</svg>
