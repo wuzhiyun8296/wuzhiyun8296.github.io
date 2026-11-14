@@ -23,19 +23,23 @@ const PUBLIC_DIR = path.join(DOCS_DIR, 'public');
 const ASSETS_DIR = path.join(PUBLIC_DIR, 'assets');
 const FONTS_DIR = path.join(PUBLIC_DIR, 'fonts');
 const LIBRARY_DIR = path.join(__dirname, 'library');
-const NOVEL_FRONTEND_DIR = path.join(DOCS_DIR, 'novel'); // 前台小说目录
+
+// 💡 前端小说相关目录
+const NOVEL_FRONTEND_DIR = path.join(DOCS_DIR, 'novel'); // 用户手写组件的地方
+const NOVEL_CHAPTERS_DIR = path.join(NOVEL_FRONTEND_DIR, 'chapters'); // 专门用来同步小说 md 文件的地方
 
 fs.ensureDirSync(PUBLIC_DIR);
 fs.ensureDirSync(ASSETS_DIR);
 fs.ensureDirSync(FONTS_DIR);
 fs.ensureDirSync(LIBRARY_DIR);
-fs.ensureDirSync(NOVEL_FRONTEND_DIR); 
+fs.ensureDirSync(NOVEL_FRONTEND_DIR);
+fs.ensureDirSync(NOVEL_CHAPTERS_DIR);
 
 app.use('/public', express.static(PUBLIC_DIR));
 app.use('/assets', express.static(path.join(DOCS_DIR, 'assets')));
 
-// 全局黑名单：在后台文件树、搜索、统计中不显示这些系统文件夹
-const IGNORE_DIRS = ['assets', 'public', 'components', 'node_modules', '.vitepress', 'website', 'novel'];
+// 💡 全局系统黑名单：在后台文件树、搜索、统计中绝对不显示这些文件夹
+const IGNORE_DIRS = ['assets', 'public', 'components', 'node_modules', '.vitepress', 'website', 'novel', 'chapters'];
 
 // ================= 图片上传配置 =================
 const storage = multer.diskStorage({
@@ -663,9 +667,9 @@ app.post('/api/git/push', async (req, res) => {
   logs.push(`[INFO] 开始配置并执行 Git 推送...\n`);
 
   try {
-    // 💡 同步小说并生成结构 JSON 供前台侧边栏和主页联动
+    // 💡 安全同步：只操作 chapters 目录，绝不删除你的 index.md 和 NovelPage.vue
     logs.push(`> 正在自动同步小说书架到前台...\n`);
-    await fs.emptyDir(NOVEL_FRONTEND_DIR); 
+    await fs.emptyDir(NOVEL_CHAPTERS_DIR); // 只清空 chapters
     
     const bookcase = []; 
 
@@ -697,23 +701,18 @@ app.post('/api/git/push', async (req, res) => {
           currentBookcase.push({ 
             title: item.replace('.md', ''), 
             type: 'file', 
-            link: `/novel/${path.relative(NOVEL_FRONTEND_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
+            // 💡 注意这里路径加上了 chapters
+            link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
           });
         }
       }
     };
 
-    copyNovelFiles(LIBRARY_DIR, NOVEL_FRONTEND_DIR, bookcase);
+    copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
     
     // 保存书架结构
     await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
-
-    // 确保小说首页存在
-    const novelIndex = path.join(NOVEL_FRONTEND_DIR, 'index.md');
-    if (!fs.existsSync(novelIndex)) {
-      await fs.writeFile(novelIndex, `# 📖 幻想域小说集\n`, 'utf-8');
-    }
-    logs.push(`> 小说书架同步完成。\n`);
+    logs.push(`> 小说同步完成。\n`);
 
     const gitignorePath = path.join(__dirname, '.gitignore');
     const ignoreContent = 'node_modules/\ngit-config.json\n.git/\nwebsite/node_modules/\nwebsite/.vitepress/cache/\nwebsite/.vitepress/dist/\n';
