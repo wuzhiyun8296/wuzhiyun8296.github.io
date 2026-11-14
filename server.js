@@ -627,10 +627,8 @@ app.post('/api/git/push', async (req, res) => {
   const config = await fs.readJson(GIT_CONFIG_FILE);
   if (!config.repoUrl || !config.token) return res.status(400).json({ error: '配置不完整，请检查仓库地址和 Token' });
 
-  // 💡 强制禁用全局凭据，彻底屏蔽弹窗
   const runCmd = (cmd) => new Promise((resolve) => {
-    const fullCmd = `git -c credential.helper= ${cmd}`;
-    exec(fullCmd, { 
+    exec(cmd, { 
       cwd: __dirname,
       env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
     }, (error, stdout, stderr) => {
@@ -643,48 +641,44 @@ app.post('/api/git/push', async (req, res) => {
   logs.push(`[INFO] 开始配置并执行 Git 推送...\n`);
 
   try {
-    // 自动生成并覆写 .gitignore，防止密码文件再次进入仓库
+    // 1. 自动生成 .gitignore，防止密码泄露
     const gitignorePath = path.join(__dirname, '.gitignore');
     const ignoreContent = 'node_modules/\ngit-config.json\n.git/\nwebsite/node_modules/\nwebsite/.vitepress/cache/\nwebsite/.vitepress/dist/\n';
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
-    // 清理旧历史
-    const gitDir = path.join(__dirname, '.git');
-    if (fs.existsSync(gitDir)) {
-      logs.push(`> 正在自动清理旧的包含密码的 Git 历史记录...\n`);
-      await fs.remove(gitDir);
-    }
-
-    // 重新初始化干净的仓库
-    await runCmd('init');
+    // 2. 初始化（如果没初始化）并配置用户信息
+    await runCmd('git init');
     
     const cleanName = (config.userName || 'Admin').trim();
     const cleanEmail = (config.userEmail || 'admin@local').trim();
-    const cleanToken = config.token.trim();
-    
-    await runCmd(`config user.name "${cleanName}"`);
-    await runCmd(`config user.email "${cleanEmail}"`);
+    await runCmd(`git config user.name "${cleanName}"`);
+    await runCmd(`git config user.email "${cleanEmail}"`);
 
+    // 3. 标准的 Token 认证 URL
     let rawUrl = config.repoUrl.trim();
     if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
-    
-    // 💡 核心突破：使用 x-access-token 机器人账号格式进行无头认证！
-    // 这是 GitHub 官方推荐用于 CI/CD 和自动化脚本的最稳定方式，绝对不会因为用户名填错而认证失败
-    const authUrl = `https://x-access-token:${cleanToken}@${rawUrl}`;
+    const safeToken = config.token.trim();
+    const authUrl = `https://${safeToken}@${rawUrl}`; // 💡 只用 Token 认证
 
-    await runCmd(`remote add origin ${authUrl}`);
+    await runCmd(`git remote remove origin`);
+    await runCmd(`git remote add origin ${authUrl}`);
     logs.push(`> 配置远程仓库: 成功\n`);
 
-    await runCmd('branch -M main');
-    await runCmd('add .');
+    await runCmd('git branch -M main');
+
+    // 4. 精准剔除密码文件
+    await runCmd('git rm --cached git-config.json -f');
     
-    let res2 = await runCmd(`commit -m "${message.replace(/"/g, '\\"')}"`);
+    await runCmd('git add .');
+    
+    let res2 = await runCmd(`git commit -m "${message.replace(/"/g, '\\"')}"`);
     logs.push(`> git commit: ${res2.success ? '成功' : '跳过(无修改)'}\n`);
 
     logs.push(`> 正在推送到 GitHub...\n`);
-    let res3 = await runCmd('push -u origin main -f');
+    // 5. 强制覆盖远端历史，洗白之前的密码
+    let res3 = await runCmd('git push -u origin main -f');
     
-    let safeOutput = res3.output.replace(new RegExp(cleanToken, 'g'), '***');
+    let safeOutput = res3.output.replace(new RegExp(safeToken, 'g'), '***');
     logs.push(safeOutput + '\n');
 
     if (!res3.success) {
