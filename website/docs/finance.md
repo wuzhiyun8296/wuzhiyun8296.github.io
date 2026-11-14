@@ -22,7 +22,7 @@ let lastMinute = -1
 
 const getNowTime = () => new Date().toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
 const formatPrice = (val) => Number(Number(val).toFixed(2))
-const getCacheKey = (symbol, period) => `finance_market_v13_${symbol}_${period}`
+const getCacheKey = (symbol, period) => `finance_market_v15_${symbol}_${period}`
 
 const generateHistory = (basePrice, count, type) => {
   let result = []
@@ -54,6 +54,68 @@ const generateHistory = (basePrice, count, type) => {
   return result
 }
 
+// 💡 核心新增：时光机推演（离线时间沙盘）
+const simulateOfflineTime = (asset) => {
+  if (!asset.historyMinute || asset.historyMinute.length === 0) return
+  
+  const now = new Date()
+  const currentMinute = now.getHours() * 60 + now.getMinutes()
+  const lastCandle = asset.historyMinute[asset.historyMinute.length - 1]
+  
+  // 解析本地最后一根K线的时间
+  let [h, m] = lastCandle.date.split(':').map(Number)
+  let lastCandleMinute = h * 60 + m
+  
+  // 如果跨天（比如之前是 23:50，现在是 00:10）
+  if (currentMinute < lastCandleMinute) {
+    lastCandleMinute = currentMinute // 简化处理：直接对齐时间，不推演跨天
+  }
+
+  const gap = currentMinute - lastCandleMinute
+  
+  if (gap > 0) {
+    let lastPrice = lastCandle.close
+    let tempHistory = [...asset.historyMinute]
+    
+    // 我们最多只补全近 30 分钟的数据（防止离线时间太长生成上万个点卡死浏览器）
+    const maxSimulate = Math.min(gap, 30)
+    
+    for (let i = maxSimulate; i > 0; i--) {
+      const time = new Date(now.getTime() - (i - 1) * 60000)
+      const dateStr = time.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })
+      
+      // 按照后台的均值回归公式进行推演
+      const revertForce = (asset.basePrice - lastPrice) * 0.005
+      const noise = lastPrice * (Math.random() * 0.001 * 2 - 0.001)
+      
+      const open = lastPrice
+      const close = Number((open + revertForce + noise).toFixed(2))
+      const highest = Math.max(open, close) + Number((open * Math.random() * 0.001).toFixed(2))
+      const lowest = Math.min(open, close) - Number((open * Math.random() * 0.001).toFixed(2))
+      
+      tempHistory.push({
+        date: dateStr,
+        open,
+        close,
+        highest: Number(highest.toFixed(2)),
+        lowest: Number(lowest.toFixed(2))
+      })
+      
+      lastPrice = close
+    }
+    
+    // 保持总数最多 30 根
+    while (tempHistory.length > 30) {
+      tempHistory.shift()
+    }
+    
+    // 更新推演后的数据
+    asset.historyMinute = tempHistory
+    asset.currentPrice = lastPrice
+    localStorage.setItem(getCacheKey(asset.symbol, 'minute'), JSON.stringify(tempHistory))
+  }
+}
+
 const initMarketPeriods = (asset) => {
   ['minute', 'day', 'month'].forEach(period => {
     const cacheKey = getCacheKey(asset.symbol, period)
@@ -72,8 +134,13 @@ const initMarketPeriods = (asset) => {
 
     if (period === 'minute') {
       asset.historyMinute = history
+      
+      // 💡 调用时光机，推演离线期间发生的故事
+      simulateOfflineTime(asset)
+      
+      // 强制以后台推上来的最新价格覆盖（如果后台按了利好/利空）
       const targetPrice = Number(asset.currentPrice !== undefined ? asset.currentPrice : asset.basePrice)
-      const lastCandle = history[history.length - 1]
+      const lastCandle = asset.historyMinute[asset.historyMinute.length - 1]
       
       if (lastCandle && Math.abs(lastCandle.close - targetPrice) > 0.001) {
         lastCandle.close = targetPrice
@@ -99,7 +166,6 @@ const startMarketSimulation = () => {
         if (activeAsset && activeAsset.historyMinute && activeAsset.historyMinute.length > 0) {
           const currentCandle = activeAsset.historyMinute[activeAsset.historyMinute.length - 1]
           
-          // 💡 前台同样放慢回归速度
           const revertForce = (activeAsset.basePrice - currentCandle.close) * 0.005;
           const noise = currentCandle.close * (Math.random() * 0.001 * 2 - 0.001);
           
