@@ -1,4 +1,9 @@
-<!-- 文件路径: website/docs/world-navigation.md -->
+---
+aside: false
+prev: false
+next: false
+---
+
 <script setup>
 import WorldNavTree from './components/WorldNavTree.vue'
 </script>

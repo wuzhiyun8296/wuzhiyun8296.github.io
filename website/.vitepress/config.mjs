@@ -5,25 +5,24 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// 💡 递归生成多级侧边栏
 function getSidebarItems(dir) {
   let items = []
   if (!fs.existsSync(dir)) return items
   const files = fs.readdirSync(dir).sort((a, b) => a.localeCompare(b, 'zh-CN', {numeric: true}))
   
   for (const file of files) {
-    if (file.startsWith('.') || file === 'index.md') continue
+    if (file.startsWith('.')) continue
     const fullPath = path.join(dir, file)
     if (fs.statSync(fullPath).isDirectory()) {
-      items.push({
-        text: `📁 ${file}`,
-        collapsed: false,
-        items: getSidebarItems(fullPath) // 递归子文件夹
-      })
+      const subItems = getSidebarItems(fullPath)
+      if (subItems.length > 0) {
+        items.push({ text: file, items: subItems })
+      }
     } else if (file.endsWith('.md')) {
       const title = file.replace('.md', '')
-      // 获取相对路径用于链接
       const relativePath = path.relative(path.resolve(__dirname, '../docs'), fullPath).replace(/\\/g, '/').replace('.md', '')
-      items.push({ text: `📄 ${title}`, link: `/${relativePath}` })
+      items.push({ text: title, link: `/${relativePath}` })
     }
   }
   return items
@@ -36,32 +35,16 @@ function generateSidebar() {
 
   const dirs = fs.readdirSync(docsDir).filter(f => {
     const fullPath = path.join(docsDir, f)
-    return fs.statSync(fullPath).isDirectory() && !f.startsWith('.') && !['assets', 'public', 'components'].includes(f)
+    return fs.statSync(fullPath).isDirectory() && !f.startsWith('.') && !['assets', 'public', 'components', 'novel'].includes(f)
   })
 
   dirs.forEach(dir => {
-    if (dir === 'novel') {
-      const novelItems = getSidebarItems(path.join(docsDir, 'novel'))
-      if (novelItems.length > 0) {
-        sidebar.push({ text: '📖 小说正文', items: novelItems })
-      }
-      return
-    }
-
-    // 设定集侧边栏保持扁平
-    const items = []
-    const files = fs.readdirSync(path.join(docsDir, dir))
-    files.forEach(file => {
-      if (file.endsWith('.md')) {
-        items.push({ text: file.replace('.md', ''), link: `/${dir}/${file.replace('.md', '')}` })
-      }
-    })
+    const items = getSidebarItems(path.join(docsDir, dir))
     if (items.length > 0) sidebar.push({ text: dir, items })
   })
   return sidebar
 }
 
-// 双向链接插件
 const wikiLinkPlugin = (md) => {
   md.inline.ruler.before('link', 'wikilink', (state, silent) => {
     const start = state.pos; const src = state.src;

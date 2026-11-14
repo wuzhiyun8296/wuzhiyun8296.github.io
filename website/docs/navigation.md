@@ -13,7 +13,6 @@
     </div>
   </a>
 
-  <!-- 小组件 1 -->
   <a href="/graph" class="nav-card">
     <div class="nav-icon">🕸️</div>
     <div class="nav-content">
@@ -22,7 +21,6 @@
     </div>
   </a>
 
-  <!-- 小组件 2 -->
   <a href="/characters" class="nav-card">
     <div class="nav-icon">👤</div>
     <div class="nav-content">
@@ -31,7 +29,6 @@
     </div>
   </a>
 
-  <!-- 小组件 3 -->
   <a href="/timeline" class="nav-card">
     <div class="nav-icon">⏳</div>
     <div class="nav-content">
@@ -40,16 +37,6 @@
     </div>
   </a>
 
-  <!-- 小组件 4 (独立HTML示例) -->
-  <a href="/demo.html" target="_blank" class="nav-card">
-    <div class="nav-icon">📊</div>
-    <div class="nav-content">
-      <h3>独立页面演示</h3>
-      <p>展示原生 HTML 交互页面的接入方式。</p>
-    </div>
-  </a>
-  
-  <!-- 小组件 5 金融功能-->
   <a href="/finance" class="nav-card">
     <div class="nav-icon">💰</div>
     <div class="nav-content">
@@ -58,7 +45,6 @@
     </div>
   </a>
   
-  <!-- 小组件 6 地图功能-->
   <a href="/map" class="nav-card">
     <div class="nav-icon">🗺️</div>
     <div class="nav-content">
@@ -67,7 +53,6 @@
     </div>
   </a>
 
-  <!-- 小组件 7 纪元演变地图 -->
   <a href="/epoch-map" class="nav-card">
     <div class="nav-icon">🕰️</div>
     <div class="nav-content">
@@ -75,55 +60,13 @@
       <p>拖动时间轴滑块，动态查看各大势力版图的扩张与覆灭。</p>
     </div>
   </a>
-
 </div>
 
 <style scoped>
-.nav-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: 20px;
-  margin-top: 30px;
-}
-
-.nav-card {
-  display: flex;
-  align-items: flex-start;
-  gap: 15px;
-  background: var(--vp-c-bg-soft, #252526);
-  padding: 20px;
-  border-radius: 12px;
-  border: 1px solid #333;
-  text-decoration: none !important;
-  transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s;
-}
-
-.nav-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--vp-c-brand-1, #0e639c);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.3);
-}
-
-.nav-icon {
-  font-size: 32px;
-  background: #1e1e1e;
-  padding: 10px;
-  border-radius: 10px;
-  border: 1px solid #444;
-}
-
-.nav-content h3 {
-  margin: 0 0 8px 0;
-  color: #fff;
-  font-size: 16px;
-  border-bottom: none;
-  padding: 0;
-}
-
-.nav-content p {
-  margin: 0;
-  color: #aaa;
-  font-size: 13px;
-  line-height: 1.5;
-}
+.nav-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 20px; margin-top: 30px; }
+.nav-card { display: flex; align-items: flex-start; gap: 15px; background: var(--vp-c-bg-soft, #252526); padding: 20px; border-radius: 12px; border: 1px solid #333; text-decoration: none !important; transition: transform 0.2s, border-color 0.2s, box-shadow 0.2s; }
+.nav-card:hover { transform: translateY(-4px); border-color: var(--vp-c-brand-1, #0e639c); box-shadow: 0 8px 24px rgba(0,0,0,0.3); }
+.nav-icon { font-size: 32px; background: #1e1e1e; padding: 10px; border-radius: 10px; border: 1px solid #444; }
+.nav-content h3 { margin: 0 0 8px 0; color: #fff; font-size: 16px; border-bottom: none; padding: 0; }
+.nav-content p { margin: 0; color: #aaa; font-size: 13px; line-height: 1.5; }
 </style>
