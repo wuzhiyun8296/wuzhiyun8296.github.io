@@ -63,12 +63,14 @@ export default defineConfig({
   description: "The Veiled Kindred Spirits",
   srcDir: './docs', 
   
-  // 💡 核心修改：放在顶层，默认暗黑模式，但保留右上角的切换图标
+  // 💡 保留默认黑暗模式
   appearance: 'dark',
 
-  // 💡 全局注入字体 CSS (打包后会自动读取 public/fonts.css)
+  // 💡 注入字体 CSS 和 网页图标
   head: [
-    ['link', { rel: 'stylesheet', href: '/fonts.css' }]
+    ['link', { rel: 'stylesheet', href: '/fonts.css' }],
+    // 👇 换图标的核心代码：把 /favicon.png 换成你放进 public 里的图片路径
+    ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }] 
   ],
 
   // 💡 修复打包报错：显式指定 @theme 别名路径
@@ -88,7 +90,6 @@ export default defineConfig({
   },
   
   themeConfig: {
-    // 💡 注意：这里不需要写 appearance 了
     nav: [
       { text: '首页', link: '/' },
       { text: '世界观', link: '/world-navigation' },
