@@ -26,26 +26,17 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 20
-          # 💡 关键修复：移除缓存配置，避免因找不到 package-lock.json 而报错
-          # cache: npm
-          # cache-dependency-path: website/package-lock.json
+          node-version: 22 # 💡 使用最稳定的 Node 22
 
       - name: Install dependencies
-        run: |
-          cd website
-          npm install
+        run: npm install # 💡 不使用 npm ci，避免包版本锁死报错
 
       - name: Build with VitePress
-        run: |
-          cd website
-          npm run docs:build
+        run: npm run docs:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          # 💡 注意：路径根据你的实际构建输出目录来定
-          # 如果你的 VitePress 配置中 outDir 没有特别指定，默认就是 website/.vitepress/dist
           path: website/.vitepress/dist
 
   deploy:
