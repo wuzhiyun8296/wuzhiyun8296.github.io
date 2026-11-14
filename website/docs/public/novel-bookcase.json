@@ -4,9 +4,14 @@
     "type": "folder",
     "children": [
       {
-        "title": "目录",
+        "title": "第1章",
         "type": "file",
-        "link": "/novel/chapters/测试/目录"
+        "link": "/novel/chapters/测试/第1章"
+      },
+      {
+        "title": "第2章",
+        "type": "file",
+        "link": "/novel/chapters/测试/第2章"
       }
     ]
   }

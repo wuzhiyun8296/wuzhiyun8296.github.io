@@ -233,6 +233,12 @@ app.get('/api/finance', async (req, res) => {
       ],
       stocks: [
         { symbol: 'TMC', name: '秋月商会 (The Moonvale Co.)', basePrice: 100, currentPrice: 100, history: [] }
+      ],
+      // 💡 新金本位汇率数据：基准设为 Gold（黄金）
+      currencies: [
+        { symbol: 'Gold', name: '黄金 (基准)', basePrice: 1, currentPrice: 1 },
+        { symbol: 'GC', name: '帝国金币', basePrice: 0.1, currentPrice: 0.1 },
+        { symbol: 'SC', name: '联邦银币', basePrice: 0.01, currentPrice: 0.01 }
       ]
     }, { spaces: 2 });
   }
@@ -757,6 +763,112 @@ app.post('/api/git/push', async (req, res) => {
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
+  }
+});
+// ================= 防吃书一致性校验接口 (智能模糊匹配版) =================
+app.get('/api/audit/check', async (req, res) => {
+  try {
+    const conflicts = [];
+    const charFile = path.join(PUBLIC_DIR, 'characters.json');
+    
+    if (!fs.existsSync(charFile)) {
+      return res.json({ conflicts: [] });
+    }
+
+    const characters = await fs.readJson(charFile);
+    const deadCharacters = characters.filter(c => c.status === 'dead' && c.deathChapter);
+
+    if (deadCharacters.length === 0) {
+      return res.json({ conflicts: [], message: '没有已标记死亡且填写了死亡章节的角色。' });
+    }
+
+    // 1. 获取所有章节文件
+    const allChapters = [];
+    const collectChapters = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.startsWith('.') || file === 'inbox.json') continue;
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          collectChapters(fullPath);
+        } else if (file.endsWith('.md')) {
+          allChapters.push({
+            fileName: file.replace('.md', ''),
+            fullPath: fullPath,
+            relativePath: path.relative(LIBRARY_DIR, fullPath).replace(/\\/g, '/').replace('.md', '')
+          });
+        }
+      }
+    };
+    collectChapters(LIBRARY_DIR);
+    
+    // 按文件名自然排序
+    allChapters.sort((a, b) => a.fileName.localeCompare(b.fileName, 'zh-CN', { numeric: true }));
+
+    // 辅助函数：从字符串中提取数字（比如“第10章”提取出 10，“10.md”也提取出 10）
+    // 💡 终极辅助函数：同时提取阿拉伯数字和中文数字（一、二、三...十）
+const extractNumber = (str) => {
+  if (!str) return null;
+  // 1. 优先匹配阿拉伯数字
+  const match = str.match(/\d+/);
+  if (match) return parseInt(match[0], 10);
+  
+  // 2. 兼容中文数字（简单映射 1-10）
+  const cnNums = { '一':1, '二':2, '三':3, '四':4, '五':5, '六':6, '七':7, '八':8, '九':9, '十':10 };
+  for (let key in cnNums) {
+    if (str.includes(key)) {
+      // 如果包含“十”，且不是“十”开头，可能是“二十”这种（简单处理）
+      if (key === '十' && str.indexOf('十') > 0) {
+         // 比如"二十"，暂时按 20 处理（如果要完美可以写更复杂的逻辑）
+         return 20; 
+      }
+      return cnNums[key];
+    }
+  }
+  return null;
+};
+
+    // 2. 遍历已死角色
+    deadCharacters.forEach(char => {
+      const deathNum = extractNumber(char.deathChapter); // 提取用户输入的死亡章节数字
+      
+      // 寻找死亡章节的索引
+      let deathIdx = -1;
+
+      if (deathNum !== null) {
+        // 如果有数字，优先用数字去比对文件名里的数字
+        deathIdx = allChapters.findIndex(ch => extractNumber(ch.fileName) === deathNum);
+      } 
+      
+      // 如果没找到数字，或者没提取到数字，退化为直接文本比对
+      if (deathIdx === -1) {
+        deathIdx = allChapters.findIndex(ch => ch.fileName.includes(char.deathChapter));
+      }
+
+      // 如果还是没找到，说明填错了或者文件不存在，直接跳过
+      if (deathIdx === -1) return; 
+
+      // 3. 检查死亡章节之后的所有章节
+      for (let i = deathIdx + 1; i < allChapters.length; i++) {
+        const chapter = allChapters[i];
+        const content = fs.readFileSync(chapter.fullPath, 'utf-8');
+        
+        if (content.includes(char.name)) {
+          conflicts.push({
+            character: char.name,
+            deathTime: char.deathChapter,
+            errorType: '死后复活',
+            fileName: chapter.fileName,
+            filePath: chapter.relativePath
+          });
+        }
+      }
+    });
+
+    res.json({ conflicts });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
   }
 });
 

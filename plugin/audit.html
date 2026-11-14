@@ -1,0 +1,103 @@
+<!-- 文件路径: plugin/audit.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>防吃书校验</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 20px 40px; }
+    .panel-inner { max-width: 1000px; margin: 0 auto; width: 100%; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    h2 { color: #fff; margin: 0; }
+    
+    .btn { background: #0e639c; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-size: 15px; font-weight: bold; transition: 0.2s; }
+    .btn:hover { background: #1177bb; }
+    .btn.danger { background: #a82626; }
+    .btn.danger:hover { background: #c92a2a; }
+    
+    .result-box { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-top: 20px; }
+    .empty-tip { color: #888; font-style: italic; text-align: center; padding: 30px; }
+    
+    .error-item { background: #1e1e1e; border-left: 4px solid #a82626; padding: 15px; border-radius: 6px; margin-bottom: 15px; }
+    .error-title { color: #ef232a; font-weight: bold; font-size: 16px; margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+    .error-desc { color: #aaa; font-size: 14px; line-height: 1.5; }
+    .chapter-link { color: #0e639c; text-decoration: none; }
+    .chapter-link:hover { text-decoration: underline; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="panel-inner">
+      <div class="header">
+        <h2>🕵️ 全局一致性校验 (防吃书)</h2>
+        <button class="btn danger" @click="startAudit" :disabled="isScanning">
+          {{ isScanning ? '正在扫描全文...' : '🚀 开始一键扫描' }}
+        </button>
+      </div>
+      <p style="color: #888;">扫描所有小说章节，自动检测“已死亡角色”是否被错误复活。</p>
+
+      <div class="result-box">
+        <div v-if="isScanning" style="text-align: center; color: #0e639c; padding: 30px;">
+          <div class="spinner"></div>
+          正在逐个检查 chapter 文件...
+        </div>
+        
+        <div v-else-if="errors.length === 0 && !hasScanned" class="empty-tip">
+          点击右上角按钮开始扫描。
+        </div>
+
+        <div v-else-if="errors.length === 0 && hasScanned" style="text-align: center; color: #2ea043; padding: 30px; font-weight: bold; font-size: 18px;">
+          ✅ 太棒了！没有发现任何逻辑冲突，你的设定非常完美！
+        </div>
+
+        <div v-else>
+          <div style="color: #fff; font-weight: bold; margin-bottom: 15px;">
+            发现 {{ errors.length }} 处冲突：
+          </div>
+          <div class="error-item" v-for="(err, idx) in errors" :key="idx">
+            <div class="error-title">
+              ⚠️ 角色：{{ err.character }} (已于 {{ err.deathTime }} 死亡)
+            </div>
+            <div class="error-desc">
+              在章节 <a :href="`/novel/${err.filePath}`" target="_blank" class="chapter-link">《{{ err.fileName }}》</a> 中，该角色被再次提及。
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    createApp({
+      setup() {
+        const isScanning = ref(false);
+        const hasScanned = ref(false);
+        const errors = ref([]);
+
+        const startAudit = async () => {
+          isScanning.value = true;
+          hasScanned.value = true;
+          errors.value = [];
+
+          try {
+            const res = await fetch(`${API_BASE}/audit/check`);
+            const data = await res.json();
+            errors.value = data.conflicts || [];
+          } catch (e) {
+            alert('扫描请求失败，请确保 server.js 已启动');
+          } finally {
+            isScanning.value = false;
+          }
+        };
+
+        return { isScanning, hasScanned, errors, startAudit };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
