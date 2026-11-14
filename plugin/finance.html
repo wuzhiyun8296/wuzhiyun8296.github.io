@@ -1,3 +1,4 @@
+<!-- 文件路径: plugin/finance.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -12,7 +13,8 @@
     .data-form { background: #252526; padding: 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
     .form-group { display: flex; flex-direction: column; flex: 1; min-width: 150px; }
     .form-group label { margin-bottom: 5px; font-size: 13px; color: #aaa; font-weight: bold; }
-    .form-group input, .form-group select { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; }
+    .form-group input, .form-group select { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; width: 100%; }
+    .form-group input:focus, .form-group select:focus { border-color: #0e639c; }
     
     .data-list { display: flex; flex-direction: column; gap: 10px; }
     .item-row { display: flex; justify-content: space-between; align-items: center; background: #252526; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #0e639c; }
@@ -29,8 +31,9 @@
     button.danger:hover { background: #c92a2a; }
     button.success { background: #2ea043; }
     button.success:hover { background: #3fb950; }
-    button.warning { background: #d29922; color: #1e1e1e; }
-    button.warning:hover { background: #e3b341; }
+    
+    .base-edit { background: #1e1e1e; border: 1px solid #444; color: #0e639c; font-weight: bold; padding: 2px 6px; border-radius: 4px; width: 70px; outline: none; text-align: center; }
+    .base-edit:focus { border-color: #0e639c; }
   </style>
 </head>
 <body>
@@ -41,42 +44,11 @@
 
       <!-- 物价管理 -->
       <h3 class="section-title">🍞 物价表</h3>
-      
-      <!-- 现实物价换算器 -->
-      <div class="data-form" style="border-color: #0e639c; background: rgba(14, 99, 156, 0.05);">
-        <div style="width: 100%; margin-bottom: 10px; color: #0e639c; font-weight: bold; font-size: 14px;">
-          🪄 现实物价智能换算
-        </div>
-        <div class="form-group" style="flex: 2;">
-          <label>选择现实参考物 / 自定义名称</label>
-          <div style="display: flex; gap: 10px;">
-            <select v-model="realItemName" @change="applyTemplate" style="flex: 1;">
-              <option value="">-- 选择模板 --</option>
-              <option v-for="t in templates" :key="t.name" :value="t.name">{{ t.name }} (现实约 {{ t.price }} 元)</option>
-            </select>
-            <input v-model="newItem.name" placeholder="或直接输入名称" style="flex: 1;" />
-          </div>
-        </div>
-        <div class="form-group">
-          <label>现实价格 (元)</label>
-          <input type="number" v-model.number="realPrice" placeholder="例如：15" />
-        </div>
-        <div class="form-group">
-          <label>换算汇率 (1元 = ? 贝勒)</label>
-          <input type="number" step="0.01" v-model.number="realToBaleRate" placeholder="例如：0.1" />
-        </div>
-        <div style="display: flex; align-items: flex-end; gap: 10px;">
-          <button @click="calcAndAddItem" style="background: #d29922; color: #1e1e1e;">自动计算并添加</button>
-        </div>
-      </div>
-
-      <!-- 手动添加 -->
       <div class="data-form">
-        <div class="form-group"><label>物品名称</label><input v-model="newItem.name" placeholder="例如：黑面包" /></div>
+        <div class="form-group"><label>物品名称</label><input type="text" v-model="newItem.name" placeholder="例如：黑面包" /></div>
         <div class="form-group"><label>价格 (贝勒)</label><input type="number" v-model.number="newItem.price" placeholder="例如：1" /></div>
         <div style="display: flex; align-items: flex-end;"><button @click="addItem">手动添加物品</button></div>
       </div>
-
       <div class="data-list">
         <div class="item-row" v-for="(item, i) in financeData.items" :key="i">
           <span><strong>{{ item.name }}</strong> - {{ item.price }} 贝勒</span>
@@ -84,15 +56,13 @@
         </div>
       </div>
 
-      <!-- 股市/汇率管理 -->
-      <h3 class="section-title">📈 股票与汇率市场</h3>
+      <!-- 股票市场 -->
+      <h3 class="section-title">📈 股票市场</h3>
       <div class="data-form" style="align-items: flex-end;">
-        <div class="form-group"><label>股票代码</label><input v-model="newStock.symbol" placeholder="例如：TMC" /></div>
-        <div class="form-group" style="flex: 2;"><label>股票名称 (汇率实体)</label><input v-model="newStock.name" placeholder="例如：秋月商会 (Bale/Gold)" /></div>
+        <div class="form-group"><label>股票代码</label><input type="text" v-model="newStock.symbol" placeholder="例如：TMC" /></div>
+        <div class="form-group" style="flex: 2;"><label>股票名称</label><input type="text" v-model="newStock.name" placeholder="例如：秋月商会" /></div>
         <div class="form-group"><label>初始基准价</label><input type="number" v-model.number="newStock.basePrice" placeholder="例如：100" /></div>
-        <div style="display: flex; gap: 10px;">
-          <button @click="addStock">添加股票</button>
-        </div>
+        <div style="display: flex; gap: 10px;"><button @click="addStock">添加股票</button></div>
       </div>
 
       <div class="data-list">
@@ -101,97 +71,125 @@
             <div>
               <span style="font-size: 16px; font-weight: bold; color: #fff;">[{{ stock.symbol }}] {{ stock.name }}</span>
               <div class="stock-info">
-                <!-- 加入安全保护，防止 currentPrice 丢失导致白屏 -->
-                当前价格: <span :class="getPriceClass(stock)">{{ (stock.currentPrice || 0).toFixed(2) }}</span> (基准: {{ stock.basePrice || 0 }})
+                当前价格: <span :class="getPriceClass(stock)">{{ (stock.currentPrice || 0).toFixed(2) }}</span> 
+                | 基准线: <input type="number" class="base-edit" v-model.number="stock.basePrice" @change="syncPriceToBase(stock)" /> (可编辑)
               </div>
             </div>
             <div style="display: flex; gap: 10px;">
-              <button class="warning" @click="simulateMarket(stock)">🎲 生成K线</button>
-              <button class="secondary" @click="resetStock(stock)">🔄 归零</button>
+              <button class="success" @click="triggerEvent(stock, 'good')">📈 利好</button>
+              <button class="danger" @click="triggerEvent(stock, 'bad')">📉 利空</button>
+              <button class="secondary" @click="resetStock(stock)">🔄 强制归零</button>
               <button class="danger" @click="financeData.stocks.splice(i, 1)">删除</button>
             </div>
           </div>
-          <!-- 加入安全保护，防止 history 缺失导致白屏 -->
-          <div v-if="stock.history && stock.history.length > 0 && stock.history[stock.history.length-1].close !== undefined" style="font-size: 12px; color: #666; width: 100%;">
-            最新数据点: {{ stock.history[stock.history.length-1].date }} - {{ (stock.history[stock.history.length-1].close || 0).toFixed(2) }} 贝勒
+        </div>
+      </div>
+
+      <!-- 汇率市场 -->
+      <h3 class="section-title">💱 汇率市场</h3>
+      <div class="data-form" style="align-items: flex-end;">
+        <div class="form-group"><label>货币对代码</label><input type="text" v-model="newCurrency.symbol" placeholder="例如：G/S" /></div>
+        <div class="form-group" style="flex: 2;"><label>货币对名称</label><input type="text" v-model="newCurrency.name" placeholder="例如：金币/银币" /></div>
+        <div class="form-group"><label>初始汇率</label><input type="number" step="0.01" v-model.number="newCurrency.basePrice" placeholder="例如：10" /></div>
+        <div style="display: flex; gap: 10px;"><button @click="addCurrency">添加汇率</button></div>
+      </div>
+
+      <div class="data-list">
+        <div class="item-row" v-for="(curr, i) in financeData.currencies" :key="i" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+            <div>
+              <span style="font-size: 16px; font-weight: bold; color: #fff;">[{{ curr.symbol }}] {{ curr.name }}</span>
+              <div class="stock-info">
+                当前汇率: <span :class="getCurrencyClass(curr)">{{ (curr.currentPrice || 0).toFixed(2) }}</span> 
+                | 基准线: <input type="number" class="base-edit" v-model.number="curr.basePrice" @change="syncPriceToBase(curr)" /> (可编辑)
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <button class="success" @click="triggerEvent(curr, 'good')">📈 利好</button>
+              <button class="danger" @click="triggerEvent(curr, 'bad')">📉 利空</button>
+              <button class="secondary" @click="resetCurrency(curr)">🔄 强制归零</button>
+              <button class="danger" @click="financeData.currencies.splice(i, 1)">删除</button>
+            </div>
           </div>
         </div>
       </div>
 
       <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
-          <button class="success" @click="saveFinance" style="padding: 12px 30px; font-size: 15px;">💾 保存金融数据</button>
+          <button class="success" @click="saveFinance" style="padding: 12px 30px; font-size: 15px;">💾 保存当前数据</button>
       </div>
     </div>
   </div>
 
   <script>
-    const { createApp, ref, onMounted } = Vue;
+    const { createApp, ref, onMounted, onUnmounted } = Vue;
     const API_BASE = 'http://localhost:3001/api';
 
     createApp({
       setup() {
-        // 初始结构防护
-        const financeData = ref({ items: [], stocks: [] });
+        const financeData = ref({ items: [], stocks: [], currencies: [] });
         const newItem = ref({ name: '', price: 1 });
         const newStock = ref({ symbol: '', name: '', basePrice: 100 });
-        
-        const realItemName = ref('');
-        const realPrice = ref(0);
-        const realToBaleRate = ref(0.1); 
-        
-        const templates = [
-          { name: '普通黑面包', price: 5 },
-          { name: '一杯淡啤酒', price: 15 },
-          { name: '一份快餐', price: 25 },
-          { name: '一斤猪肉', price: 20 },
-          { name: '一斤牛肉', price: 50 },
-          { name: '一把普通铁剑', price: 500 },
-          { name: '一套锁子甲', price: 3000 },
-          { name: '一瓶治疗药水', price: 200 }
-        ];
+        const newCurrency = ref({ symbol: '', name: '', basePrice: 10 });
 
-        const applyTemplate = () => {
-          const t = templates.find(x => x.name === realItemName.value);
-          if (t) {
-            newItem.value.name = t.name;
-            realPrice.value = t.price;
-          }
-        };
-
-        const calcAndAddItem = () => {
-          if (!newItem.value.name) return showToast('请选择模板或输入物品名', true);
-          if (!realPrice.value) return showToast('请输入现实价格', true);
-          
-          const calcPrice = Number((realPrice.value * realToBaleRate.value).toFixed(2));
-          newItem.value.price = calcPrice;
-          
-          financeData.value.items.push({ ...newItem.value });
-          showToast(`🪄 已换算并添加：${calcPrice} 贝勒`);
-          
-          newItem.value = { name: '', price: 1 };
-          realItemName.value = '';
-          realPrice.value = 0;
-        };
+        let timer = null;
 
         const fetchFinance = async () => {
           try {
             const res = await fetch(`${API_BASE}/finance`);
             const data = await res.json();
-            
-            // 极严格的容错处理：如果拉回来的数据缺胳膊少腿，自动补齐
             financeData.value = {
               items: Array.isArray(data.items) ? data.items : [],
               stocks: Array.isArray(data.stocks) ? data.stocks.map(s => ({
-                ...s,
-                currentPrice: s.currentPrice !== undefined ? s.currentPrice : (s.basePrice || 100),
-                basePrice: s.basePrice || 100,
-                history: Array.isArray(s.history) ? s.history : []
+                ...s, currentPrice: s.currentPrice !== undefined ? s.currentPrice : (s.basePrice || 100), basePrice: s.basePrice || 100
+              })) : [],
+              currencies: Array.isArray(data.currencies) ? data.currencies.map(c => ({
+                ...c, currentPrice: c.currentPrice !== undefined ? c.currentPrice : (c.basePrice || 10), basePrice: c.basePrice || 10
               })) : []
             };
-          } catch (e) { 
-            console.error("数据加载错误:", e);
-            showToast('读取失败，请重启 Node 服务', true); 
+          } catch (e) { showToast('读取失败，请重启 Node 服务', true); }
+        };
+
+        const syncPriceToBase = (asset) => {
+          if (confirm(`基准价已修改为 ${asset.basePrice}，是否将当前价格也重置为基准价？`)) {
+            asset.currentPrice = Number(asset.basePrice);
           }
+        };
+
+        const triggerEvent = (asset, type) => {
+          const current = Number(asset.currentPrice) || 10;
+          let multiplier = 1;
+          let eventName = '';
+
+          if (type === 'good') {
+            multiplier = 1 + (Math.random() * 0.15 + 0.15); // 涨 15%~30%
+            const events = ['大财团收购', '发现新矿脉', '商会联盟建立', '战争大捷'];
+            eventName = events[Math.floor(Math.random() * events.length)];
+          } else {
+            multiplier = 1 - (Math.random() * 0.15 + 0.15); // 跌 15%~30%
+            const events = ['战争爆发', '商船遇袭', '高管丑闻', '恶性通胀'];
+            eventName = events[Math.floor(Math.random() * events.length)];
+          }
+
+          asset.currentPrice = Number((current * multiplier).toFixed(2));
+          showToast(`💥 ${eventName}！${asset.symbol} 瞬间剧变至 ${asset.currentPrice}`);
+        };
+
+        // 💡 核心改动：回归系数调整为 0.005，回弹速度变得极其缓慢
+        const startLivePreview = () => {
+          timer = setInterval(() => {
+            const updateAsset = (asset) => {
+              // 回归力变小了（每秒只拉回 0.5% 的偏离度）
+              const revertForce = (asset.basePrice - asset.currentPrice) * 0.005;
+              // 噪声也调小一点，让它在低位震荡
+              const noise = asset.currentPrice * (Math.random() * 0.001 * 2 - 0.001);
+              
+              asset.currentPrice = Number((asset.currentPrice + revertForce + noise).toFixed(2));
+              if (asset.currentPrice < 0.01) asset.currentPrice = 0.01;
+            };
+
+            financeData.value.stocks.forEach(updateAsset);
+            financeData.value.currencies.forEach(updateAsset);
+          }, 1000);
         };
 
         const addItem = () => {
@@ -203,78 +201,71 @@
 
         const addStock = () => {
           if (!newStock.value.symbol || !newStock.value.name) return showToast('代码和名称不能为空', true);
-          financeData.value.stocks.push({
-            ...newStock.value,
-            currentPrice: newStock.value.basePrice,
-            history: []
-          });
+          financeData.value.stocks.push({ ...newStock.value, currentPrice: newStock.value.basePrice });
           newStock.value = { symbol: '', name: '', basePrice: 100 };
           showToast('股票已添加');
         };
 
-        const simulateMarket = (stock) => {
-          let history = stock.history || [];
-          if (history.length === 0 || history[0].open === undefined) {
-            stock.history = [];
-            let open = stock.basePrice;
-            for (let i = 10; i > 0; i--) {
-              const h = open * (1 + Math.random() * 0.04);
-              const l = open * (1 - Math.random() * 0.04);
-              const c = l + Math.random() * (h - l);
-              stock.history.push({ date: `历史_${i}`, open, close: c, highest: h, lowest: l });
-              open = c;
-            }
-            stock.currentPrice = open;
-          }
-
-          const o = stock.currentPrice;
-          const h = o * (1 + Math.random() * 0.03);
-          const l = o * (1 - Math.random() * 0.03);
-          const c = l + Math.random() * (h - l);
-          
-          stock.currentPrice = c;
-          stock.history.push({ date: `第${stock.history.length + 1}根`, open: o, close: c, highest: h, lowest: l });
-          showToast(`📈 ${stock.symbol} 已生成新K线`);
+        const addCurrency = () => {
+          if (!newCurrency.value.symbol || !newCurrency.value.name) return showToast('代码和名称不能为空', true);
+          const baseP = Number(newCurrency.value.basePrice) || 10;
+          financeData.value.currencies.push({ 
+            symbol: newCurrency.value.symbol,
+            name: newCurrency.value.name,
+            basePrice: baseP,
+            currentPrice: baseP 
+          });
+          newCurrency.value = { symbol: '', name: '', basePrice: 10 };
+          showToast('✅ 汇率已成功添加到列表');
         };
 
         const resetStock = (stock) => {
-          if (confirm(`确定要将 ${stock.symbol} 的走势和历史数据归零吗？`)) {
-            stock.history = []; 
-            stock.currentPrice = stock.basePrice; 
-            showToast('走势已归零，请记得点击下方保存！');
-          }
+          if (confirm(`确定要将 ${stock.symbol} 瞬间重置为基准价吗？`)) { stock.currentPrice = Number(stock.basePrice); }
         };
 
-        const getPriceClass = (stock) => {
-          if (!stock.history || stock.history.length < 1) return '';
-          const last = stock.history[stock.history.length - 1];
-          if (last.close === undefined || last.open === undefined) return '';
-          return last.close >= last.open ? 'price-up' : 'price-down';
+        const resetCurrency = (curr) => {
+          if (confirm(`确定要将 ${curr.symbol} 瞬间重置为基准价吗？`)) { curr.currentPrice = Number(curr.basePrice); }
         };
+
+        const getPriceClass = (item) => item.currentPrice >= item.basePrice ? 'price-up' : 'price-down';
+        const getCurrencyClass = (item) => item.currentPrice >= item.basePrice ? 'price-up' : 'price-down';
 
         const saveFinance = async () => {
           await fetch(`${API_BASE}/finance`, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(financeData.value)
           });
-          showToast('✅ 金融数据已保存');
+          showToast('✅ 金融数据已保存并同步到前台');
         };
 
         const showToast = (msg, isError = false) => {
           const toast = document.createElement('div');
           toast.innerText = msg;
-          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:9999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold; transform: translateY(20px); opacity: 0;`;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:9999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold; opacity: 0; transform: translateY(20px);`;
           document.body.appendChild(toast);
-          setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; }, 10);
-          setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+          requestAnimationFrame(() => {
+            toast.style.opacity = '1';
+            toast.style.transform = 'translateY(0)';
+          });
+          setTimeout(() => {
+            toast.style.opacity = '0';
+            toast.style.transform = 'translateY(20px)';
+            setTimeout(() => toast.remove(), 300);
+          }, 2500);
         };
 
-        onMounted(fetchFinance);
+        onMounted(() => {
+          fetchFinance();
+          startLivePreview(); 
+        });
+
+        onUnmounted(() => {
+          if (timer) clearInterval(timer);
+        });
+
         return { 
-          financeData, newItem, newStock, 
-          realItemName, realPrice, realToBaleRate, templates, applyTemplate, calcAndAddItem,
-          addItem, addStock, simulateMarket, resetStock, getPriceClass, saveFinance 
+          financeData, newItem, newStock, newCurrency, addItem, addStock, addCurrency,
+          triggerEvent, resetStock, resetCurrency, syncPriceToBase, getPriceClass, getCurrencyClass, saveFinance 
         };
       }
     }).mount('#app');
