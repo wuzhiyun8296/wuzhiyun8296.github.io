@@ -1,63 +1,6 @@
 <!-- 文件路径: website/docs/.vitepress/theme/components/EpochMap.vue -->
-<script setup>
-import { ref, computed, onMounted } from 'vue'
-
-const epochs = ref([])
-const countries = ref([])
-const currentIndex = ref(0)
-const isLoading = ref(true)
-const hasError = ref(false)
-
-onMounted(async () => {
-  try {
-    // 💡 加上时间戳，强制浏览器获取最新数据，绝不使用缓存
-    const res = await fetch('/epoch-map-data.json?t=' + Date.now())
-    if (!res.ok) throw new Error('文件不存在')
-    const data = await res.json()
-    
-    // 兼容处理：确保所有 ID 都是字符串，防止类型不匹配
-    epochs.value = (data.epochs || []).map(e => ({ ...e, id: String(e.id) }))
-    countries.value = (data.countries || []).map(c => ({
-      ...c,
-      visibleIn: Array.isArray(c.visibleIn) ? c.visibleIn.map(String) : []
-    }))
-    
-    if (epochs.value.length > 0) currentIndex.value = 0
-  } catch (e) {
-    console.error('加载地图数据失败', e)
-    hasError.value = true
-  } finally {
-    isLoading.value = false
-  }
-})
-
-const currentEpoch = computed(() => epochs.value[currentIndex.value] || {})
-
-const visibleCountries = computed(() => {
-  if (!currentEpoch.value.id) return []
-  // 使用字符串 ID 进行比对
-  return countries.value.filter(c => c.visibleIn.includes(currentEpoch.value.id))
-})
-</script>
-
 <template>
-  <div v-if="isLoading" style="text-align: center; padding: 50px; color: #888;">加载数据中...</div>
-  
-  <div v-else-if="hasError" class="empty-state">
-    <div class="empty-icon">⚠️</div>
-    <h3>数据加载失败</h3>
-    <p>找不到 <code>/epoch-map-data.json</code> 文件。</p>
-    <p>请检查文件是否存在于 <code>website/docs/public/epoch-map-data.json</code>。</p>
-  </div>
-
-  <div v-else-if="epochs.length === 0" class="empty-state">
-    <div class="empty-icon">🌌</div>
-    <h3>世界尚未诞生</h3>
-    <p>当前没有任何纪元与版图数据。</p>
-    <p>请前往后台界面的 <strong>🕰️ 纪元地图</strong> 插件，为你的世界创建第一个纪元。</p>
-  </div>
-
-  <div class="epoch-wrapper" v-else>
+  <div class="epoch-wrapper" v-if="!isLoading">
     <div class="epoch-container">
       <div class="map-area">
         <svg viewBox="0 0 600 400" class="map-svg">
@@ -127,14 +70,45 @@ const visibleCountries = computed(() => {
       />
     </div>
   </div>
+  <div v-else style="text-align: center; padding: 50px; color: #888;">加载纪元数据中...</div>
 </template>
 
-<style scoped>
-.empty-state { text-align: center; padding: 60px 20px; background: #1e1e1e; border: 1px dashed #444; border-radius: 8px; margin-top: 20px; color: #aaa; }
-.empty-icon { font-size: 48px; margin-bottom: 15px; }
-.empty-state h3 { color: #fff; margin: 0 0 10px 0; }
-.empty-state strong, .empty-state code { color: #0e639c; }
+<script setup>
+import { ref, computed, onMounted } from 'vue'
 
+const epochs = ref([])
+const countries = ref([])
+const currentIndex = ref(0)
+const isLoading = ref(true)
+
+onMounted(async () => {
+  try {
+    const res = await fetch('/epoch-map-data.json?t=' + Date.now())
+    const data = await res.json()
+    
+    epochs.value = (data.epochs || []).map(e => ({ ...e, id: String(e.id) }))
+    countries.value = (data.countries || []).map(c => ({
+      ...c,
+      visibleIn: Array.isArray(c.visibleIn) ? c.visibleIn.map(String) : []
+    }))
+    
+    if (epochs.value.length > 0) currentIndex.value = 0
+  } catch (e) {
+    console.error('加载地图数据失败', e)
+  } finally {
+    isLoading.value = false
+  }
+})
+
+const currentEpoch = computed(() => epochs.value[currentIndex.value] || {})
+
+const visibleCountries = computed(() => {
+  if (!currentEpoch.value.id) return []
+  return countries.value.filter(c => c.visibleIn.includes(currentEpoch.value.id))
+})
+</script>
+
+<style scoped>
 .epoch-wrapper { margin-top: 20px; }
 .epoch-container { display: flex; gap: 20px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; overflow: hidden; height: 450px; }
 .map-area { flex: 2; position: relative; background: #121212; border-right: 1px solid #333; }
