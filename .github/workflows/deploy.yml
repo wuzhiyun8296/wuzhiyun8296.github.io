@@ -17,9 +17,6 @@ concurrency:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: website # 💡 指定你的项目在 website 目录下
     steps:
       - name: Checkout
         uses: actions/checkout@v4
@@ -30,22 +27,26 @@ jobs:
         uses: actions/setup-node@v4
         with:
           node-version: 20
-          cache: npm
-          cache-dependency-path: website/package-lock.json # 💡 缓存依赖
-
-      - name: Setup Pages
-        uses: actions/configure-pages@v4
+          # 💡 关键修复：移除缓存配置，避免因找不到 package-lock.json 而报错
+          # cache: npm
+          # cache-dependency-path: website/package-lock.json
 
       - name: Install dependencies
-        run: npm ci
+        run: |
+          cd website
+          npm install
 
       - name: Build with VitePress
-        run: npm run docs:build
+        run: |
+          cd website
+          npm run docs:build
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/.vitepress/dist # 💡 提取 VitePress 的构建产物
+          # 💡 注意：路径根据你的实际构建输出目录来定
+          # 如果你的 VitePress 配置中 outDir 没有特别指定，默认就是 website/.vitepress/dist
+          path: website/.vitepress/dist
 
   deploy:
     environment:
