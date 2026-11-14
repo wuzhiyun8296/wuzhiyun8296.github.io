@@ -17,7 +17,12 @@ function getSidebarItems(dir) {
     if (fs.statSync(fullPath).isDirectory()) {
       const subItems = getSidebarItems(fullPath)
       if (subItems.length > 0) {
-        items.push({ text: file, items: subItems })
+        // 💡 核心：加上 collapsed 属性，控制子菜单的折叠
+        items.push({ 
+          text: file, 
+          collapsed: true, // 默认收起，点击即可展开
+          items: subItems 
+        })
       }
     } else if (file.endsWith('.md')) {
       const title = file.replace('.md', '')
@@ -33,6 +38,7 @@ function generateSidebar() {
   const sidebar = []
   if (!fs.existsSync(docsDir)) return sidebar
 
+  // 过滤掉系统文件夹
   const dirs = fs.readdirSync(docsDir).filter(f => {
     const fullPath = path.join(docsDir, f)
     return fs.statSync(fullPath).isDirectory() && !f.startsWith('.') && !['assets', 'public', 'components', 'novel'].includes(f)
@@ -40,7 +46,9 @@ function generateSidebar() {
 
   dirs.forEach(dir => {
     const items = getSidebarItems(path.join(docsDir, dir))
-    if (items.length > 0) sidebar.push({ text: dir, items })
+    if (items.length > 0) {
+      sidebar.push({ text: dir, items })
+    }
   })
   return sidebar
 }
