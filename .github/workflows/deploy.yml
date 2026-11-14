@@ -26,18 +26,18 @@ jobs:
       - name: Setup Node
         uses: actions/setup-node@v4
         with:
-          node-version: 22 # 💡 使用最稳定的 Node 22
+          node-version: 22
 
       - name: Install dependencies
-        run: npm install # 💡 不使用 npm ci，避免包版本锁死报错
+        run: npm install
 
       - name: Build with VitePress
-        run: npm run docs:build
+        run: npm run build # 💡 核心修复：这里改成了 build，对应你 package.json 里的命令
 
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
-          path: website/.vitepress/dist
+          path: website/.vitepress/dist # VitePress 的默认输出目录
 
   deploy:
     environment:
