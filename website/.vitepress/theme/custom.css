@@ -1,0 +1,10 @@
+.wikilink {
+  color: #0e639c !important;
+  text-decoration: none;
+  border-bottom: 1px dashed #0e639c;
+  font-weight: bold;
+  cursor: pointer;
+}
+.wikilink:hover {
+  background-color: rgba(14, 99, 156, 0.2);
+}

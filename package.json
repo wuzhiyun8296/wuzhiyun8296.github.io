@@ -1,0 +1,29 @@
+{
+  "name": "my-world-system",
+  "version": "1.0.0",
+  "description": "Fantasy World Building Static Site",
+  "main": "server.js",
+  "scripts": {
+    "admin": "node server.js",
+    "dev": "vitepress dev website",
+    "build": "vitepress build website",
+    "preview": "vitepress preview website",
+    "start": "node server.js"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "cors": "^2.8.6",
+    "echarts": "^6.1.0",
+    "express": "^4.22.3",
+    "fs-extra": "^11.4.1",
+    "marked": "^18.2.0",
+    "multer": "^2.5.0"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4",
+    "vue": "^3.5.45"
+  },
+  "type": "commonjs"
+}

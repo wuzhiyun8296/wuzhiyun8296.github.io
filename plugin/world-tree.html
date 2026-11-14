@@ -1,0 +1,278 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>世界观树插件</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 20px 40px; }
+    .panel-inner { max-width: 1000px; margin: 0 auto; width: 100%; }
+    .data-form { background: #252526; padding: 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .form-group { display: flex; flex-direction: column; flex: 1; min-width: 150px; }
+    .form-group label { margin-bottom: 5px; font-size: 13px; color: #aaa; font-weight: bold; }
+    .form-group input, .form-group select { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; font-size: 14px;}
+    .form-group select { cursor: pointer; }
+    
+    /* 树形节点样式 */
+    .tree-node { margin-left: 20px; border-left: 1px dashed #444; padding-left: 15px; margin-top: 10px; }
+    .node-header { display: flex; align-items: center; justify-content: space-between; background: #252526; padding: 10px 15px; border-radius: 6px; border: 1px solid #333; transition: all 0.2s; }
+    .node-header:hover { border-color: #555; background: #2d2d2d; }
+    .node-title { display: flex; align-items: center; gap: 8px; font-weight: bold; color: #fff; font-size: 15px; }
+    .node-actions { display: flex; gap: 8px; }
+    
+    /* 内联图标选择器 */
+    .inline-icon-select { background: transparent; border: 1px solid transparent; color: #fff; font-size: 18px; cursor: pointer; padding: 2px; border-radius: 4px; appearance: none; }
+    .inline-icon-select:hover { background: #1e1e1e; border-color: #444; }
+    .inline-icon-select option { background: #252526; font-size: 14px; }
+
+    button { background: #0e639c; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 12px; font-weight: bold; transition: background 0.2s; }
+    button:hover { background: #1177bb; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    button.danger { background: #a82626; }
+    button.danger:hover { background: #c92a2a; }
+    button.success { background: #2ea043; }
+    button.success:hover { background: #3fb950; }
+    
+    .file-tag { font-size: 12px; color: #888; margin-left: 10px; font-weight: normal; }
+    .auto-path-tip { font-size: 12px; color: #0e639c; margin-top: 5px; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="panel-inner">
+      <div style="display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 20px;">
+        <div>
+          <h2 style="color: #fff; margin-top: 0;">🌍 世界观结构树</h2>
+          <p style="color: #888; margin: 0;">支持无限级子文件夹。在子文件夹中新建文件时，路径会自动拼接。</p>
+        </div>
+        <div style="display: flex; gap: 10px;">
+          <button class="secondary" @click="syncTree">🔄 一键同步物理目录</button>
+          <button class="success" @click="saveTree">💾 保存世界观树</button>
+        </div>
+      </div>
+
+      <!-- 快速添加根目录 -->
+      <div class="data-form" style="border-color: #0e639c; background: rgba(14, 99, 156, 0.05);">
+        <div style="width: 100%; margin-bottom: 5px; color: #0e639c; font-weight: bold; font-size: 14px;">➕ 添加一级分类</div>
+        <div class="form-group"><label>分类名称</label><input v-model="newCatName" placeholder="例如：国家与势力" /></div>
+        <div class="form-group">
+          <label>选择图标</label>
+          <select v-model="newCatIcon">
+            <option value="📁">📁 默认</option>
+            <option value="🏰">🏰 城堡 / 国家</option>
+            <option value="🌍">🌍 世界 / 地理</option>
+            <option value="✨">✨ 魔法 / 科技</option>
+            <option value="🧝‍♂️">🧝‍♂️ 种族</option>
+            <option value="📜">📜 历史</option>
+            <option value="⚔️">⚔️ 战争</option>
+          </select>
+        </div>
+        <div style="display: flex; align-items: flex-end;"><button @click="addRootCat">添加</button></div>
+      </div>
+
+      <!-- 递归渲染树 -->
+      <div v-if="treeData.length === 0" style="text-align:center; padding: 50px; color:#666;">暂无结构，点击上方按钮添加分类，或点击右上角一键同步。</div>
+      
+      <tree-node 
+        v-for="(node, index) in treeData" 
+        :key="index" 
+        :node="node" 
+        :parent-path="''"
+        @delete="deleteNode(treeData, index)"
+        @add-doc="handleAddDoc"
+      ></tree-node>
+
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    // 💡 核心：递归组件，支持自动路径拼接
+    const TreeNode = {
+      name: 'TreeNode',
+      props: ['node', 'parentPath'], // 💡 接收父级路径
+      emits: ['delete', 'add-doc'],
+      template: `
+        <div class="tree-node" v-if="node.type === 'folder'">
+          <div class="node-header">
+            <div class="node-title">
+              <select v-model="node.icon" class="inline-icon-select">
+                <option value="📁">📁</option><option value="🏰">🏰</option><option value="🌍">🌍</option>
+                <option value="✨">✨</option><option value="🧝‍♂️">🧝‍♂️</option><option value="📜">📜</option><option value="⚔️">⚔️</option>
+              </select>
+              {{ node.name }}
+            </div>
+            <div class="node-actions">
+              <button class="secondary" @click="showAddFolder = !showAddFolder">+ 子分类</button>
+              <button @click="showAddDoc = !showAddDoc">+ 文件</button>
+              <button class="danger" @click="$emit('delete')">删除</button>
+            </div>
+          </div>
+
+          <!-- 内联表单：添加子文件夹 -->
+          <div v-if="showAddFolder" style="margin: 10px 0 10px 20px; display: flex; gap: 10px;">
+            <input v-model="folderName" placeholder="子分类名称" style="padding: 5px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:4px;" />
+            <button @click="confirmAddFolder">确认</button>
+          </div>
+
+          <!-- 内联表单：添加文档 (路径自动生成) -->
+          <div v-if="showAddDoc" style="margin: 10px 0 10px 20px; display: flex; flex-direction: column; gap: 10px; background: #2d2d2d; padding: 15px; border-radius: 6px;">
+            <div style="display: flex; gap: 10px;">
+              <input v-model="docTitle" placeholder="文件名称 (如:帝国)" style="padding: 5px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:4px; flex: 1;" />
+              <button @click="confirmAddDoc">创建并添加</button>
+            </div>
+            <div class="auto-path-tip">✨ 物理路径将自动创建为: /{{ parentPath ? parentPath + '/' : '' }}{{ node.name }}/{{ docTitle || '...' }}.md</div>
+          </div>
+
+          <!-- 渲染子节点 -->
+          <div v-if="node.children && node.children.length > 0">
+            <tree-node 
+              v-for="(child, index) in node.children" 
+              :key="index" 
+              :node="child" 
+              :parent-path="parentPath ? parentPath + '/' + node.name : node.name"
+              @delete="node.children.splice(index, 1)"
+              @add-doc="(...args) => $emit('add-doc', ...args)"
+            ></tree-node>
+          </div>
+        </div>
+
+        <!-- 如果是文件节点 -->
+        <div v-else class="tree-node" style="margin-top: 5px;">
+          <div class="node-header" style="border-left: 3px solid #0e639c; background: #202020;">
+            <div class="node-title" style="font-weight: normal;">
+              📄 {{ node.name }}
+              <span class="file-tag">{{ node.slug }}</span>
+            </div>
+            <div class="node-actions">
+              <button class="danger" @click="$emit('delete')" style="padding: 4px 8px;">删除</button>
+            </div>
+          </div>
+        </div>
+      `,
+      setup(props, { emit }) {
+        const showAddFolder = ref(false);
+        const folderName = ref('');
+        const showAddDoc = ref(false);
+        const docTitle = ref('');
+
+        const confirmAddFolder = () => {
+          if (!folderName.value) return;
+          if (!props.node.children) props.node.children = [];
+          props.node.children.push({ type: 'folder', name: folderName.value, icon: '📁', children: [] });
+          folderName.value = ''; showAddFolder.value = false;
+        };
+
+        const confirmAddDoc = () => {
+          if (!docTitle.value) return alert('文件名不能为空');
+          
+          // 💡 核心逻辑：自动拼接路径
+          const currentFullPath = props.parentPath ? `${props.parentPath}/${props.node.name}` : props.node.name;
+          const finalSlug = `${currentFullPath}/${docTitle.value}`;
+
+          if (!props.node.children) props.node.children = [];
+          props.node.children.push({ type: 'file', name: docTitle.value, slug: `/${finalSlug}`, desc: '请在此修改描述' });
+          
+          // 触发全局事件去建物理文档
+          emit('add-doc', { title: docTitle.value, slug: `/${finalSlug}` });
+          
+          docTitle.value = ''; showAddDoc.value = false;
+        };
+
+        return { 
+          showAddFolder, folderName, confirmAddFolder,
+          showAddDoc, docTitle, confirmAddDoc
+        };
+      }
+    };
+
+    const app = createApp({
+      setup() {
+        const treeData = ref([]);
+        const newCatName = ref('');
+        const newCatIcon = ref('📁');
+
+        const fetchTree = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/world-tree`);
+            treeData.value = await res.json();
+          } catch (e) { showToast('读取失败', true); }
+        };
+
+        const addRootCat = () => {
+          if (!newCatName.value) return showToast('名称不能为空', true);
+          treeData.value.push({ type: 'folder', name: newCatName.value, icon: newCatIcon.value, children: [] });
+          newCatName.value = '';
+          showToast('一级分类已添加');
+        };
+
+        const deleteNode = (parentArray, index) => {
+          if (confirm('确定删除该节点及其所有子内容吗？(不会删除物理文件)')) {
+            parentArray.splice(index, 1);
+          }
+        };
+
+        const handleAddDoc = async (docInfo) => {
+          try {
+            showToast('⏳ 正在创建文档...');
+            const res = await fetch(`${API_BASE}/create-doc`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: docInfo.slug, title: docInfo.title })
+            });
+            const data = await res.json();
+            if (data.existed) showToast('✅ 已添加 (文档已存在)');
+            else showToast('✨ 已添加并建好文档！');
+          } catch (e) {
+            showToast('自动建文档失败', true);
+          }
+        };
+
+        const syncTree = async () => {
+          if (!confirm('将自动扫描物理文件夹结构，并把缺失的文件补全，是否继续？')) return;
+          try {
+            showToast('⏳ 正在扫描并同步...');
+            const res = await fetch(`${API_BASE}/sync-tree`, { method: 'POST' });
+            const data = await res.json();
+            if (data.success) {
+              treeData.value = data.treeData;
+              showToast(`✅ 同步成功，补全了 ${data.addedCount} 个条目`);
+            }
+          } catch (e) { showToast('同步失败', true); }
+        };
+
+        const saveTree = async () => {
+          await fetch(`${API_BASE}/world-tree`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(treeData.value)
+          });
+          showToast('✅ 世界观树已保存');
+        };
+
+        const showToast = (msg, isError = false) => {
+          const oldToast = document.getElementById('custom-toast');
+          if (oldToast) oldToast.remove();
+          const toast = document.createElement('div');
+          toast.id = 'custom-toast';
+          toast.innerText = msg;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:9999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold; transform: translateY(20px); opacity: 0;`;
+          document.body.appendChild(toast);
+          setTimeout(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; }, 10);
+          setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+        };
+
+        onMounted(fetchTree);
+        return { treeData, newCatName, newCatIcon, addRootCat, deleteNode, handleAddDoc, syncTree, saveTree };
+      }
+    });
+
+    app.component('tree-node', TreeNode);
+    app.mount('#app');
+  </script>
+</body>
+</html>

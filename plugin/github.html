@@ -1,0 +1,234 @@
+<!-- 文件路径: plugin/github.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>一键推送至 GitHub</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; overflow-y: auto; }
+    .container { width: 100%; max-width: 900px; padding: 30px 20px; display: flex; flex-direction: column; gap: 20px; }
+    
+    .header { text-align: center; }
+    .header h1 { color: #fff; margin: 0 0 10px 0; font-size: 24px; display: flex; align-items: center; justify-content: center; gap: 10px;}
+    .header p { color: #888; margin: 0; font-size: 14px; }
+
+    .config-panel { background: #252526; border: 1px solid #333; border-radius: 8px; overflow: hidden; }
+    .config-header { padding: 15px 20px; background: #2d2d2d; display: flex; justify-content: space-between; align-items: center; cursor: pointer; user-select: none; }
+    .config-header h3 { margin: 0; font-size: 16px; color: #fff; display: flex; align-items: center; gap: 8px;}
+    .config-header .arrow { transition: transform 0.3s; color: #888; font-size: 12px; }
+    .config-header .arrow.open { transform: rotate(180deg); }
+    
+    .config-body { padding: 20px; display: grid; grid-template-columns: 1fr 1fr; gap: 15px; border-top: 1px solid #333; }
+    .form-group { display: flex; flex-direction: column; gap: 6px; }
+    .form-group.full-width { grid-column: span 2; }
+    .form-group label { font-size: 13px; color: #aaa; }
+    .form-group input { 
+      background: #121212; border: 1px solid #444; color: #fff; 
+      padding: 10px 12px; border-radius: 4px; outline: none; font-size: 14px; transition: border 0.2s;
+    }
+    .form-group input:focus { border-color: #0e639c; }
+    .form-group .help-text { font-size: 12px; color: #666; margin-top: 2px; }
+
+    .push-form { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 15px;}
+    
+    .action-row { display: flex; gap: 15px; }
+    .action-row input { 
+      flex: 1; background: #121212; border: 1px solid #444; color: #fff; 
+      padding: 12px 15px; border-radius: 6px; outline: none; font-size: 15px;
+    }
+    
+    .btn-save { 
+      background: #0e639c; color: #fff; border: none; padding: 0 20px; border-radius: 6px; 
+      cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; white-space: nowrap;
+    }
+    .btn-save:hover { background: #1177bb; }
+    
+    .btn-push { 
+      background: #2ea043; color: #fff; border: none; padding: 0 25px; border-radius: 6px; 
+      cursor: pointer; font-weight: bold; font-size: 15px; transition: 0.2s; display: flex; align-items: center; gap: 8px; white-space: nowrap;
+    }
+    .btn-push:hover:not(:disabled) { background: #3fb950; }
+    .btn-push:disabled { background: #555; cursor: not-allowed; opacity: 0.7; }
+
+    .terminal { 
+      background: #0d0d0d; border: 1px solid #333; border-radius: 8px; 
+      height: 350px; overflow-y: auto; padding: 15px; font-family: Consolas, monospace; 
+      font-size: 13px; line-height: 1.6; color: #4ec9b0; white-space: pre-wrap; word-wrap: break-word;
+      box-shadow: inset 0 0 20px rgba(0,0,0,0.8); flex-shrink: 0;
+    }
+    .terminal .error { color: #f48771; }
+    .terminal .success { color: #89d185; }
+    .terminal .info { color: #dcdcaa; }
+    
+    .terminal::-webkit-scrollbar { width: 8px; }
+    .terminal::-webkit-scrollbar-track { background: #0d0d0d; }
+    .terminal::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+
+    .spinner { animation: spin 1s linear infinite; display: inline-block; }
+    @keyframes spin { 100% { transform: rotate(360deg); } }
+  </style>
+</head>
+<body>
+  <div id="app" class="container">
+    <div class="header">
+      <h1>🚀 一键部署到 GitHub</h1>
+      <p>配置一次，以后只需点击即可将本地所有修改同步到云端</p>
+    </div>
+
+    <div class="config-panel">
+      <div class="config-header" @click="isConfigOpen = !isConfigOpen">
+        <h3>⚙️ GitHub 配置</h3>
+        <span class="arrow" :class="{ open: isConfigOpen }">▼</span>
+      </div>
+      
+      <div class="config-body" v-show="isConfigOpen">
+        <div class="form-group">
+          <label>GitHub 用户名</label>
+          <input type="text" v-model="config.userName" placeholder="如: octocat" />
+        </div>
+        <div class="form-group">
+          <label>GitHub 邮箱</label>
+          <input type="text" v-model="config.userEmail" placeholder="如: octocat@github.com" />
+        </div>
+        
+        <div class="form-group full-width">
+          <label>仓库地址 (HTTPS)</label>
+          <input type="text" v-model="config.repoUrl" placeholder="如: https://github.com/用户名/仓库名.git" />
+        </div>
+        
+        <div class="form-group full-width">
+          <label>Personal Access Token (必填)</label>
+          <input type="password" v-model="config.token" placeholder="ghp_xxxxxxxxxxxxxxxxxxxx" />
+          <div class="help-text">
+            <a href="https://github.com/settings/tokens" target="_blank" style="color: #0e639c;">去 GitHub 生成 Token</a> 
+            (勾选 repo 和 workflow 权限即可)
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="push-form">
+      <div class="action-row">
+        <input 
+          type="text" 
+          v-model="commitMsg" 
+          placeholder="请输入本次更新的说明（如：更新了第3章剧情）" 
+          @keyup.enter="pushToGithub"
+          :disabled="isPushing"
+        />
+        <button class="btn-save" @click="saveConfig">💾 保存配置</button>
+        <button class="btn-push" @click="pushToGithub" :disabled="isPushing || !commitMsg.trim()">
+          <span v-if="isPushing" class="spinner">⏳</span>
+          <span v-else>🚀</span>
+          {{ isPushing ? '推送中...' : '立即推送' }}
+        </button>
+      </div>
+    </div>
+
+    <div class="terminal" ref="terminalRef" v-html="formattedLogs"></div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    createApp({
+      setup() {
+        const config = ref({ repoUrl: '', userName: '', userEmail: '', token: '' });
+        const isConfigOpen = ref(false);
+        const commitMsg = ref('Update world settings from admin panel');
+        const isPushing = ref(false);
+        const logs = ref('');
+        const terminalRef = ref(null);
+
+        const formattedLogs = computed(() => {
+          if (!logs.value) return '> 终端就绪，等待指令...\n';
+          let html = logs.value;
+          html = html.replace(/(> .*)/g, '<span class="info">$1</span>');
+          html = html.replace(/(Error:|fatal:|error:)/gi, '<span class="error">$1</span>');
+          html = html.replace(/(\[SUCCESS\].*)/gi, '<span class="success">$1</span>');
+          html = html.replace(/(\[INFO\].*)/gi, '<span class="info">$1</span>');
+          html = html.replace(/(\[ERROR\].*)/gi, '<span class="error">$1</span>');
+          return html;
+        });
+
+        watch(logs, () => {
+          nextTick(() => {
+            if (terminalRef.value) terminalRef.value.scrollTop = terminalRef.value.scrollHeight;
+          });
+        });
+
+        const loadConfig = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/git/config?t=${Date.now()}`);
+            const data = await res.json();
+            if (data) config.value = data;
+            if (!data.repoUrl || !data.token) isConfigOpen.value = true;
+          } catch (e) {}
+        };
+
+        const saveConfig = async () => {
+          if (!config.value.repoUrl || !config.value.token) {
+            logs.value += `\n[ERROR] 仓库地址和 Token 不能为空！\n`;
+            return;
+          }
+          try {
+            await fetch(`${API_BASE}/git/config`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(config.value)
+            });
+            logs.value += `\n[INFO] ✅ 配置已成功保存到本地。\n`;
+          } catch (e) {
+            logs.value += `\n[ERROR] 保存配置失败，请检查 server.js 是否运行。\n`;
+          }
+        };
+
+        const pushToGithub = async () => {
+          if (!config.value.repoUrl || !config.value.token) {
+            isConfigOpen.value = true;
+            logs.value += `\n[ERROR] 请先在配置面板填写仓库地址和 Token！\n`;
+            return;
+          }
+          if (!commitMsg.value.trim() || isPushing.value) return;
+          
+          isPushing.value = true;
+          
+          try {
+            await fetch(`${API_BASE}/git/config`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(config.value)
+            });
+
+            logs.value += `\n[USER] 开始推送，提交信息: "${commitMsg.value}"\n`;
+            const res = await fetch(`${API_BASE}/git/push`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ message: commitMsg.value })
+            });
+            const data = await res.json();
+            
+            if (data.log) logs.value += data.log;
+            else if (data.error) logs.value += `[ERROR] ${data.error}\n`;
+            
+          } catch (e) {
+            logs.value += `[ERROR] 请求失败，请检查 Node.js 服务是否运行。\n`;
+          } finally {
+            isPushing.value = false;
+          }
+        };
+
+        onMounted(loadConfig);
+
+        return { 
+          config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
+          saveConfig, pushToGithub 
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

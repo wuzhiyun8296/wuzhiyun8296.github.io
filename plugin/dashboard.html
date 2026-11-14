@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>全局仪表盘</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 30px; }
+    .dashboard { max-width: 1000px; margin: 0 auto; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; }
+    .header h1 { color: #fff; margin: 0; font-size: 24px; }
+    
+    /* 统计卡片 */
+    .stats-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 20px; margin-bottom: 30px; }
+    .stat-card { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; text-align: center; }
+    .stat-card .value { font-size: 32px; font-weight: bold; color: #d29922; margin-bottom: 5px; }
+    .stat-card .label { font-size: 13px; color: #888; }
+
+    /* 搜索区 */
+    .search-box { background: #252526; border-radius: 8px; padding: 20px; margin-bottom: 30px; border: 1px solid #333; }
+    .search-input { width: 100%; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 12px 15px; border-radius: 6px; outline: none; font-size: 15px; margin-bottom: 15px; }
+    .search-result { padding: 10px; border-bottom: 1px solid #333; font-size: 14px; cursor: pointer; }
+    .search-result:hover { background: #333; }
+    .search-result .title { color: #0e639c; font-weight: bold; margin-bottom: 3px; }
+    .search-result .snippet { color: #888; font-size: 13px; }
+    .search-result .type { font-size: 11px; background: #333; padding: 2px 6px; border-radius: 4px; margin-left: 10px; color: #aaa;}
+
+    /* 两列布局 */
+    .panels { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
+    
+    /* 灵感箱 */
+    .inbox-panel { background: #252526; border-radius: 8px; padding: 20px; border: 1px solid #333; display: flex; flex-direction: column; height: 400px; }
+    .inbox-list { flex: 1; overflow-y: auto; margin-bottom: 10px; display: flex; flex-direction: column; gap: 10px;}
+    .inbox-item { background: #1e1e1e; padding: 10px; border-radius: 4px; font-size: 13px; position: relative; border-left: 3px solid #911eb4;}
+    .inbox-item .del { position: absolute; right: 5px; top: 5px; cursor: pointer; color: #a82626; font-size: 12px; }
+    .inbox-input { display: flex; gap: 10px; }
+    .inbox-input input { flex: 1; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; outline: none; }
+
+    /* 备份中心 */
+    .backup-panel { background: #252526; border-radius: 8px; padding: 20px; border: 1px solid #333; display: flex; flex-direction: column; justify-content: center; align-items: center; text-align: center;}
+    .backup-icon { font-size: 60px; margin-bottom: 20px; }
+    .backup-tips { font-size: 13px; color: #888; margin-bottom: 20px; line-height: 1.6;}
+
+    button { background: #0e639c; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-size: 14px; font-weight: bold; transition: background 0.2s; }
+    button:hover { background: #1177bb; }
+    button.success { background: #2ea043; }
+    button.danger { background: #a82626; }
+  </style>
+</head>
+<body>
+  <div id="app" class="dashboard">
+    <div class="header">
+      <h1>🗺️ 创世主控台</h1>
+      <span style="color:#2ea043; font-weight:bold;">系统运行正常</span>
+    </div>
+
+    <!-- 统计区域 -->
+    <div class="stats-grid">
+      <div class="stat-card"><div class="value">{{ stats.totalWords }}</div><div class="label">总计字数</div></div>
+      <div class="stat-card"><div class="value">{{ stats.articleCount }}</div><div class="label">文章/章节总数</div></div>
+      <div class="stat-card"><div class="value">{{ stats.charCount }}</div><div class="label">人物档案</div></div>
+      <div class="stat-card"><div class="value">{{ stats.markerCount }}</div><div class="label">地图标识</div></div>
+    </div>
+
+    <!-- 全局搜索 -->
+    <div class="search-box">
+      <input type="text" class="search-input" v-model="searchQuery" @input="doSearch" placeholder="🔍 全局深度搜索 (输入关键字，如人物、武器、地名等)..." />
+      <div v-if="searchResults.length > 0" style="max-height: 250px; overflow-y: auto;">
+        <div class="search-result" v-for="(res, i) in searchResults" :key="i">
+          <div class="title">{{ res.title }} <span class="type">{{ res.type }}</span></div>
+          <div class="snippet">{{ res.snippet }}</div>
+        </div>
+      </div>
+      <div v-else-if="searchQuery && !isSearching" style="color: #666; text-align: center; font-size: 14px;">未找到匹配内容</div>
+    </div>
+
+    <div class="panels">
+      <!-- 灵感箱 -->
+      <div class="inbox-panel">
+        <h3 style="margin-top:0; color:#fff; border-bottom:1px solid #444; padding-bottom:10px;">💡 灵感碎片箱</h3>
+        <div class="inbox-list">
+          <div class="inbox-item" v-for="(item, i) in inboxList" :key="i">
+            {{ item.text }}
+            <span class="del" @click="deleteInbox(i)">✖</span>
+          </div>
+          <div v-if="inboxList.length === 0" style="color:#666; text-align:center; margin-top:50px;">暂无灵感，快记录一条吧</div>
+        </div>
+        <div class="inbox-input">
+          <input type="text" v-model="newInbox" @keyup.enter="addInbox" placeholder="突然想到的设定或台词..." />
+          <button @click="addInbox">记录</button>
+        </div>
+      </div>
+
+      <!-- 数据安全 -->
+      <div class="backup-panel">
+        <div class="backup-icon">🛡️</div>
+        <h3 style="margin-top:0; color:#fff;">数据安全与备份</h3>
+        <p class="backup-tips">
+          所有的设定和小说都保存在你的本地文件夹中。<br>
+          强烈建议每周下载一次备份，防止意外丢失。
+        </p>
+        <button class="success" @click="downloadBackup" style="width: 100%; justify-content: center; font-size: 16px;">📥 打包下载全站备份 (JSON)</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    createApp({
+      setup() {
+        const stats = ref({ totalWords: 0, articleCount: 0, charCount: 0, markerCount: 0 });
+        
+        // 搜索
+        const searchQuery = ref('');
+        const searchResults = ref([]);
+        const isSearching = ref(false);
+        let searchTimer = null;
+
+        // 灵感箱
+        const inboxList = ref([]);
+        const newInbox = ref('');
+
+        const fetchStats = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/dashboard/stats`);
+            stats.value = await res.json();
+          } catch (e) {}
+        };
+
+        const doSearch = () => {
+          if (!searchQuery.value.trim()) { searchResults.value = []; return; }
+          isSearching.value = true;
+          clearTimeout(searchTimer);
+          searchTimer = setTimeout(async () => {
+            try {
+              const res = await fetch(`${API_BASE}/global-search?q=${encodeURIComponent(searchQuery.value)}`);
+              searchResults.value = await res.json();
+            } catch (e) {}
+            isSearching.value = false;
+          }, 500);
+        };
+
+        const fetchInbox = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/inbox`);
+            inboxList.value = await res.json();
+          } catch (e) {}
+        };
+
+        const addInbox = async () => {
+          if (!newInbox.value.trim()) return;
+          inboxList.value.push({ text: newInbox.value, date: Date.now() });
+          newInbox.value = '';
+          await fetch(`${API_BASE}/inbox`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inboxList.value) });
+        };
+
+        const deleteInbox = async (index) => {
+          inboxList.value.splice(index, 1);
+          await fetch(`${API_BASE}/inbox`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(inboxList.value) });
+        };
+
+        const downloadBackup = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/backup`);
+            const data = await res.json();
+            
+            const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `FantasyWorld_Backup_${new Date().toISOString().split('T')[0]}.json`;
+            document.body.appendChild(a);
+            a.click();
+            document.body.removeChild(a);
+            URL.revokeObjectURL(url);
+          } catch (e) {
+            alert('备份失败，请检查后台');
+          }
+        };
+
+        onMounted(() => {
+          fetchStats();
+          fetchInbox();
+        });
+
+        return { stats, searchQuery, searchResults, isSearching, doSearch, inboxList, newInbox, addInbox, deleteInbox, downloadBackup };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
