@@ -7,7 +7,8 @@ const errorMsg = ref('')
 
 onMounted(async () => {
   try {
-    const res = await fetch('/public/timeline.json')
+    // 💡 核心修复：使用 VitePress 的环境变量自动拼接正确路径，并加上时间戳防缓存
+    const res = await fetch(import.meta.env.BASE_URL + 'timeline.json?t=' + Date.now())
     if (res.ok) {
       events.value = await res.json()
     } else {

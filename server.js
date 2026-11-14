@@ -32,6 +32,9 @@ fs.ensureDirSync(LIBRARY_DIR);
 app.use('/public', express.static(PUBLIC_DIR));
 app.use('/assets', express.static(path.join(DOCS_DIR, 'assets')));
 
+// 💡 全局系统黑名单：在文件树、搜索、统计中绝对不显示这些文件夹
+const IGNORE_DIRS = ['assets', 'public', 'components', 'node_modules', '.vitepress', 'website'];
+
 // ================= 图片上传配置 =================
 const storage = multer.diskStorage({
   destination: (req, file, cb) => cb(null, ASSETS_DIR),
@@ -94,7 +97,9 @@ app.get('/api/files', async (req, res) => {
     const files = await fs.readdir(dir);
     const tree = [];
     for (const file of files) {
-      if (file === 'assets' || file === 'public' || file.startsWith('.')) continue;
+      // 💡 过滤黑名单文件夹和隐藏文件
+      if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+      
       const fullPath = path.join(dir, file);
       const stat = await fs.stat(fullPath);
       
@@ -287,7 +292,9 @@ app.post('/api/sync-tree', async (req, res) => {
     const scanDir = (dir, baseDir) => {
       const files = fs.readdirSync(dir);
       for (const file of files) {
-        if (file.startsWith('.') || file === 'assets' || file === 'public') continue;
+        // 💡 过滤黑名单
+        if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+        
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
           scanDir(fullPath, baseDir);
@@ -478,28 +485,42 @@ app.get('/api/dashboard/stats', async (req, res) => {
     let totalWords = 0;
     let articleCount = 0;
     
-    const countWords = (dir) => {
+    const countWords = (dir, isRoot = false) => {
       if (!fs.existsSync(dir)) return;
       const files = fs.readdirSync(dir);
       for (const file of files) {
+        // 💡 过滤黑名单
+        if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+
         const fullPath = path.join(dir, file);
         const stat = fs.statSync(fullPath);
-        if (stat.isDirectory() && file !== 'assets' && file !== 'public' && !file.startsWith('.')) {
-          countWords(fullPath);
+        if (stat.isDirectory()) {
+          countWords(fullPath, false); // 递归子文件夹
         } else if (file.endsWith('.md')) {
+          // 💡 过滤 docs 根目录下的 md 文件
+          if (isRoot && dir === DOCS_DIR) continue;
+
           const rawContent = fs.readFileSync(fullPath, 'utf-8');
+          
+          // 💡 智能过滤：如果包含代码特征，直接跳过不计入章节
+          if (rawContent.includes('<script') || rawContent.includes('<template') || rawContent.includes('import ')) {
+            continue;
+          }
+
           let cleanText = rawContent
-            .replace(/<[^>]+>/g, '')
-            .replace(/!\[.*?\]\(.*?\)/g, '')
-            .replace(/\[(.*?)\]\(.*?\)/g, '$1')
-            .replace(/[#*_`~=\-|>\s\n\r]/g, '');
+            .replace(/<[^>]+>/g, '')                  
+            .replace(/!\[.*?\]\(.*?\)/g, '')          
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1')       
+            .replace(/[#*_`~=\-|>\s\n\r]/g, '');     
+            
           totalWords += cleanText.length;
           articleCount++;
         }
       }
     };
-    countWords(DOCS_DIR);
-    countWords(LIBRARY_DIR);
+    
+    countWords(DOCS_DIR, true); 
+    countWords(LIBRARY_DIR, false); 
 
     const charFile = path.join(PUBLIC_DIR, 'characters.json');
     const charCount = fs.existsSync(charFile) ? (await fs.readJson(charFile)).length : 0;
@@ -529,9 +550,12 @@ app.get('/api/global-search', async (req, res) => {
     if (!fs.existsSync(dir)) return;
     const files = fs.readdirSync(dir);
     for (const file of files) {
+      // 💡 过滤黑名单
+      if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+
       const fullPath = path.join(dir, file);
       const stat = fs.statSync(fullPath);
-      if (stat.isDirectory() && file !== 'assets' && file !== 'public' && !file.startsWith('.')) {
+      if (stat.isDirectory()) {
         searchDir(fullPath, type);
       } else if (file.endsWith('.md')) {
         const content = fs.readFileSync(fullPath, 'utf-8');
@@ -566,9 +590,12 @@ app.get('/api/backup', async (req, res) => {
       if (!fs.existsSync(dir)) return;
       const files = fs.readdirSync(dir);
       for (const file of files) {
+        // 💡 过滤黑名单
+        if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+
         const fullPath = path.join(dir, file);
         const stat = fs.statSync(fullPath);
-        if (stat.isDirectory() && file !== 'assets' && file !== 'public' && !file.startsWith('.')) {
+        if (stat.isDirectory()) {
           readDirRecursive(fullPath, obj);
         } else if (file.endsWith('.md') || file.endsWith('.json')) {
           obj[fullPath] = fs.readFileSync(fullPath, 'utf-8');
@@ -641,12 +668,10 @@ app.post('/api/git/push', async (req, res) => {
   logs.push(`[INFO] 开始配置并执行 Git 推送...\n`);
 
   try {
-    // 1. 自动生成 .gitignore，防止密码泄露
     const gitignorePath = path.join(__dirname, '.gitignore');
     const ignoreContent = 'node_modules/\ngit-config.json\n.git/\nwebsite/node_modules/\nwebsite/.vitepress/cache/\nwebsite/.vitepress/dist/\n';
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
-    // 2. 初始化（如果没初始化）并配置用户信息
     await runCmd('git init');
     
     const cleanName = (config.userName || 'Admin').trim();
@@ -654,28 +679,23 @@ app.post('/api/git/push', async (req, res) => {
     await runCmd(`git config user.name "${cleanName}"`);
     await runCmd(`git config user.email "${cleanEmail}"`);
 
-    // 3. 标准的 Token 认证 URL
     let rawUrl = config.repoUrl.trim();
     if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
     const safeToken = config.token.trim();
-    const authUrl = `https://${safeToken}@${rawUrl}`; // 💡 只用 Token 认证
+    const authUrl = `https://${safeToken}@${rawUrl}`; 
 
     await runCmd(`git remote remove origin`);
     await runCmd(`git remote add origin ${authUrl}`);
     logs.push(`> 配置远程仓库: 成功\n`);
 
     await runCmd('git branch -M main');
-
-    // 4. 精准剔除密码文件
     await runCmd('git rm --cached git-config.json -f');
-    
     await runCmd('git add .');
     
     let res2 = await runCmd(`git commit -m "${message.replace(/"/g, '\\"')}"`);
     logs.push(`> git commit: ${res2.success ? '成功' : '跳过(无修改)'}\n`);
 
     logs.push(`> 正在推送到 GitHub...\n`);
-    // 5. 强制覆盖远端历史，洗白之前的密码
     let res3 = await runCmd('git push -u origin main -f');
     
     let safeOutput = res3.output.replace(new RegExp(safeToken, 'g'), '***');
