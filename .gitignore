@@ -4,3 +4,10 @@ git-config.json
 website/node_modules/
 website/.vitepress/cache/
 website/.vitepress/dist/
+
+# 隐私保护：防止私人数据被推送到公开仓库
+library/
+website/docs/public/
+website/docs/novel/chapters/
+website/docs/assets/
+website/docs/**/*.md 

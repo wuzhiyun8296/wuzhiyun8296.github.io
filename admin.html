@@ -374,26 +374,27 @@
           }
         };
 
-        const updateGit = async () => {
-          openModal({ type: 'confirm', title: '⏳ 正在更新', message: '正在暂存本地修改并拉取远程代码，请稍候...' });
+                const updateGit = async () => {
+          openModal({ type: 'confirm', title: '⏳ 正在更新', message: '正在从 GitHub 下载最新版本并覆盖代码，请稍候...（请勿关闭页面）' });
           try {
-            const res = await fetch(`${API_BASE}/git/pull`);
+            // 💡 调用新的无 Git 下载接口
+            const res = await fetch(`${API_BASE}/update/zip`);
             const data = await res.json();
+            
             if (data.success) {
               openModal({ 
                 type: 'confirm', 
                 title: '✅ 更新成功', 
-                message: '代码已成功更新！<br><b>为了防止数据冲突，系统将自动刷新。</b>', 
+                message: '系统核心代码已更新！<br><b>为了防止数据缓存，请手动关闭并重新双击 start.bat 启动服务。</b>', 
                 callback: () => { window.location.reload(); } 
               });
             } else {
-              openModal({ type: 'confirm', title: '❌ 更新失败', message: data.error || '未知错误，可能是文件冲突。', isDanger: true });
+              openModal({ type: 'confirm', title: '❌ 更新失败', message: data.error || '未知错误', isDanger: true });
             }
           } catch (e) {
             openModal({ type: 'confirm', title: '❌ 请求失败', message: e.message, isDanger: true });
           }
         };
-
         const changePassword = () => {
           openModal({
             type: 'prompt-double', title: '🔐 修改安全密码', message: '第一个输入框填写新密码，第二个填写提示语。若新密码留空，则恢复默认 123456。', placeholder1: '请输入新密码', placeholder2: '请输入密码提示语 (下次登录显示)',

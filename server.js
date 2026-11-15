@@ -832,10 +832,23 @@ app.post('/api/git/push', async (req, res) => {
       logs.push(`> 前台已隐藏小说。\n`);
     }
 
-    // 💡 移除外部多余的 copyNovelFiles 调用，统一在 if 块内完成
-
     const gitignorePath = path.join(__dirname, '.gitignore');
-    const ignoreContent = 'node_modules/\ngit-config.json\n.git/\nwebsite/node_modules/\nwebsite/.vitepress/cache/\nwebsite/.vitepress/dist/\n';
+    
+    // 💡 核心修复 1：重写 .gitignore，彻底屏蔽所有私人数据
+    const ignoreContent = `node_modules/
+git-config.json
+.git/
+website/node_modules/
+website/.vitepress/cache/
+website/.vitepress/dist/
+
+# 隐私保护：防止私人数据被推送到公开仓库
+library/
+website/docs/public/
+website/docs/novel/chapters/
+website/docs/assets/
+website/docs/**/*.md 
+`;
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
     await runCmd('git init');
@@ -855,25 +868,31 @@ app.post('/api/git/push', async (req, res) => {
 
     await runCmd('git branch -M main');
     await runCmd('git rm --cached git-config.json -f');
+    
+    // 💡 核心修复 2：强制清空 Git 缓存，让新加的 .gitignore 立即生效
+    await runCmd('git rm -r --cached . -f');
+    
     await runCmd('git add .');
     
     let res2 = await runCmd(`git commit -m "${message.replace(/"/g, '\\"')}"`);
     logs.push(`> git commit: ${res2.success ? '成功' : '跳过(无修改)'}\n`);
 
     logs.push(`> 正在推送到 GitHub...\n`);
+    // 💡 核心修复 3：使用 -f 强推，用干净代码覆盖掉云端已有的隐私文件
     let res3 = await runCmd('git push -u origin main -f');
     
     let safeOutput = res3.output.replace(new RegExp(safeToken, 'g'), '***');
     logs.push(safeOutput + '\n');
 
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
-    logs.push(`\n[SUCCESS] 代码及小说书架已成功推送！\n`);
+    logs.push(`\n[SUCCESS] 代码推送成功（私人文章和设定已安全过滤）！\n`);
     res.json({ success: true, log: logs.join('\n') });
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
   }
 });
+
 // ================= 💡 检测并拉取 GitHub 更新 =================
 app.get('/api/git/check-update', async (req, res) => {
   if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ success: false, error: '请先在【一键推送】中配置 GitHub Token' });
@@ -1130,128 +1149,47 @@ const generateZeroWidthWatermark = (text) => {
   return result + '\u200d'; 
 };
 
-// ================= 💡 一键导出纯净系统包 =================
+// ================= 💡 一键导出纯净系统包 (包含运行环境，开箱即用) =================
 app.get('/api/export/init', async (req, res) => {
   try {
-    // 我们不在原目录直接打包（防止把 node_modules 或用户数据打进去）
-    // 而是先复制到一个临时文件夹进行清洗
     const tempDir = path.join(__dirname, '.temp_export_build');
-    await fs.remove(tempDir); // 清理旧临时目录
+    await fs.remove(tempDir);
     await fs.ensureDir(tempDir);
 
-    // 需要复制并打包的核心文件夹和文件
     const keepList = [
-      'server.js', 'admin.html', 'package.json', 
-      'plugin', 'website', 'node_modules' // 如果不带 node_modules 包会很小，但别人需要 npm install
+      'server.js', 'admin.html', 'package.json', 'package-lock.json', 
+      'plugin', 'website', 
+      '一键启动.vbs', 'start.bat', 'loading.html', 
+      'icon.svg', 'icon3.ico', '幻想世界启动器.lnk'
     ];
 
     for (const item of keepList) {
       const srcPath = path.join(__dirname, item);
       const destPath = path.join(tempDir, item);
-      if (fs.existsSync(srcPath)) {
-        if (item === 'website') {
-          // 💡 清理 website 里的用户数据
-          await fs.copy(srcPath, destPath, {
-            filter: (src) => {
-              // 排除用户产生的大文件/数据
-              if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
-              if (src.includes('docs/public/assets')) return false;
-              if (src.includes('docs/novel/chapters')) return false;
-              return true;
-            }
-          });
-        } else {
-          await fs.copy(srcPath, destPath);
-        }
+      if (!fs.existsSync(srcPath)) continue;
+
+      if (item === 'website') {
+        await fs.copy(srcPath, destPath, {
+          filter: (src) => {
+            if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
+            if (src.includes('docs/public/assets')) return false;
+            if (src.includes('docs/novel/chapters')) return false;
+            return true;
+          }
+        });
+      } else {
+        await fs.copy(srcPath, destPath);
       }
     }
 
-    // 💡 构建干净的空数据文件
-    const publicDir = path.join(tempDir, 'website/docs/public');
-    await fs.ensureDir(publicDir);
-    
-    await fs.writeJson(path.join(publicDir, 'characters.json'), [], { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'timeline.json'), [], { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'graph.json'), { nodes: [], links: [] }, { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'map.json'), { image: '', markers: [] }, { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'world-tree.json'), [], { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'plotline.json'), [], { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'finance.json'), {
-      items: [],
-      stocks: [],
-      currencies: [{ symbol: 'Gold', name: '黄金', basePrice: 1, currentPrice: 1 }]
-    }, { spaces: 2 });
-    await fs.writeJson(path.join(publicDir, 'protection-config.json'), {
-      enableNovelSync: true, enableWatermark: true, authorName: '新作者', enableAntiCopy: true, copyrightText: '请支持正版。', targetWords: 100000, lastCertifiedMilestone: 0
-    }, { spaces: 2 });
-
-    // 清理 novel/chapters 目录
-    const chaptersDir = path.join(tempDir, 'website/docs/novel/chapters');
-    await fs.ensureDir(chaptersDir);
-
-    // 清理 library 目录
-    const libDir = path.join(tempDir, 'library');
-    await fs.ensureDir(libDir);
-    await fs.writeFile(path.join(libDir, '.gitkeep'), '');
-
-    // 💡 执行压缩命令 (利用 Windows 自带的 tar 命令)
-    const zipName = `my-world-system-init.zip`;
-    const zipPath = path.join(__dirname, zipName);
-    
-    // tar -a -c -f 压缩包路径 -C 目录 .
-    // Windows 的 tar 完美支持这种打包方式
-    await new Promise((resolve, reject) => {
-      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-
-    // 删除临时目录
-    await fs.remove(tempDir);
-
-    // 发送给客户端下载
-    res.download(zipPath, zipName, async () => {
-      // 下载完毕后清理生成的 zip
-      await fs.remove(zipPath);
-    });
-
-  } catch (error) {
-    res.status(500).send('导出失败: ' + error.message);
-  }
-});
-
-// ================= 💡 一键导出全站干净模板 (ZIP) =================
-app.get('/api/export/template', async (req, res) => {
-  try {
-    const tempDir = path.join(__dirname, '.temp_export_build');
-    await fs.remove(tempDir);
-    await fs.ensureDir(tempDir);
-
-    const keepList = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
-    
-    // 1. 复制核心文件，剔除无用大文件
-    for (const item of keepList) {
-      const srcPath = path.join(__dirname, item);
-      const destPath = path.join(tempDir, item);
-      if (fs.existsSync(srcPath)) {
-        if (item === 'website') {
-          await fs.copy(srcPath, destPath, {
-            filter: (src) => {
-              // 排除缓存、大文件、用户数据
-              if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
-              if (src.includes('docs/public/assets')) return false;
-              if (src.includes('docs/novel/chapters')) return false;
-              return true;
-            }
-          });
-        } else {
-          await fs.copy(srcPath, destPath);
-        }
-      }
+        // 2. 使用 fs-extra 复制 node_modules（开启 dereference 防止 Windows 软链接报错）
+    const nmSrc = path.join(__dirname, 'node_modules');
+    const nmDest = path.join(tempDir, 'node_modules');
+    if (fs.existsSync(nmSrc)) {
+      await fs.copy(nmSrc, nmDest, { dereference: true });
     }
 
-    // 2. 重置所有的 JSON 数据为空
+    // 构建干净的空数据文件
     const publicDir = path.join(tempDir, 'website/docs/public');
     await fs.ensureDir(publicDir);
     await fs.writeJson(path.join(publicDir, 'characters.json'), [], { spaces: 2 });
@@ -1267,16 +1205,87 @@ app.get('/api/export/template', async (req, res) => {
       enableNovelSync: true, enableWatermark: true, authorName: '新作者', enableAntiCopy: true, copyrightText: '请支持正版。', targetWords: 100000, lastCertifiedMilestone: 0
     }, { spaces: 2 });
 
-    // 3. 清空小说库和前台的章节
+    const chaptersDir = path.join(tempDir, 'website/docs/novel/chapters');
+    await fs.ensureDir(chaptersDir);
+    const libDir = path.join(tempDir, 'library');
+    await fs.ensureDir(libDir);
+    await fs.writeFile(path.join(libDir, '.gitkeep'), '');
+
+    const zipName = `my-world-system-init.zip`;
+    const zipPath = path.join(__dirname, zipName);
+    
+    await new Promise((resolve, reject) => {
+      exec(`tar --force-local -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100 }, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    await fs.remove(tempDir);
+    res.download(zipPath, zipName, async () => { await fs.remove(zipPath); });
+
+  } catch (error) {
+    res.status(500).send('导出失败: ' + error.message);
+  }
+});
+
+// ================= 💡 一键导出全站干净模板 (无 node_modules，适合开发者) =================
+app.get('/api/export/template', async (req, res) => {
+  try {
+    const tempDir = path.join(__dirname, '.temp_export_build');
+    await fs.remove(tempDir);
+    await fs.ensureDir(tempDir);
+
+    const keepList = [
+      'server.js', 'admin.html', 'package.json', 'package-lock.json', 
+      'plugin', 'website',
+      '一键启动.vbs', 'start.bat', 'loading.html', 
+      'icon.svg', 'icon3.ico', '幻想世界启动器.lnk'
+    ];
+    
+    for (const item of keepList) {
+      const srcPath = path.join(__dirname, item);
+      const destPath = path.join(tempDir, item);
+      if (!fs.existsSync(srcPath)) continue;
+
+      if (item === 'website') {
+        await fs.copy(srcPath, destPath, {
+          filter: (src) => {
+            if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
+            if (src.includes('docs/public/assets')) return false;
+            if (src.includes('docs/novel/chapters')) return false;
+            return true;
+          }
+        });
+      } else {
+        await fs.copy(srcPath, destPath);
+      }
+    }
+
+    // 构建干净的空数据文件
+    const publicDir = path.join(tempDir, 'website/docs/public');
+    await fs.ensureDir(publicDir);
+    await fs.writeJson(path.join(publicDir, 'characters.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'timeline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'graph.json'), { nodes: [], links: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'map.json'), { image: '', markers: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'world-tree.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'plotline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'finance.json'), {
+      items: [], stocks: [], currencies: [{ symbol: 'Gold', name: '黄金', basePrice: 1, currentPrice: 1 }]
+    }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'protection-config.json'), {
+      enableNovelSync: true, enableWatermark: true, authorName: '新作者', enableAntiCopy: true, copyrightText: '请支持正版。', targetWords: 100000, lastCertifiedMilestone: 0
+    }, { spaces: 2 });
+
     await fs.emptyDir(path.join(tempDir, 'library'));
     await fs.ensureDir(path.join(tempDir, 'website/docs/novel/chapters'));
 
-    // 4. 使用 Windows 自带 tar 命令打包 (零依赖)
     const zipName = `my-world-system-template.zip`;
     const zipPath = path.join(__dirname, zipName);
     
     await new Promise((resolve, reject) => {
-      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, (error) => {
+      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100 }, (error) => {
         if (error) reject(error);
         else resolve();
       });
@@ -1500,6 +1509,89 @@ app.get('/api/diagnostic', async (req, res) => {
 
   res.json(results);
 });
+// ================= 💡 无 Git 直接下载更新 (ZIP) =================
+const https = require('https');
+
+
+app.get('/api/update/zip', async (req, res) => {
+  if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ success: false, error: '请先配置 GitHub 仓库地址' });
+
+  try {
+    const config = await fs.readJson(GIT_CONFIG_FILE);
+    let rawUrl = config.repoUrl.trim().replace(/\.git$/, ''); 
+    // 提取 owner 和 repo 名称
+    const match = rawUrl.match(/github\.com\/([^\/]+)\/([^\/]+)/);
+    if (!match) return res.status(400).json({ success: false, error: '无法识别 GitHub 仓库地址' });
+    
+    const owner = match[1];
+    const repo = match[2];
+    const zipUrl = `https://github.com/${owner}/${repo}/archive/refs/heads/main.zip`;
+    const zipPath = path.join(__dirname, 'update.zip');
+    const tempDir = path.join(__dirname, '.temp_update');
+
+    // 1. 下载 ZIP 包
+    const downloadFile = (url, dest) => new Promise((resolve, reject) => {
+      const file = fs.createWriteStream(dest);
+      https.get(url, (response) => {
+        if (response.statusCode === 302 || response.statusCode === 301) {
+          return downloadFile(response.headers.location, dest).then(resolve).catch(reject);
+        }
+        if (response.statusCode !== 200) {
+          return reject(new Error(`下载失败，HTTP 状态码: ${response.statusCode}`));
+        }
+        response.pipe(file);
+        file.on('finish', () => { file.close(resolve); });
+      }).on('error', (err) => {
+        fs.unlink(dest);
+        reject(err);
+      });
+    });
+
+    await downloadFile(zipUrl, zipPath);
+
+    // 2. 清理旧的临时目录并解压
+    await fs.remove(tempDir);
+    await fs.ensureDir(tempDir);
+    await new Promise((resolve, reject) => {
+      exec(`tar -xf "${zipPath}" -C "${tempDir}"`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    // 3. 找到解压后的文件夹 (GitHub 自动生成的文件夹名通常是 repo-main)
+    const dirs = await fs.readdir(tempDir);
+    const sourceDir = path.join(tempDir, dirs[0]);
+
+    // 4. 💡 核心保护机制：只覆盖特定文件，保留数据
+    const keepData = ['library', 'website/docs/public', 'git-config.json', '.gitignore', 'node_modules'];
+    const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website']; // 更新系统核心
+
+    for (const item of filesToUpdate) {
+      const src = path.join(sourceDir, item);
+      const dest = path.join(__dirname, item);
+      if (fs.existsSync(src)) {
+        if (item === 'website') {
+          // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
+          await fs.copy(src, dest, {
+            filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
+          });
+        } else {
+          await fs.copy(src, dest);
+        }
+      }
+    }
+
+    // 5. 清理垃圾
+    await fs.remove(tempDir);
+    await fs.remove(zipPath);
+
+    res.json({ success: true, message: '更新成功！私人数据已保留，请重启后台。' });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
 // 启动服务
 app.listen(3001, () => {
   console.log('=================================');
