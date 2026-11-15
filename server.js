@@ -874,6 +874,88 @@ app.post('/api/git/push', async (req, res) => {
     res.json({ success: false, log: logs.join('\n') });
   }
 });
+// ================= 💡 检测并拉取 GitHub 更新 =================
+app.get('/api/git/check-update', async (req, res) => {
+  if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ success: false, error: '请先在【一键推送】中配置 GitHub Token' });
+
+  const runCmd = (cmd) => new Promise((resolve) => {
+    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+      if (error) resolve({ success: false, output: stderr || stdout || error.message });
+      else resolve({ success: true, output: stdout || stderr });
+    });
+  });
+
+  try {
+    const config = await fs.readJson(GIT_CONFIG_FILE);
+    let rawUrl = config.repoUrl.trim();
+    if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
+    const safeToken = config.token.trim();
+    const authUrl = `https://${safeToken}@${rawUrl}`;
+    
+    // 确保连接到正确的仓库
+    await runCmd('git remote remove origin');
+    await runCmd(`git remote add origin ${authUrl}`);
+
+    // 拉取远程分支信息（只拉取不合并）
+    const fetchRes = await runCmd('git fetch origin main');
+    if (!fetchRes.success) return res.json({ success: false, error: '拉取远程信息失败，请检查网络或 Token：' + fetchRes.output.replace(new RegExp(safeToken, 'g'), '***') });
+
+    // 检查落后多少个 commit
+    const countRes = await runCmd('git rev-list HEAD...origin/main --count');
+    const count = parseInt(countRes.output.trim(), 10);
+
+    if (count > 0) {
+      // 有更新，获取更新日志
+      const logRes = await runCmd('git log HEAD..origin/main --pretty=format:"%h - %s (%cr)"');
+      res.json({ success: true, hasUpdate: true, count, logs: logRes.output.split('\n') });
+    } else {
+      res.json({ success: true, hasUpdate: false, count: 0, logs: [] });
+    }
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+app.get('/api/git/pull', async (req, res) => {
+  if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ success: false, error: '请先配置 GitHub Token' });
+
+  const runCmd = (cmd) => new Promise((resolve) => {
+    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+      if (error) resolve({ success: false, output: stderr || stdout || error.message });
+      else resolve({ success: true, output: stdout || stderr });
+    });
+  });
+
+  let logs = [];
+  try {
+    const config = await fs.readJson(GIT_CONFIG_FILE);
+    let rawUrl = config.repoUrl.trim();
+    if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
+    const safeToken = config.token.trim();
+    const authUrl = `https://${safeToken}@${rawUrl}`;
+    
+    await runCmd('git remote remove origin');
+    await runCmd(`git remote add origin ${authUrl}`);
+    
+    logs.push('> 正在暂存本地修改（防止冲突）...');
+    await runCmd('git add .');
+    await runCmd('git stash');
+    
+    logs.push('> 正在拉取远程最新代码...');
+    const pullRes = await runCmd('git pull origin main');
+    
+    logs.push('> 正在恢复你的本地文件...');
+    const popRes = await runCmd('git stash pop');
+    
+    if (pullRes.success) {
+      res.json({ success: true, log: logs.join('\n') + '\n' + pullRes.output.replace(new RegExp(safeToken, 'g'), '***') + '\n' + popRes.output });
+    } else {
+      res.json({ success: false, error: pullRes.output.replace(new RegExp(safeToken, 'g'), '***') });
+    }
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 // ================= 防吃书一致性校验接口 (智能模糊匹配版) =================
 app.get('/api/audit/check', async (req, res) => {
   try {

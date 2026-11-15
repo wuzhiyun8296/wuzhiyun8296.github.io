@@ -1,4 +1,0 @@
-=================================
-SUCCESS! Server is running on port 3001
-URL: http://localhost:3001
-=================================

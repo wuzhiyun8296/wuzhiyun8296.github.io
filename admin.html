@@ -27,10 +27,14 @@
 
     /* ================= 通用高级模态框 ================= */
     .custom-modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 99998; background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; }
-    .custom-modal-box { background: #252526; border: 1px solid #444; border-radius: 10px; padding: 25px; width: 420px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    .custom-modal-box { background: #252526; border: 1px solid #444; border-radius: 10px; padding: 25px; width: 480px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
     @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
     .custom-modal-box h3 { margin: 0 0 10px 0; color: #fff; font-size: 18px; }
     .custom-modal-box p { color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    
+    /* 更新日志展示区 */
+    .update-log-box { background: #111; border: 1px solid #333; border-radius: 6px; padding: 10px; font-family: Consolas, monospace; font-size: 12px; color: #aaa; max-height: 150px; overflow-y: auto; text-align: left; margin-bottom: 15px; line-height: 1.6; }
+
     .modal-input-group { margin-bottom: 15px; }
     .modal-input-group input { width: 100%; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; }
     .modal-input-group input:focus { border-color: #0e639c; }
@@ -156,6 +160,9 @@
           </div>
         </div>
 
+        <!-- 💡 更新日志展示区 -->
+        <div v-if="modal.updateLogs" class="update-log-box" v-html="modal.updateLogs"></div>
+
         <div class="modal-actions">
           <button class="secondary" @click="closeModal">取消</button>
           <button :class="{ danger: modal.isDanger }" @click="confirmModal">确认</button>
@@ -167,7 +174,7 @@
     <div class="main-ui" :class="{ hidden: !isAuthenticated }">
       <div class="top-nav">
         <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
-                <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
+        <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
           <!-- 仪表盘永远固定在第一位 -->
           <button class="nav-btn" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
           
@@ -185,6 +192,7 @@
         </div>
         
         <div class="nav-actions">
+          <button class="action-btn" @click="checkUpdate">🔄 检测更新</button>
           <button class="action-btn" @click="changePassword">🔐 改密</button>
           <button class="action-btn danger" @click="logout">退出登录</button>
         </div>
@@ -319,8 +327,9 @@
           }
         };
 
-        const modal = ref({ show: false, type: '', title: '', message: '', input1: '', input2: '', placeholder1: '', placeholder2: '', callback: null, isDanger: false });
-        const openModal = (options) => { modal.value = { ...modal.value, ...options, show: true, input1: '', input2: '' }; };
+        // 💡 扩展了 modal，增加了 updateLogs 用于显示更新列表
+        const modal = ref({ show: false, type: '', title: '', message: '', input1: '', input2: '', placeholder1: '', placeholder2: '', callback: null, isDanger: false, updateLogs: '' });
+        const openModal = (options) => { modal.value = { ...modal.value, updateLogs: '', ...options, show: true, input1: '', input2: '' }; };
         const closeModal = () => { modal.value.show = false; };
         const confirmModal = () => {
           if (modal.value.callback) {
@@ -328,6 +337,61 @@
             else { modal.value.callback(modal.value.input1); }
           }
           closeModal();
+        };
+
+        // 💡 检测更新逻辑
+        const isCheckingUpdate = ref(false);
+        const checkUpdate = async () => {
+          if (isCheckingUpdate.value) return;
+          isCheckingUpdate.value = true;
+          
+          openModal({ type: 'confirm', title: '🔄 正在检测更新', message: '正在连接 GitHub 服务器获取最新版本信息，请稍候...' });
+          
+          try {
+            const res = await fetch(`${API_BASE}/git/check-update`);
+            const data = await res.json();
+            
+            if (!data.success) {
+              openModal({ type: 'confirm', title: '⚠️ 检测失败', message: data.error || '未知错误，请检查【一键推送】里配置的仓库信息。', isDanger: true });
+            } else {
+              if (data.hasUpdate) {
+                const logsHtml = data.logs.map(l => `<div>${l}</div>`).join('');
+                openModal({ 
+                  type: 'confirm', 
+                  title: '🎉 发现新版本', 
+                  message: `发现 <b>${data.count}</b> 个新提交：`,
+                  updateLogs: logsHtml,
+                  callback: () => updateGit()
+                });
+              } else {
+                openModal({ type: 'confirm', title: '✅ 已是最新', message: '当前代码已经是最新版本，无需更新。' });
+              }
+            }
+          } catch (e) {
+            openModal({ type: 'confirm', title: '❌ 网络错误', message: e.message, isDanger: true });
+          } finally {
+            isCheckingUpdate.value = false;
+          }
+        };
+
+        const updateGit = async () => {
+          openModal({ type: 'confirm', title: '⏳ 正在更新', message: '正在暂存本地修改并拉取远程代码，请稍候...' });
+          try {
+            const res = await fetch(`${API_BASE}/git/pull`);
+            const data = await res.json();
+            if (data.success) {
+              openModal({ 
+                type: 'confirm', 
+                title: '✅ 更新成功', 
+                message: '代码已成功更新！<br><b>为了防止数据冲突，系统将自动刷新。</b>', 
+                callback: () => { window.location.reload(); } 
+              });
+            } else {
+              openModal({ type: 'confirm', title: '❌ 更新失败', message: data.error || '未知错误，可能是文件冲突。', isDanger: true });
+            }
+          } catch (e) {
+            openModal({ type: 'confirm', title: '❌ 请求失败', message: e.message, isDanger: true });
+          }
         };
 
         const changePassword = () => {
@@ -461,12 +525,10 @@
 
         const handleKeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') { e.preventDefault(); saveFile(); } };
         
-        // 💡 提取加载逻辑，过滤掉仪表盘、插件工厂、文章编辑和隐藏后台的插件
-                const loadDynamicPlugins = () => {
+        const loadDynamicPlugins = () => {
           fetch(`${API_BASE}/plugins/list?t=${Date.now()}`)
             .then(res => res.json())
             .then(data => { 
-              // 过滤掉隐藏的插件，仅保留需要显示的
               dynamicPlugins.value = Array.isArray(data) 
                 ? data.filter(p => !p.hideBackend) 
                 : []; 
@@ -474,7 +536,6 @@
             .catch(() => {});
         };
 
-        // 💡 监听 iframe 发来的局部刷新指令
         const handleIframeMessage = (e) => {
           if (e.data && e.data.type === 'REFRESH_PLUGINS') {
             loadDynamicPlugins();
@@ -502,7 +563,7 @@
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
           navGroupRef, handleNavWheel,
-          dynamicPlugins
+          dynamicPlugins, checkUpdate
         };
       }
     });

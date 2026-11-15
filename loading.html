@@ -42,7 +42,7 @@
     .error-title { color: #ff6b6b; font-size: 22px; margin-top: 0; margin-bottom: 15px; display: flex; align-items: center; gap: 10px; border-bottom: 1px solid #333; padding-bottom: 15px;}
     .error-desc { color: #ccc; font-size: 14px; line-height: 1.6; margin-bottom: 20px; background: rgba(168,38,38,0.1); padding: 15px; border-radius: 6px; border-left: 4px solid #a82626; }
     
-    .diag-list { background: #121212; border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 250px; overflow-y: auto; font-family: Consolas, monospace; font-size: 13px; margin-bottom: 20px;}
+    .diag-list { background: #121212; border: 1px solid #333; border-radius: 8px; padding: 15px; max-height: 250px; overflow-y: auto; font-family: Consolas, monospace; font-size: 13px; margin-bottom: 25px;}
     .diag-item { padding: 10px 0; border-bottom: 1px dashed #333; display: flex; justify-content: space-between; align-items: center; }
     .diag-item:last-child { border-bottom: none; }
     .diag-item .name { color: #aaa; font-weight: bold; }
@@ -52,11 +52,10 @@
     .status-warning { color: #d29922; background: rgba(210,153,34,0.1); padding: 2px 6px; border-radius: 4px; }
     .status-error { color: #ff6b6b; background: rgba(168,38,38,0.2); padding: 2px 6px; border-radius: 4px; font-weight: bold; }
     
-    .action-btns { display: flex; gap: 15px; }
-    .btn { background: #0e639c; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; text-decoration: none; font-size: 14px; transition: 0.2s; }
-    .btn:hover { background: #1177bb; }
-    .btn.outline { background: transparent; border: 1px solid #444; color: #aaa; }
-    .btn.outline:hover { background: #333; color: #fff; }
+    /* 按钮区域，现在只有关闭按钮，居中显示 */
+    .action-btns { display: flex; justify-content: center; align-items: center; }
+    .btn { background: #333; color: #ccc; border: 1px solid #555; padding: 10px 30px; border-radius: 6px; cursor: pointer; font-weight: bold; text-decoration: none; font-size: 14px; transition: 0.2s; }
+    .btn:hover { background: #444; color: #fff; }
   </style>
 </head>
 <body>
@@ -65,7 +64,8 @@
   <div id="loading-panel" class="panel active">
     <div class="loader"></div>
     <h2 style="color: #ddd; font-weight: normal; letter-spacing: 2px; margin: 0;">幻想写作系统正在唤醒</h2>
-    <p id="loading-text" style="margin-top: 10px;">正在检测后台服务与星网矩阵...</p>
+    <p id="loading-text" style="margin-top: 10px;">正在探测服务状态...</p>
+    <div style="font-size: 12px; color: #555; margin-top: 10px; cursor: pointer;" onclick="showErrorPanel('强制跳过等待，查看诊断结果。')">如果卡住不动，点击这里</div>
   </div>
 
   <!-- 2. 启动成功 -->
@@ -99,8 +99,7 @@
       </div>
       
       <div class="action-btns">
-        <button class="btn" onclick="location.reload()">🔄 重新检测</button>
-        <a href="javascript:window.close()" class="btn outline">关闭页面</a>
+        <a href="javascript:window.close()" class="btn">关闭页面</a>
       </div>
     </div>
   </div>
@@ -108,13 +107,18 @@
   <script>
     let backendReady = false;
     let frontendReady = false;
-    
-    // 探活函数
+    let timer = null;
+
+    // 带有超时机制的探活函数（防止 fetch 卡住导致页面死机）
     const checkHealth = async (url) => {
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 1000); // 1秒超时
       try {
-        await fetch(url, { mode: 'no-cors', cache: 'no-store' });
+        await fetch(url, { mode: 'no-cors', cache: 'no-store', signal: controller.signal });
+        clearTimeout(timeoutId);
         return true;
       } catch (e) {
+        clearTimeout(timeoutId);
         return false;
       }
     };
@@ -123,15 +127,13 @@
     const fetchDiagnostic = async () => {
       try {
         const res = await fetch('http://localhost:3001/api/diagnostic?t=' + Date.now());
-        if (!res.ok) return false;
+        if (!res.ok) return;
         const data = await res.json();
         
         const listEl = document.getElementById('diag-list');
         listEl.innerHTML = '';
         
-        let hasFatalError = false;
         data.forEach(item => {
-          if (item.status === 'error') hasFatalError = true;
           let statusText = item.status === 'ok' ? '正常' : (item.status === 'warning' ? '警告' : '错误');
           let statusClass = 'status-' + item.status;
           
@@ -145,11 +147,24 @@
             </div>
           `;
         });
-
-        return hasFatalError;
       } catch (e) {
         document.getElementById('diag-list').innerHTML = '<div style="color:#ff6b6b;">无法连接后端诊断接口，原因可能是 Node.js 未安装或 server.js 报错。</div>';
-        return true;
+      }
+    };
+
+    // 显示错误面板
+    const showErrorPanel = async (reason) => {
+      if (timer) clearInterval(timer);
+      document.getElementById('loading-panel').classList.remove('active');
+      document.getElementById('error-panel').classList.add('active');
+      
+      if (reason) document.getElementById('error-message').innerHTML = reason;
+      
+      if (backendReady) {
+        await fetchDiagnostic();
+      } else {
+        document.getElementById('error-message').innerHTML = '后台端口(3001)未能启动。<br>请确认是否已安装 Node.js 环境，以及是否在项目根目录运行过 <b>npm install</b>。';
+        await fetchDiagnostic(); // 尝试拉取，拉不到会有红字提示
       }
     };
 
@@ -157,10 +172,14 @@
     const initSystem = async () => {
       let attempts = 0;
       const maxAttempts = 20; // 20次 * 500ms = 10秒超时
+      const textEl = document.getElementById('loading-text');
       
-      const timer = setInterval(async () => {
+      timer = setInterval(async () => {
         attempts++;
         
+        // 显示动态秒数，让用户知道没死机
+        textEl.innerText = `正在探测服务状态... (已等待 ${Math.floor(attempts * 0.5)} 秒)`;
+
         if (!frontendReady) frontendReady = await checkHealth('http://localhost:5173');
         if (!backendReady) backendReady = await checkHealth('http://localhost:3001');
 
@@ -174,25 +193,18 @@
 
         // 超时处理
         if (attempts >= maxAttempts) {
-          clearInterval(timer);
-          document.getElementById('loading-panel').classList.remove('active');
-          document.getElementById('error-panel').classList.add('active');
-          
-          if (backendReady) {
-            // 后端起来了，但前端没起来
-            document.getElementById('error-message').innerHTML = '后台端口(3001)已启动，但前台端口(5173)启动失败。<br>请检查 VitePress 编译是否报错，或者是否忘记运行 npm run dev。';
-            await fetchDiagnostic();
+          if (backendReady && !frontendReady) {
+            showErrorPanel('后台(3001)已启动，但前台(5173)未响应。可能是 VitePress 编译较慢或报错，请查看 dev_log.txt 日志。');
+          } else if (!backendReady && frontendReady) {
+            showErrorPanel('前台(5173)已启动，但后台(3001)未响应。请查看 server_log.txt 日志。');
           } else {
-            // 连后端都没起来（通常是没装 Node，或者依赖没装）
-            document.getElementById('error-message').innerHTML = '后台端口(3001)未能启动。<br>请确认是否已安装 Node.js 环境，以及是否在项目根目录运行过 <b>npm install</b>。';
-            // 尝试请求一下，如果连不上，会显示内部的红字
-            await fetchDiagnostic();
+            showErrorPanel('前台与后台均未启动。请检查命令行窗口是否闪退，或是否安装了 Node.js。');
           }
         }
       }, 500);
     };
 
-    initVideo();
+    initSystem();
   </script>
 </body>
 </html>
