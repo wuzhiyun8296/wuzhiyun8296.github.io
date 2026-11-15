@@ -40,21 +40,15 @@
     .main-ui { display: flex; flex-direction: column; width: 100%; height: 100%; transition: opacity 0.5s; }
     .main-ui.hidden { opacity: 0; pointer-events: none; }
 
-    /* 顶部导航 */
-    .top-nav { background: #252526; display: flex; border-bottom: 1px solid #333; flex-shrink: 0; align-items: center; justify-content: space-between; }
-    
-    /* 💡 优化：左侧滚动区隐藏滚动条 */
-    .nav-group { display: flex; overflow-x: auto; flex: 1; scrollbar-width: none; /* Firefox */ -ms-overflow-style: none; /* IE/Edge */ }
-    .nav-group::-webkit-scrollbar { display: none; /* Chrome/Safari */ }
-    
-    /* 导航按钮 */
-    .nav-btn { padding: 12px 16px; background: none; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; }
+    /* 💡 顶部导航核心优化 */
+    .top-nav { background: #252526; display: flex; border-bottom: 1px solid #333; flex-shrink: 0; align-items: center; height: 50px; }
+    .nav-group { display: flex; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; height: 100%; padding: 0 5px; scroll-behavior: smooth;}
+    .nav-group::-webkit-scrollbar { display: none; }
+    .nav-btn { padding: 0 15px; height: 100%; background: none; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; flex-shrink: 0; }
     .nav-btn:hover { color: #fff; background: #2d2d2d; }
     .nav-btn.active { color: #fff; border-bottom-color: #0e639c; background: #1e1e1e; }
-    
-    /* 💡 优化：右侧操作区固定宽度，防止被挤压 */
-    .nav-actions { display: flex; gap: 10px; padding: 0 15px; flex-shrink: 0; background: #252526; border-left: 1px solid #333;}
-    .action-btn { background: transparent; border: 1px solid #444; color: #888; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 13px;}
+    .nav-actions { display: flex; gap: 10px; padding: 0 15px; flex-shrink: 0; background: #252526; border-left: 1px solid #333; height: 100%; align-items: center; z-index: 10; box-shadow: -10px 0 15px -5px rgba(0,0,0,0.5);}
+    .action-btn { background: transparent; border: 1px solid #444; color: #888; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 13px; white-space: nowrap;}
     .action-btn:hover { background: #444; color: #fff; }
     .action-btn.danger { background: #a82626; border-color: #a82626; color: #fff; }
     .action-btn.danger:hover { background: #c92a2a; border-color: #c92a2a; }
@@ -92,9 +86,15 @@
     .md-textarea { width: 50%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; border-right: 1px solid #333; padding: 20px; font-size: 15px; line-height: 1.6; font-family: Consolas, monospace; resize: none; outline: none; }
     .preview-pane { width: 50%; height: 100%; padding: 20px; overflow-y: auto; line-height: 1.6; font-size: 15px; }
     .preview-pane h1, .preview-pane h2, .preview-pane h3 { color: #fff; border-bottom: 1px solid #444; padding-bottom: 8px; }
-    .preview-pane table { border-collapse: collapse; width: 100%; margin-bottom: 20px; }
-    .preview-pane th, .preview-pane td { border: 1px solid #444; padding: 8px 12px; }
-    .preview-pane th { background: #2d2d2d; color: #fff; }
+    
+    /* 💡 预览区表格样式 */
+    .preview-pane table { border-collapse: collapse; width: 100%; margin-bottom: 20px; margin-top: 10px; }
+    .preview-pane th, .preview-pane td { border: 1px solid #444; padding: 8px 12px; text-align: left; }
+    .preview-pane th { background: #2d2d2d; color: #fff; font-weight: bold; }
+    
+    /* 💡 预览区双向链接样式 */
+    .preview-pane a { color: #0e639c; text-decoration: none; border-bottom: 1px dashed #0e639c; font-weight: bold; }
+    .preview-pane a:hover { color: #1177bb; border-bottom-style: solid; }
 
     /* 按钮 */
     button { background: #0e639c; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; transition: background 0.2s; }
@@ -166,23 +166,24 @@
     <!-- ================= 主界面 ================= -->
     <div class="main-ui" :class="{ hidden: !isAuthenticated }">
       <div class="top-nav">
-        <div class="nav-group">
+        <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
+                <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
+          <!-- 仪表盘永远固定在第一位 -->
           <button class="nav-btn" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'article' }" @click="currentTab = 'article'">📝 文章编辑</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'writer' }" @click="currentTab = 'writer'">✍️ 沉浸码字</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'plotline' }" @click="currentTab = 'plotline'">🎬 剧情大纲</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'timeline' }" @click="currentTab = 'timeline'">⏳ 时间线</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'characters' }" @click="currentTab = 'characters'">👤 人物档案</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'graph' }" @click="currentTab = 'graph'">🕸️ 关系图谱</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'finance' }" @click="currentTab = 'finance'">💰 金融中心</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'world-tree' }" @click="currentTab = 'world-tree'">🌍 世界观树</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'map' }" @click="currentTab = 'map'">🗺️ 世界地图</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'epoch-map' }" @click="currentTab = 'epoch-map'">🕰️ 纪元地图</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'audit' }" @click="currentTab = 'audit'">🕵️ 防吃书校验</button>
-          <button class="nav-btn" :class="{ active: currentTab === 'github' }" @click="currentTab = 'github'">🚀 一键推送</button>
+          
+          <!-- 其他所有插件全部由 navigation.json 的顺序动态渲染 -->
+          <template v-for="p in dynamicPlugins" :key="p.id">
+            <button 
+              v-if="p.id !== 'dashboard'"
+              class="nav-btn" 
+              :class="{ active: currentTab === p.id }" 
+              @click="currentTab = p.id"
+            >
+              {{ p.icon || '🧩' }} {{ p.name }}
+            </button>
+          </template>
         </div>
         
-        <!-- 💡 优化的右侧操作区 -->
         <div class="nav-actions">
           <button class="action-btn" @click="changePassword">🔐 改密</button>
           <button class="action-btn danger" @click="logout">退出登录</button>
@@ -234,6 +235,28 @@
         </div>
       </div>
     </div>
+
+    <!-- 表格生成器模态框 -->
+    <div class="modal-overlay" v-if="showTableModal" @click.self="showTableModal = false">
+      <div class="modal-box">
+        <h3>插入表格</h3>
+        <div class="modal-row">
+          <div class="form-group">
+            <label>行数</label>
+            <input type="number" v-model.number="tableRows" min="1" />
+          </div>
+          <div class="form-group">
+            <label>列数</label>
+            <input type="number" v-model.number="tableCols" min="1" />
+          </div>
+        </div>
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
+          <button class="secondary" @click="showTableModal = false">取消</button>
+          <button @click="insertTable">确认插入</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -278,6 +301,7 @@
 
     const app = createApp({
       setup() {
+        const dynamicPlugins = ref([]);
         const isAuthenticated = ref(false);
         const password = ref('');
         const showError = ref(false);
@@ -328,13 +352,27 @@
           });
         };
 
+        const navGroupRef = ref(null);
+        const handleNavWheel = (e) => {
+          if (navGroupRef.value) {
+            navGroupRef.value.scrollLeft += e.deltaY;
+          }
+        };
+
         const currentTab = ref('dashboard');
         const tree = ref([]); const content = ref(''); const currentPath = ref(''); const selectedFolder = ref('');
 
         const renderedHtml = computed(() => {
           if (!content.value || typeof content.value !== 'string') return '';
           if (typeof marked === 'undefined') return '<div style="color:#a82626;">Marked 库未加载。</div>';
-          try { return marked.parse(content.value); } catch (e) { return '<div style="color:#a82626;">语法解析出错</div>'; }
+          try {
+            let mdText = content.value.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+              const cleanP1 = p1.replace(/\\/g, '/');
+              return `<a href="/${cleanP1}">🔗 ${cleanP1}</a>`;
+            });
+            marked.setOptions({ gfm: true, breaks: true });
+            return marked.parse(mdText);
+          } catch (e) { return '<div style="color:#a82626;">语法解析出错</div>'; }
         });
         
         const fetchTree = async () => { try { const res = await fetch(`${API_BASE}/files`); tree.value = await res.json(); } catch (e) {} };
@@ -397,10 +435,14 @@
 
         const showTableModal = ref(false); const tableRows = ref(3); const tableCols = ref(3);
         const insertTable = async () => {
-          let mdTable = '\n';
+          let mdTable = '\n\n';
           mdTable += '| ' + Array.from({length: tableCols.value}).map((_, i) => `表头 ${i+1}`).join(' | ') + ' |\n';
           mdTable += '| ' + Array.from({length: tableCols.value}).map(() => `---`).join(' | ') + ' |\n';
-          for (let r = 0; r < tableRows.value; r++) { mdTable += '| ' + Array.from({length: tableCols.value}).map(() => `内容`).join(' | ') + ' |\n'; }
+          for (let r = 0; r < tableRows.value; r++) { 
+            mdTable += '| ' + Array.from({length: tableCols.value}).map(() => `内容`).join(' | ') + ' |\n'; 
+          }
+          mdTable += '\n';
+          
           const textarea = document.getElementById('md-editor');
           if (textarea) {
             const startPos = textarea.selectionStart; const endPos = textarea.selectionEnd;
@@ -419,18 +461,48 @@
 
         const handleKeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') { e.preventDefault(); saveFile(); } };
         
+        // 💡 提取加载逻辑，过滤掉仪表盘、插件工厂、文章编辑和隐藏后台的插件
+                const loadDynamicPlugins = () => {
+          fetch(`${API_BASE}/plugins/list?t=${Date.now()}`)
+            .then(res => res.json())
+            .then(data => { 
+              // 过滤掉隐藏的插件，仅保留需要显示的
+              dynamicPlugins.value = Array.isArray(data) 
+                ? data.filter(p => !p.hideBackend) 
+                : []; 
+            })
+            .catch(() => {});
+        };
+
+        // 💡 监听 iframe 发来的局部刷新指令
+        const handleIframeMessage = (e) => {
+          if (e.data && e.data.type === 'REFRESH_PLUGINS') {
+            loadDynamicPlugins();
+          }
+        };
+
         onMounted(() => {
           if (sessionStorage.getItem('admin_auth') === 'true') { isAuthenticated.value = true; }
-          fetchTree(); window.addEventListener('keydown', handleKeydown);
+          fetchTree(); 
+          window.addEventListener('keydown', handleKeydown);
+          
+          loadDynamicPlugins();
+          window.addEventListener('message', handleIframeMessage);
         });
-        onUnmounted(() => window.removeEventListener('keydown', handleKeydown));
+        
+        onUnmounted(() => {
+          window.removeEventListener('keydown', handleKeydown);
+          window.removeEventListener('message', handleIframeMessage);
+        });
 
         return { 
           isAuthenticated, password, showError, handleLogin, loginHint, changePassword, logout,
           currentTab, tree, content, currentPath, selectedFolder, renderedHtml, 
           loadFile, saveFile, newFile, newFolder, deleteNode,
           showTableModal, tableRows, tableCols, insertTable,
-          modal, closeModal, confirmModal
+          modal, closeModal, confirmModal,
+          navGroupRef, handleNavWheel,
+          dynamicPlugins
         };
       }
     });

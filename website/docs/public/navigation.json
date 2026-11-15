@@ -1,0 +1,164 @@
+[
+  {
+    "id": "plugin-builder",
+    "title": "插件工厂",
+    "icon": "🏭",
+    "desc": "自定义",
+    "link": "#",
+    "isSystem": true,
+    "hideBackend": false,
+    "hideFrontend": true
+  },
+  {
+    "id": "graph",
+    "title": "关系图谱",
+    "desc": "交互式拖拽查看人物与势力的复杂关系网络。",
+    "icon": "🕸️",
+    "link": "/graph",
+    "isSystem": true,
+    "hideBackend": false
+  },
+  {
+    "id": "characters",
+    "title": "人物档案",
+    "desc": "查看各阵营核心成员的档案与立绘照片。",
+    "icon": "👤",
+    "link": "/characters",
+    "isSystem": true,
+    "hideBackend": false
+  },
+  {
+    "id": "finance",
+    "title": "金融中心",
+    "desc": "查看实时物价、货币汇率及虚拟股市波动行情。",
+    "icon": "💰",
+    "link": "/finance",
+    "isSystem": true,
+    "hideBackend": false
+  },
+  {
+    "id": "map",
+    "title": "世界地图",
+    "desc": "交互式查看幻想域大陆的各个国家与地标。",
+    "icon": "🗺️",
+    "link": "/map",
+    "isSystem": true,
+    "hideBackend": false
+  },
+  {
+    "id": "epoch-map",
+    "title": "纪元地图",
+    "desc": "拖动时间轴滑块，动态查看各大势力版图的扩张与覆灭。",
+    "icon": "🕰️",
+    "link": "/epoch-map",
+    "isSystem": true,
+    "hideBackend": false
+  },
+  {
+    "id": "plotline",
+    "title": "剧情大纲",
+    "icon": "🎬",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "timeline",
+    "title": "时间线",
+    "icon": "⏳",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "world-tree",
+    "title": "世界观树",
+    "icon": "🌍",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "dashboard",
+    "title": "仪表盘",
+    "icon": "📊",
+    "desc": "自定义",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true
+  },
+  {
+    "id": "writer",
+    "title": "沉浸码字",
+    "icon": "✍️",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "article",
+    "title": "文章编辑",
+    "icon": "📝",
+    "desc": "自定义",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": true
+  },
+  {
+    "id": "audit",
+    "title": "防吃书校验",
+    "icon": "🕵️",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "protection",
+    "title": "版权与目标",
+    "icon": "🎯",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "home-editor",
+    "title": "首页设计与导出",
+    "icon": "🎨",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "github",
+    "title": "一键推送",
+    "icon": "🚀",
+    "desc": "系统内置插件",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false
+  },
+  {
+    "id": "novel",
+    "title": "幻想域小说",
+    "desc": "阅读主角穿越后在幻想域的奇妙冒险与故事。",
+    "icon": "📖",
+    "link": "/novel/",
+    "isSystem": true
+  }
+]

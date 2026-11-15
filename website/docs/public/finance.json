@@ -18,20 +18,20 @@
       "symbol": "TMC",
       "name": "秋月商会 (The Moonvale Co.)",
       "basePrice": 100,
-      "currentPrice": 117.71
+      "currentPrice": 95.5
     },
     {
       "symbol": "ICC",
       "name": "帝国商会 (Imperial Chamber of Commerce)",
       "basePrice": 500,
-      "currentPrice": 488.55,
+      "currentPrice": 488.78,
       "history": []
     },
     {
       "symbol": "IIC",
       "name": "DGDFHDG",
       "basePrice": 100,
-      "currentPrice": 100.51,
+      "currentPrice": 101.02,
       "history": []
     }
   ],
@@ -46,7 +46,7 @@
       "symbol": "G",
       "name": "金币",
       "basePrice": 10,
-      "currentPrice": 10.57
+      "currentPrice": 10.54
     }
   ]
 }

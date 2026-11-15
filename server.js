@@ -745,20 +745,15 @@ app.post('/api/inbox', async (req, res) => {
 const GIT_CONFIG_FILE = path.join(__dirname, 'git-config.json');
 
 app.get('/api/git/config', async (req, res) => {
-  if (fs.existsSync(GIT_CONFIG_FILE)) {
-    res.json(await fs.readJson(GIT_CONFIG_FILE));
-  } else {
-    res.json({ repoUrl: '', userName: '', userEmail: '', token: '' });
-  }
+  if (fs.existsSync(GIT_CONFIG_FILE)) res.json(await fs.readJson(GIT_CONFIG_FILE));
+  else res.json({ repoUrl: '', userName: '', userEmail: '', token: '' });
 });
 
 app.post('/api/git/config', async (req, res) => {
   try {
     await fs.writeJson(GIT_CONFIG_FILE, req.body, { spaces: 2 });
     res.json({ success: true });
-  } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+  } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
 app.post('/api/git/push', async (req, res) => {
@@ -770,10 +765,7 @@ app.post('/api/git/push', async (req, res) => {
   if (!config.repoUrl || !config.token) return res.status(400).json({ error: '配置不完整，请检查仓库地址和 Token' });
 
   const runCmd = (cmd) => new Promise((resolve) => {
-    exec(cmd, { 
-      cwd: __dirname,
-      env: { ...process.env, GIT_TERMINAL_PROMPT: '0' }
-    }, (error, stdout, stderr) => {
+    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
       if (error) resolve({ success: false, output: stderr || stdout || error.message });
       else resolve({ success: true, output: stdout || stderr });
     });
@@ -787,52 +779,66 @@ app.post('/api/git/push', async (req, res) => {
     await fs.emptyDir(NOVEL_CHAPTERS_DIR); 
     
     const bookcase = []; 
-
-    const copyNovelFiles = (srcDir, destDir, currentBookcase) => {
-      if (!fs.existsSync(srcDir)) return;
-      const items = fs.readdirSync(srcDir);
-      
-      const sortedItems = items.sort((a, b) => {
-        const aStat = fs.statSync(path.join(srcDir, a));
-        const bStat = fs.statSync(path.join(srcDir, b));
-        if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
-        if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
-        return a.localeCompare(b, 'zh-CN', {numeric: true});
-      });
-
-      for (const item of sortedItems) {
-        if (item.startsWith('.') || item === 'inbox.json') continue;
-        const srcPath = path.join(srcDir, item);
-        const destPath = path.join(destDir, item);
-        const stat = fs.statSync(srcPath);
-        
-        if (stat.isDirectory()) {
-          fs.ensureDirSync(destPath);
-          const subBookcase = { title: item, type: 'folder', children: [] };
-          currentBookcase.push(subBookcase);
-          copyNovelFiles(srcPath, destPath, subBookcase.children);
-        } else if (item.endsWith('.md')) {
-          fs.copyFileSync(srcPath, destPath);
-          currentBookcase.push({ 
-            title: item.replace('.md', ''), 
-            type: 'file', 
-            link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
-          });
-        }
-      }
-    };
-
-    copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
+    const protConfig = fs.existsSync(PROTECTION_CONFIG_FILE) ? await fs.readJson(PROTECTION_CONFIG_FILE) : { enableNovelSync: true, enableWatermark: true };
     
-    await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
-    logs.push(`> 小说同步完成。\n`);
+    if (protConfig.enableNovelSync) {
+      const watermarkStr = protConfig.enableWatermark ? generateZeroWidthWatermark(`[Author:${protConfig.authorName}]`) : '';
+
+      const copyNovelFiles = (srcDir, destDir, currentBookcase) => {
+        if (!fs.existsSync(srcDir)) return;
+        const items = fs.readdirSync(srcDir).sort((a, b) => {
+          const aStat = fs.statSync(path.join(srcDir, a));
+          const bStat = fs.statSync(path.join(srcDir, b));
+          if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
+          if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
+          return a.localeCompare(b, 'zh-CN', {numeric: true});
+        });
+
+        for (const item of items) {
+          if (item.startsWith('.') || item === 'inbox.json') continue;
+          const srcPath = path.join(srcDir, item);
+          const destPath = path.join(destDir, item);
+          const stat = fs.statSync(srcPath);
+          
+          if (stat.isDirectory()) {
+            fs.ensureDirSync(destPath);
+            const subBookcase = { title: item, type: 'folder', children: [] };
+            currentBookcase.push(subBookcase);
+            copyNovelFiles(srcPath, destPath, subBookcase.children);
+          } else if (item.endsWith('.md')) {
+            let content = fs.readFileSync(srcPath, 'utf-8');
+            if (protConfig.enableWatermark) {
+              content = content.replace(/[\u200b\u200c\u200d]/g, ''); 
+              content = content.replace(/<\/(div|p)>/gi, `${watermarkStr}</$1>`);
+              if (!content.includes('</div>') && !content.includes('</p>')) content += watermarkStr;
+            }
+            fs.writeFileSync(destPath, content, 'utf-8');
+            
+            currentBookcase.push({ 
+              title: item.replace('.md', ''), 
+              type: 'file', 
+              link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
+            });
+          }
+        }
+      };
+
+      copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
+      await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
+      logs.push(`> 小说同步完成，防伪水印已注入。\n`);
+    } else {
+      logs.push(`> ⚠️ 小说公开已关闭，正在清空前台小说目录以隐藏内容...\n`);
+      await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), [], { spaces: 2 });
+      logs.push(`> 前台已隐藏小说。\n`);
+    }
+
+    // 💡 移除外部多余的 copyNovelFiles 调用，统一在 if 块内完成
 
     const gitignorePath = path.join(__dirname, '.gitignore');
     const ignoreContent = 'node_modules/\ngit-config.json\n.git/\nwebsite/node_modules/\nwebsite/.vitepress/cache/\nwebsite/.vitepress/dist/\n';
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
     await runCmd('git init');
-    
     const cleanName = (config.userName || 'Admin').trim();
     const cleanEmail = (config.userEmail || 'admin@local').trim();
     await runCmd(`git config user.name "${cleanName}"`);
@@ -860,13 +866,9 @@ app.post('/api/git/push', async (req, res) => {
     let safeOutput = res3.output.replace(new RegExp(safeToken, 'g'), '***');
     logs.push(safeOutput + '\n');
 
-    if (!res3.success) {
-      return res.json({ success: false, log: logs.join('\n') });
-    }
-
+    if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
     logs.push(`\n[SUCCESS] 代码及小说书架已成功推送！\n`);
     res.json({ success: true, log: logs.join('\n') });
-
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
@@ -961,7 +963,461 @@ app.get('/api/audit/check', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+// ================= 版权保护与系统控制接口 =================
+const PROTECTION_CONFIG_FILE = path.join(PUBLIC_DIR, 'protection-config.json');
+const SITE_NOTICE_FILE = path.join(PUBLIC_DIR, 'site-notice.json'); // 💡 新增首页提示文件
 
+// 1. 读取/保存保护配置
+app.get('/api/protection/config', async (req, res) => {
+  if (!fs.existsSync(PROTECTION_CONFIG_FILE)) {
+    await fs.writeJson(PROTECTION_CONFIG_FILE, {
+      enableNovelSync: true, 
+      enableWatermark: true, 
+      authorName: '幻想域作者', 
+      enableAntiCopy: true, 
+      copyrightText: '本文摘自《幻想域》，请支持正版。',
+      targetWords: 0,
+      lastCertifiedMilestone: 0 // 💡 新增：记录上次提醒的里程碑（0代表没提示过，1代表十万字提示过，2代表二十万字...）
+    }, { spaces: 2 });
+  }
+  res.json(await fs.readJson(PROTECTION_CONFIG_FILE));
+});
+
+app.post('/api/protection/config', async (req, res) => {
+  await fs.writeJson(PROTECTION_CONFIG_FILE, req.body, { spaces: 2 });
+  res.json({ success: true });
+});
+
+// 2. 💡 新增：精准统计小说字数（仅统计 library 目录，剔除符号）
+app.get('/api/protection/stats', async (req, res) => {
+  try {
+    let totalWords = 0;
+    let chapterCount = 0;
+    
+    const countWords = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      const files = fs.readdirSync(dir);
+      for (const file of files) {
+        if (file.startsWith('.')) continue;
+        const fullPath = path.join(dir, file);
+        if (fs.statSync(fullPath).isDirectory()) {
+          countWords(fullPath); 
+        } else if (file.endsWith('.md')) {
+          const rawContent = fs.readFileSync(fullPath, 'utf-8');
+          let cleanText = rawContent
+            .replace(/<[^>]+>/g, '')                  
+            .replace(/!\[.*?\]\(.*?\)/g, '')          
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1')       
+            .replace(/[#*_`~=\-|>\s\n\r]/g, '');     
+          totalWords += cleanText.length;
+          chapterCount++;
+        }
+      }
+    };
+    countWords(LIBRARY_DIR);
+    res.json({ totalWords, chapterCount });
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+// 3. 💡 新增：读取/保存首页系统提示
+app.get('/api/site-notice', async (req, res) => {
+  if (!fs.existsSync(SITE_NOTICE_FILE)) {
+    await fs.writeJson(SITE_NOTICE_FILE, { text: '', type: 'info' }, { spaces: 2 });
+  }
+  res.json(await fs.readJson(SITE_NOTICE_FILE));
+});
+
+app.post('/api/site-notice', async (req, res) => {
+  await fs.writeJson(SITE_NOTICE_FILE, req.body, { spaces: 2 });
+  res.json({ success: true });
+});
+
+// 💡 零宽水印生成工具
+const generateZeroWidthWatermark = (text) => {
+  // ... 保持原有的水印生成逻辑不变 ...
+  let result = '';
+  for (let i = 0; i < text.length; i++) {
+    const charCode = text.charCodeAt(i);
+    const binary = charCode.toString(2).padStart(16, '0');
+    for (let bit of binary) {
+      result += bit === '0' ? '\u200b' : '\u200c'; 
+    }
+  }
+  return result + '\u200d'; 
+};
+
+// ================= 💡 一键导出纯净系统包 =================
+app.get('/api/export/init', async (req, res) => {
+  try {
+    // 我们不在原目录直接打包（防止把 node_modules 或用户数据打进去）
+    // 而是先复制到一个临时文件夹进行清洗
+    const tempDir = path.join(__dirname, '.temp_export_build');
+    await fs.remove(tempDir); // 清理旧临时目录
+    await fs.ensureDir(tempDir);
+
+    // 需要复制并打包的核心文件夹和文件
+    const keepList = [
+      'server.js', 'admin.html', 'package.json', 
+      'plugin', 'website', 'node_modules' // 如果不带 node_modules 包会很小，但别人需要 npm install
+    ];
+
+    for (const item of keepList) {
+      const srcPath = path.join(__dirname, item);
+      const destPath = path.join(tempDir, item);
+      if (fs.existsSync(srcPath)) {
+        if (item === 'website') {
+          // 💡 清理 website 里的用户数据
+          await fs.copy(srcPath, destPath, {
+            filter: (src) => {
+              // 排除用户产生的大文件/数据
+              if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
+              if (src.includes('docs/public/assets')) return false;
+              if (src.includes('docs/novel/chapters')) return false;
+              return true;
+            }
+          });
+        } else {
+          await fs.copy(srcPath, destPath);
+        }
+      }
+    }
+
+    // 💡 构建干净的空数据文件
+    const publicDir = path.join(tempDir, 'website/docs/public');
+    await fs.ensureDir(publicDir);
+    
+    await fs.writeJson(path.join(publicDir, 'characters.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'timeline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'graph.json'), { nodes: [], links: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'map.json'), { image: '', markers: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'world-tree.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'plotline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'finance.json'), {
+      items: [],
+      stocks: [],
+      currencies: [{ symbol: 'Gold', name: '黄金', basePrice: 1, currentPrice: 1 }]
+    }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'protection-config.json'), {
+      enableNovelSync: true, enableWatermark: true, authorName: '新作者', enableAntiCopy: true, copyrightText: '请支持正版。', targetWords: 100000, lastCertifiedMilestone: 0
+    }, { spaces: 2 });
+
+    // 清理 novel/chapters 目录
+    const chaptersDir = path.join(tempDir, 'website/docs/novel/chapters');
+    await fs.ensureDir(chaptersDir);
+
+    // 清理 library 目录
+    const libDir = path.join(tempDir, 'library');
+    await fs.ensureDir(libDir);
+    await fs.writeFile(path.join(libDir, '.gitkeep'), '');
+
+    // 💡 执行压缩命令 (利用 Windows 自带的 tar 命令)
+    const zipName = `my-world-system-init.zip`;
+    const zipPath = path.join(__dirname, zipName);
+    
+    // tar -a -c -f 压缩包路径 -C 目录 .
+    // Windows 的 tar 完美支持这种打包方式
+    await new Promise((resolve, reject) => {
+      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    // 删除临时目录
+    await fs.remove(tempDir);
+
+    // 发送给客户端下载
+    res.download(zipPath, zipName, async () => {
+      // 下载完毕后清理生成的 zip
+      await fs.remove(zipPath);
+    });
+
+  } catch (error) {
+    res.status(500).send('导出失败: ' + error.message);
+  }
+});
+
+// ================= 💡 一键导出全站干净模板 (ZIP) =================
+app.get('/api/export/template', async (req, res) => {
+  try {
+    const tempDir = path.join(__dirname, '.temp_export_build');
+    await fs.remove(tempDir);
+    await fs.ensureDir(tempDir);
+
+    const keepList = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
+    
+    // 1. 复制核心文件，剔除无用大文件
+    for (const item of keepList) {
+      const srcPath = path.join(__dirname, item);
+      const destPath = path.join(tempDir, item);
+      if (fs.existsSync(srcPath)) {
+        if (item === 'website') {
+          await fs.copy(srcPath, destPath, {
+            filter: (src) => {
+              // 排除缓存、大文件、用户数据
+              if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
+              if (src.includes('docs/public/assets')) return false;
+              if (src.includes('docs/novel/chapters')) return false;
+              return true;
+            }
+          });
+        } else {
+          await fs.copy(srcPath, destPath);
+        }
+      }
+    }
+
+    // 2. 重置所有的 JSON 数据为空
+    const publicDir = path.join(tempDir, 'website/docs/public');
+    await fs.ensureDir(publicDir);
+    await fs.writeJson(path.join(publicDir, 'characters.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'timeline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'graph.json'), { nodes: [], links: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'map.json'), { image: '', markers: [] }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'world-tree.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'plotline.json'), [], { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'finance.json'), {
+      items: [], stocks: [], currencies: [{ symbol: 'Gold', name: '黄金', basePrice: 1, currentPrice: 1 }]
+    }, { spaces: 2 });
+    await fs.writeJson(path.join(publicDir, 'protection-config.json'), {
+      enableNovelSync: true, enableWatermark: true, authorName: '新作者', enableAntiCopy: true, copyrightText: '请支持正版。', targetWords: 100000, lastCertifiedMilestone: 0
+    }, { spaces: 2 });
+
+    // 3. 清空小说库和前台的章节
+    await fs.emptyDir(path.join(tempDir, 'library'));
+    await fs.ensureDir(path.join(tempDir, 'website/docs/novel/chapters'));
+
+    // 4. 使用 Windows 自带 tar 命令打包 (零依赖)
+    const zipName = `my-world-system-template.zip`;
+    const zipPath = path.join(__dirname, zipName);
+    
+    await new Promise((resolve, reject) => {
+      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    await fs.remove(tempDir);
+    res.download(zipPath, zipName, async () => { await fs.remove(zipPath); });
+
+  } catch (error) {
+    res.status(500).send('导出失败: ' + error.message);
+  }
+});
+
+// ================= 💡 插件与系统诊断接口 =================
+const NAVIGATION_FILE = path.join(PUBLIC_DIR, 'navigation.json');
+
+// 💡 系统内置插件的专属中文字典（图标 + 名称）
+const systemPluginMap = {
+  'dashboard': { name: '仪表盘', icon: '📊' },
+  'writer': { name: '沉浸码字', icon: '✍️' },
+  'timeline': { name: '时间线', icon: '⏳' },
+  'characters': { name: '人物档案', icon: '👤' },
+  'graph': { name: '关系图谱', icon: '🕸️' },
+  'finance': { name: '金融中心', icon: '💰' },
+  'world-tree': { name: '世界观树', icon: '🌍' },
+  'map': { name: '世界地图', icon: '🗺️' },
+  'epoch-map': { name: '纪元地图', icon: '🕰️' },
+  'plotline': { name: '剧情大纲', icon: '🎬' },
+  'audit': { name: '防吃书校验', icon: '🕵️' },
+  'protection': { name: '版权与目标', icon: '🎯' },
+  'github': { name: '一键推送', icon: '🚀' },
+  'home-editor': { name: '首页设计与导出', icon: '🎨' },
+  'plugin-builder': { name: '插件工厂', icon: '🏭' },
+  'diagnostic': { name: '环境检测', icon: '🩺' },
+  'article': { name: '文章编辑', icon: '📝' }
+};
+
+// 1. 获取导航数据
+app.get('/api/navigation', async (req, res) => {
+  if (!fs.existsSync(NAVIGATION_FILE)) {
+    // 💡 首次初始化：把所有内置核心功能全部写入，确保顺序完整
+    const defaultNav = [
+      { id: 'writer', title: '沉浸码字', desc: '系统内置', icon: '✍️', link: '/writer', isSystem: true },
+      { id: 'plotline', title: '剧情大纲', desc: '系统内置', icon: '🎬', link: '/plotline', isSystem: true },
+      { id: 'timeline', title: '时间线', desc: '系统内置', icon: '⏳', link: '/timeline', isSystem: true },
+      { id: 'characters', title: '人物档案', desc: '系统内置', icon: '👤', link: '/characters', isSystem: true },
+      { id: 'graph', title: '关系图谱', desc: '系统内置', icon: '🕸️', link: '/graph', isSystem: true },
+      { id: 'finance', title: '金融中心', desc: '系统内置', icon: '💰', link: '/finance', isSystem: true },
+      { id: 'world-tree', title: '世界观树', desc: '系统内置', icon: '🌍', link: '/world-tree', isSystem: true },
+      { id: 'map', title: '世界地图', desc: '系统内置', icon: '🗺️', link: '/map', isSystem: true },
+      { id: 'epoch-map', title: '纪元地图', desc: '系统内置', icon: '🕰️', link: '/epoch-map', isSystem: true },
+      { id: 'audit', title: '防吃书校验', desc: '系统内置', icon: '🕵️', link: '/audit', isSystem: true },
+      { id: 'protection', title: '版权与目标', desc: '系统内置', icon: '🎯', link: '/protection', isSystem: true },
+      { id: 'github', title: '一键推送', desc: '系统内置', icon: '🚀', link: '/github', isSystem: true },
+      { id: 'home-editor', title: '首页设计与导出', desc: '系统内置', icon: '🎨', link: '/home-editor', isSystem: true },
+      { id: 'novel', title: '幻想域小说', desc: '阅读主角的奇妙冒险。', icon: '📖', link: '/novel/', isSystem: true }
+    ];
+    await fs.writeJson(NAVIGATION_FILE, defaultNav, { spaces: 2 });
+  }
+  
+  let navList = await fs.readJson(NAVIGATION_FILE);
+  
+  // 💡 自动修复历史遗留的英文导航数据（把英文名全部覆盖为中文）
+  let needSave = false;
+  navList.forEach(n => {
+    if (systemPluginMap[n.id]) {
+      n.title = systemPluginMap[n.id].name;
+      n.icon = systemPluginMap[n.id].icon;
+      needSave = true;
+    }
+  });
+  if (needSave) await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
+  
+  res.json(navList);
+});
+
+// 2. 保存导航数据
+app.post('/api/navigation', async (req, res) => {
+  await fs.writeJson(NAVIGATION_FILE, req.body, { spaces: 2 });
+  res.json({ success: true });
+});
+
+// 3. 获取已存在的插件列表（用于后台动态菜单）
+app.get('/api/plugins/list', async (req, res) => {
+  try {
+    const pluginDir = path.join(__dirname, 'plugin');
+    if (!fs.existsSync(pluginDir)) return res.json([]);
+    
+    // 读取导航配置，获取前/后台的显隐状态和顺序
+    const navList = fs.existsSync(NAVIGATION_FILE) ? await fs.readJson(NAVIGATION_FILE) : [];
+    
+    // 获取物理目录下的所有 html 文件，并加上虚拟的 article
+    const files = fs.readdirSync(pluginDir).filter(f => f.endsWith('.html'));
+    let allPlugins = files.map(f => f.replace('.html', ''));
+    allPlugins = [...new Set([...allPlugins, 'article', 'dashboard', 'plugin-builder'])];
+
+    const plugins = allPlugins.map(id => {
+      const isSys = !!systemPluginMap[id];
+      const navIdx = navList.findIndex(n => n.id === id);
+      const navItem = navIdx >= 0 ? navList[navIdx] : null;
+      
+      // 获取中文字典里的名字和图标
+      let name = id.toUpperCase() + ' 插件';
+      let icon = '🧩';
+      if (isSys) {
+        name = systemPluginMap[id].name;
+        icon = systemPluginMap[id].icon;
+      }
+      
+      return {
+        id: id,
+        name: name,
+        icon: icon,
+        isSystem: isSys,
+        // 如果不在 navList 里，说明还没被注册进导航，默认处于隐藏状态
+        hideFrontend: navItem ? !!navItem.hideFrontend : true,
+        hideBackend: navItem ? !!navItem.hideBackend : true,
+        navIdx: navIdx >= 0 ? navIdx : 9999 // 未注册的排在最后
+      };
+    });
+    
+    // 按照 navIdx 排序，这样后台右侧列表的顺序就完美对齐了顶部导航
+    plugins.sort((a, b) => a.navIdx - b.navIdx);
+    
+    res.json(plugins);
+  } catch (error) { 
+    console.error('获取插件列表失败:', error);
+    res.json([]); 
+  }
+});
+
+// 4. 创建或读取自定义插件
+const SAFE_PLUGIN_ID = /^[a-zA-Z0-9_-]+$/; // 💡 新增：防止路径穿越攻击
+
+app.get('/api/plugins/file', async (req, res) => {
+  const id = String(req.query.id || '');
+  if (!SAFE_PLUGIN_ID.test(id)) return res.status(400).json({ error: '非法插件 ID' });
+  
+  const filePath = path.join(__dirname, 'plugin', `${id}.html`);
+  if (fs.existsSync(filePath)) res.json({ content: await fs.readFile(filePath, 'utf-8') });
+  else res.json({ content: '' });
+});
+
+app.post('/api/plugins/file', async (req, res) => {
+  try {
+    const id = String(req.body.id || '');
+    if (!SAFE_PLUGIN_ID.test(id)) return res.status(400).json({ success: false, error: '非法插件 ID' });
+    
+    const filePath = path.join(__dirname, 'plugin', `${id}.html`);
+    await fs.writeFile(filePath, req.body.content, 'utf-8');
+    res.json({ success: true });
+  } catch (error) {
+    res.status(500).json({ success: false, error: error.message });
+  }
+});
+
+// 💡 新增：彻底删除插件接口
+app.post('/api/plugins/delete', async (req, res) => {
+  try {
+    const id = String(req.body.id || '');
+    if (!SAFE_PLUGIN_ID.test(id)) {
+      return res.status(400).json({ success: false, error: '非法插件 ID' });
+    }
+    
+    const filePath = path.join(__dirname, 'plugin', `${id}.html`);
+    
+    // 1. 删除物理文件
+    if (fs.existsSync(filePath)) {
+      await fs.remove(filePath);
+    }
+
+    // 2. 从导航配置中移除
+    if (fs.existsSync(NAVIGATION_FILE)) {
+      let navList = await fs.readJson(NAVIGATION_FILE);
+      const initialLength = navList.length;
+      navList = navList.filter(n => n.id !== id);
+      
+      if (navList.length !== initialLength) {
+        await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
+      }
+    }
+
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, message: e.message });
+  }
+});
+
+// 5. 💡 环境疑难解答诊断
+app.get('/api/diagnostic', async (req, res) => {
+  const results = [];
+  const check = (name, status, msg) => results.push({ name, status, msg });
+
+  check('Node.js 运行环境', 'ok', `版本: ${process.version}`);
+
+  try {
+    const gitVersion = await new Promise((resolve, reject) => {
+      exec('git --version', (err, stdout) => err ? reject(err) : resolve(stdout.trim()));
+    });
+    check('Git 命令行', 'ok', gitVersion);
+  } catch (e) {
+    check('Git 命令行', 'error', '未安装 Git 或未配置系统环境变量！');
+  }
+
+  if (fs.existsSync(path.join(__dirname, 'node_modules'))) {
+    check('核心依赖包', 'ok', 'node_modules 目录已存在');
+  } else {
+    check('核心依赖包', 'error', '缺失 node_modules，请运行 npm install');
+  }
+
+  const checkPort = (port) => new Promise((resolve) => {
+    const server = require('net').createServer();
+    server.once('error', (err) => resolve(err.code === 'EADDRINUSE' ? 'occupied' : 'error'));
+    server.once('listening', () => { server.close(); resolve('free'); });
+    server.listen(port);
+  });
+  
+  const port5173 = await checkPort(5173);
+  check('前台端口 5173', port5173 === 'occupied' ? 'ok' : 'warning', port5173 === 'occupied' ? '前台服务正在运行' : '前台未启动');
+  check('后台端口 3001', 'ok', '当前诊断接口就在此端口运行，正常');
+
+  res.json(results);
+});
 // 启动服务
 app.listen(3001, () => {
   console.log('=================================');

@@ -1,0 +1,259 @@
+<!-- 文件路径: plugin/home-editor.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>首页设计与导出</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/marked/12.0.1/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Microsoft YaHei', sans-serif; padding: 20px; height: 100vh; display: flex; flex-direction: column; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; border-bottom: 1px solid #333; padding-bottom: 15px; }
+    h2 { color: #fff; margin: 0; font-size: 20px; display: flex; align-items: center; gap: 10px;}
+    
+    /* 按钮区 */
+    .actions-bar { display: flex; gap: 10px; }
+    .btn { background: #0e639c; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; font-weight: bold; font-size: 14px; transition: 0.2s; display: inline-flex; align-items: center; gap: 6px;}
+    .btn:hover { background: #1177bb; }
+    .btn-success { background: #2ea043; }
+    .btn-success:hover { background: #3fb950; }
+    .btn-outline { background: transparent; border: 1px solid #444; color: #aaa; }
+    .btn-outline:hover { background: #333; color: #fff; }
+    .btn-danger { background: #a82626; padding: 6px 12px; font-size: 12px; }
+    .btn-danger:hover { background: #c92a2a; }
+    .btn-export-all { background: linear-gradient(135deg, #d29922, #e3b341); color: #1e1e1e; }
+    .btn-export-all:hover { background: linear-gradient(135deg, #e3b341, #f1c44b); }
+
+    .layout { display: flex; gap: 20px; flex: 1; min-height: 0; }
+    
+    /* 左侧表单区 */
+    .panel-left { flex: 1; min-width: 350px; background: #252526; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column; overflow-y: auto; }
+    .section { padding: 20px; border-bottom: 1px dashed #444; }
+    .section-title { color: #fff; font-size: 16px; font-weight: bold; margin-bottom: 15px; display: flex; justify-content: space-between; align-items: center;}
+    
+    .form-group { display: flex; flex-direction: column; gap: 5px; margin-bottom: 12px; }
+    .form-group label { font-size: 13px; color: #888; }
+    .form-group input, .form-group textarea { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; transition: border 0.2s; }
+    .form-group input:focus, .form-group textarea:focus { border-color: #0e639c; }
+    
+    .feature-item { background: #1e1e1e; border: 1px solid #333; padding: 15px; border-radius: 6px; margin-bottom: 10px; position: relative; }
+    .feature-item .btn-del { position: absolute; top: 10px; right: 10px; }
+
+    /* 右侧预览区 */
+    .panel-right { flex: 1; background: #121212; border: 1px solid #333; border-radius: 8px; overflow-y: auto; padding: 40px 20px; display: flex; flex-direction: column; align-items: center; }
+    .preview-hero { text-align: center; margin-bottom: 50px; max-width: 800px; }
+    .preview-hero h1 { font-size: 48px; color: #fff; margin: 0 0 10px 0; font-weight: bold; }
+    .preview-hero p { font-size: 20px; color: #888; margin: 0 0 20px 0; }
+    .preview-hero .tagline { font-size: 16px; color: #aaa; margin-bottom: 30px; }
+    .preview-hero .actions { display: flex; justify-content: center; gap: 15px; }
+    .preview-hero .btn-action { padding: 10px 24px; border-radius: 20px; font-weight: bold; text-decoration: none; font-size: 15px; }
+    .btn-brand { background: #0e639c; color: #fff; }
+    .btn-alt { background: #333; color: #fff; }
+    
+    .preview-features { display: grid; grid-template-columns: repeat(auto-fit, minmax(250px, 1fr)); gap: 20px; width: 100%; max-width: 900px; }
+    .preview-card { background: #1e1e1e; border: 1px solid #333; padding: 25px; border-radius: 12px; }
+    .preview-card h3 { color: #fff; margin: 0 0 10px 0; font-size: 18px; }
+    .preview-card p { color: #888; margin: 0; font-size: 14px; line-height: 1.6; }
+    
+    .preview-markdown { max-width: 900px; width: 100%; margin-top: 40px; color: #ccc; line-height: 1.8; }
+    .preview-markdown h2 { border-bottom: 1px solid #333; padding-bottom: 10px; color: #fff; }
+
+    .toast { position: fixed; bottom: 30px; right: 30px; background: #2ea043; color: #fff; padding: 12px 24px; border-radius: 6px; z-index: 9999; font-weight: bold; opacity: 0; transform: translateY(20px); transition: all 0.3s; }
+    .toast.show { opacity: 1; transform: translateY(0); }
+    .toast.error { background: #a82626; }
+  </style>
+</head>
+<body>
+  <div id="app" style="display:flex; flex-direction:column; height:100%;">
+    <div class="header">
+      <h2>🎨 首页设计与全站导出</h2>
+      <div class="actions-bar">
+        <button class="btn btn-export-all" @click="exportTemplate">📦 一键导出全站空模板 (ZIP)</button>
+        <button class="btn btn-outline" @click="copySource" style="margin-left: 10px;">📋 复制首页源码</button>
+      </div>
+    </div>
+
+    <div class="layout">
+      <!-- 左侧：可视化表单 -->
+      <div class="panel-left">
+        <div class="section">
+          <div class="section-title">🌟 顶部展示区 (Hero)</div>
+          <div class="form-group"><label>大标题 (Name)</label><input v-model="form.hero.name" placeholder="请输入大标题" /></div>
+          <div class="form-group"><label>副标题 (Text)</label><input v-model="form.hero.text" placeholder="请输入副标题" /></div>
+          <div class="form-group"><label>一句话简介 (Tagline)</label><input v-model="form.hero.tagline" placeholder="请输入简介" /></div>
+          
+          <div style="margin-top: 15px; font-size:13px; color:#aaa;">按钮组</div>
+          <div class="form-group" style="flex-direction:row; gap:10px;">
+            <div style="flex:1;"><label>按钮1 文字</label><input v-model="form.hero.actions[0].text" placeholder="如：探索世界" /></div>
+            <div style="flex:1;"><label>按钮1 链接</label><input v-model="form.hero.actions[0].link" placeholder="如：/world-navigation" /></div>
+          </div>
+          <div class="form-group" style="flex-direction:row; gap:10px;">
+            <div style="flex:1;"><label>按钮2 文字</label><input v-model="form.hero.actions[1].text" placeholder="如：查看编年史" /></div>
+            <div style="flex:1;"><label>按钮2 链接</label><input v-model="form.hero.actions[1].link" placeholder="如：/timeline" /></div>
+          </div>
+        </div>
+
+        <div class="section">
+          <div class="section-title">
+            <span>🧩 特性卡片 (Features)</span>
+            <button class="btn btn-outline" style="padding:4px 10px; font-size:12px;" @click="addFeature">+ 添加卡片</button>
+          </div>
+          <div class="feature-item" v-for="(feat, idx) in form.features" :key="idx">
+            <button class="btn btn-danger btn-del" @click="removeFeature(idx)">✖</button>
+            <div class="form-group"><label>卡片标题</label><input v-model="feat.title" placeholder="卡片标题" /></div>
+            <div class="form-group"><label>卡片描述</label><textarea v-model="feat.details" rows="2" placeholder="卡片描述内容..."></textarea></div>
+          </div>
+          <div v-if="form.features.length === 0" style="text-align: center; color: #666; padding: 10px; font-size: 13px;">
+            暂无卡片，点击右上角添加
+          </div>
+        </div>
+      </div>
+
+      <!-- 右侧：实时预览 -->
+      <div class="panel-right">
+        <div class="preview-hero">
+          <h1>{{ form.hero.name || '标题预览' }}</h1>
+          <p>{{ form.hero.text || '副标题预览' }}</p>
+          <div class="tagline">{{ form.hero.tagline }}</div>
+          <div class="actions">
+            <a :href="form.hero.actions[0].link" class="btn-action btn-brand">{{ form.hero.actions[0].text || '按钮1' }}</a>
+            <a :href="form.hero.actions[1].link" class="btn-action btn-alt">{{ form.hero.actions[1].text || '按钮2' }}</a>
+          </div>
+        </div>
+
+        <div class="preview-features">
+          <div class="preview-card" v-for="(feat, idx) in form.features" :key="idx">
+            <h3>{{ feat.title }}</h3>
+            <p>{{ feat.details }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" :class="{ show: toast.show, error: toast.isError }">{{ toast.msg }}</div>
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+    const HOME_FILE_PATH = 'index.md';
+
+    createApp({
+      setup() {
+        const toast = ref({ show: false, msg: '', isError: false });
+        
+        const emptyForm = () => ({
+          hero: {
+            name: '',
+            text: '',
+            tagline: '',
+            actions: [
+              { text: '', link: '' },
+              { text: '', link: '' }
+            ]
+          },
+          features: []
+        });
+
+        const form = ref(emptyForm());
+
+        // 生成 index.md 源码
+        const generatedSource = computed(() => {
+          let source = '---\nlayout: home\n\n';
+          source += `hero:\n`;
+          source += `  name: "${form.value.hero.name.replace(/"/g, '\\"')}"\n`;
+          source += `  text: "${form.value.hero.text.replace(/"/g, '\\"')}"\n`;
+          source += `  tagline: "${form.value.hero.tagline.replace(/"/g, '\\"')}"\n`;
+          source += `  actions:\n`;
+          form.value.hero.actions.forEach((act, index) => {
+            if (act.text || act.link) {
+              source += `    - theme: ${index === 0 ? 'brand' : 'alt'}\n`;
+              source += `      text: "${act.text.replace(/"/g, '\\"')}"\n`;
+              source += `      link: "${act.link.replace(/"/g, '\\"')}"\n`;
+            }
+          });
+          if (form.value.features.length > 0) {
+            source += `features:\n`;
+            form.value.features.forEach(feat => {
+              source += `  - title: "${feat.title.replace(/"/g, '\\"')}"\n`;
+              source += `    details: "${feat.details.replace(/"/g, '\\"')}"\n`;
+            });
+          }
+          source += `---\n\n`;
+          return source;
+        });
+
+        // 保存首页
+        const saveContent = async () => {
+          await fetch(`${API_BASE}/file`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ path: HOME_FILE_PATH, content: generatedSource.value })
+          });
+          showToast('✅ 首页配置已暂存');
+        };
+
+        // 💡 核心逻辑：先保存首页，然后下载全站 ZIP
+        const exportTemplate = async () => {
+          try {
+            // 先把当前设计的首页保存到系统里
+            await saveContent(); 
+            // 然后下载打包好的纯净版系统
+            window.location.href = `${API_BASE}/export/template`;
+            showToast('📦 正在打包纯净模板，请稍候...');
+          } catch (e) {
+            showToast('导出失败', true);
+          }
+        };
+
+        const copySource = () => {
+          navigator.clipboard.writeText(generatedSource.value).then(() => {
+            showToast('✅ 源码已复制到剪贴板！');
+          }).catch(() => {
+            showToast('复制失败，请手动复制', true);
+          });
+        };
+
+        const addFeature = () => { form.value.features.push({ title: '', details: '' }); };
+        const removeFeature = (index) => { form.value.features.splice(index, 1); };
+
+        const showToast = (msg, isError = false) => {
+          toast.value = { show: true, msg, isError };
+          setTimeout(() => { toast.value.show = false; }, 2500);
+        };
+
+        // 自动读取当前的首页内容（覆盖你刚才的输入，方便二次修改）
+        onMounted(async () => {
+          try {
+            const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(HOME_FILE_PATH)}&t=${Date.now()}`);
+            const data = await res.json();
+            if (!data.content) return;
+            
+            const frontmatterMatch = data.content.match(/^---\n([\s\S]*?)\n---\n([\s\S]*)$/);
+            if (frontmatterMatch) {
+              const yamlText = frontmatterMatch[1];
+              const nameMatch = yamlText.match(/name:\s*["']?([^"'\n]+)["']?/);
+              if (nameMatch) form.value.hero.name = nameMatch[1];
+              const textMatch = yamlText.match(/text:\s*["']?([^"'\n]+)["']?/);
+              if (textMatch) form.value.hero.text = textMatch[1];
+              const taglineMatch = yamlText.match(/tagline:\s*["']?([^"'\n]+)["']?/);
+              if (taglineMatch) form.value.hero.tagline = taglineMatch[1];
+              const featuresBlock = yamlText.match(/features:([\s\S]*)/);
+              if (featuresBlock) {
+                const titles = [...featuresBlock[1].matchAll(/title:\s*["']?([^"'\n]+)["']?/g)].map(m => m[1]);
+                const details = [...featuresBlock[1].matchAll(/details:\s*["']?([^"'\n]+)["']?/g)].map(m => m[1]);
+                const feats = [];
+                titles.forEach((title, i) => feats.push({ title, details: details[i] || '' }));
+                form.value.features = feats;
+              }
+            }
+          } catch (e) {}
+        });
+
+        return { form, toast, exportTemplate, copySource, addFeature, removeFeature };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

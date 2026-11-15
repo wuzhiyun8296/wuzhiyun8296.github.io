@@ -1,0 +1,129 @@
+<!-- 文件路径: plugin/protection.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>版权与目标</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 20px 40px; }
+    .panel-inner { max-width: 800px; margin: 0 auto; width: 100%; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px; border-bottom: 1px solid #333; padding-bottom: 15px; }
+    h2 { color: #fff; margin: 0; }
+    
+    .config-card { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; margin-bottom: 20px; }
+    .config-row { display: flex; justify-content: space-between; align-items: center; padding: 15px 0; border-bottom: 1px dashed #333; }
+    .config-row:last-child { border-bottom: none; }
+    .config-info h3 { margin: 0 0 5px 0; color: #fff; font-size: 16px; }
+    .config-info p { margin: 0; color: #888; font-size: 13px; }
+    
+    .form-input, .form-textarea { background: #121212; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; width: 300px; outline: none; font-family: inherit; }
+    .form-input:focus, .form-textarea:focus { border-color: #0e639c; }
+    
+    .switch { position: relative; display: inline-block; width: 50px; height: 26px; flex-shrink: 0; }
+    .switch input { opacity: 0; width: 0; height: 0; }
+    .slider { position: absolute; cursor: pointer; top: 0; left: 0; right: 0; bottom: 0; background-color: #444; transition: .4s; border-radius: 34px; }
+    .slider:before { position: absolute; content: ""; height: 18px; width: 18px; left: 4px; bottom: 4px; background-color: white; transition: .4s; border-radius: 50%; }
+    input:checked + .slider { background-color: #2ea043; }
+    input:checked + .slider:before { transform: translateX(24px); }
+
+    .btn { background: #0e639c; color: white; border: none; padding: 12px 30px; cursor: pointer; border-radius: 4px; font-size: 15px; font-weight: bold; transition: 0.2s; display: block; margin-left: auto; }
+    .btn:hover { background: #1177bb; }
+    .btn-notice { background: #d29922; width: 100%; margin: 15px 0 0 0; color: #1e1e1e; }
+    .btn-notice:hover { background: #e3b341; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="panel-inner">
+      <div class="header">
+        <h2>🎯 版权与写作目标配置</h2>
+        <button class="btn" @click="saveConfig">💾 保存所有设置</button>
+      </div>
+
+      <!-- 💡 系统自定义公告 -->
+      <div class="config-card" style="border-color: #d29922;">
+        <div class="config-info" style="margin-bottom: 10px;">
+          <h3 style="color: #d29922;">📢 控制台顶部寄语 / 系统提示</h3>
+          <p>在这里写一句话，会直接展示在仪表盘（创世主控台）的最上方。</p>
+        </div>
+        <textarea class="form-textarea" v-model="config.sysNotice" rows="2" placeholder="例如：本周目标：把陈默写到绝望之谷。坚持就是胜利！" style="width: 100%;"></textarea>
+      </div>
+
+      <!-- 版权里程碑设置 -->
+      <div class="config-card" style="border-color: #0e639c;">
+        <div class="config-info" style="margin-bottom: 15px;">
+          <h3 style="color: #0e639c;">🏆 版权存证提醒节点</h3>
+          <p>系统每跨过设定字数（如 100000 字），会自动在仪表盘强提醒你去登记版权。</p>
+        </div>
+        <div class="config-row" style="border: none; padding-bottom: 0;">
+          <div class="config-info">
+            <h3>存证节点 (字)</h3>
+            <p>默认十万字提醒一次。</p>
+          </div>
+          <input type="number" class="form-input" v-model.number="config.certTarget" style="width: 200px;">
+        </div>
+      </div>
+
+      <!-- 版权保护开关 (保留之前功能) -->
+      <div class="config-card">
+        <div class="config-row">
+          <div class="config-info"><h3>📚 公开小说正文</h3><p>关闭后前台小说库将被清空隐藏。</p></div>
+          <label class="switch"><input type="checkbox" v-model="config.enableNovelSync"><span class="slider"></span></label>
+        </div>
+        <div class="config-row">
+          <div class="config-info"><h3>💧 注入隐形数字水印</h3><p>在正文插入不可见字符，防抄袭。</p></div>
+          <label class="switch"><input type="checkbox" v-model="config.enableWatermark"><span class="slider"></span></label>
+        </div>
+        <div class="config-row" v-if="config.enableWatermark">
+          <div class="config-info"><h3>✍️ 水印作者标识</h3></div>
+          <input type="text" class="form-input" v-model="config.authorName" style="width: 250px;">
+        </div>
+        <div class="config-row">
+          <div class="config-info"><h3>🚫 开启防复制保护</h3><p>禁止选中文字，复制追加声明。</p></div>
+          <label class="switch"><input type="checkbox" v-model="config.enableAntiCopy"><span class="slider"></span></label>
+        </div>
+        <div class="config-row" v-if="config.enableAntiCopy">
+          <div class="config-info"><h3>⚖️ 复制追加声明</h3></div>
+          <input type="text" class="form-input" v-model="config.copyrightText" style="width: 250px;">
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    createApp({
+      setup() {
+        const config = ref({ 
+          sysNotice: '欢迎回到幻想域，创造属于你的史诗。',
+          certTarget: 100000, // 默认 10 万字
+          enableNovelSync: true, enableWatermark: true, authorName: '幻想域作者', enableAntiCopy: true, copyrightText: '本文摘自《幻想域》，请支持正版。' 
+        });
+
+        const loadData = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/protection/config?t=${Date.now()}`);
+            const data = await res.json();
+            if (data) config.value = { ...config.value, ...data };
+          } catch (e) {}
+        };
+
+        const saveConfig = async () => {
+          await fetch(`${API_BASE}/protection/config`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(config.value)
+          });
+          alert('✅ 设置已保存！切换回仪表盘即可看到顶部公告。');
+        };
+
+        onMounted(loadData);
+        return { config, saveConfig };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
