@@ -68,6 +68,30 @@
 
     .spinner { animation: spin 1s linear infinite; display: inline-block; }
     @keyframes spin { 100% { transform: rotate(360deg); } }
+
+    /* 推送后的 Gitee 同步提醒 */
+    .gitee-tip {
+      margin-top: 14px; padding: 14px 18px; flex-shrink: 0;
+      background: rgba(240, 173, 78, 0.10);
+      border: 1px solid rgba(240, 173, 78, 0.55);
+      border-left: 4px solid #f0ad4e;
+      border-radius: 8px;
+    }
+    .gitee-head { color: #f0ad4e; font-weight: bold; font-size: 14px; margin-bottom: 6px; }
+    .gitee-body { color: #ccc; font-size: 13px; line-height: 1.6; }
+    .gitee-ver { margin-left: 8px; color: #89d185; font-family: Consolas, monospace; }
+    .gitee-actions { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+    .gitee-actions a {
+      color: #4ec9b0; text-decoration: none; font-size: 13px; font-weight: bold;
+      border-bottom: 1px dashed #4ec9b0; padding-bottom: 1px;
+    }
+    .gitee-actions a:hover { color: #7fe3d0; }
+    .gitee-close {
+      margin-left: auto; background: #333; color: #ddd; border: 1px solid #555;
+      padding: 5px 12px; border-radius: 6px; cursor: pointer; font-size: 12px;
+    }
+    .gitee-close:hover { background: #444; color: #fff; }
+    .gitee-hint { margin-top: 8px; color: #777; font-size: 12px; }
   </style>
 </head>
 <body>
@@ -128,6 +152,21 @@
     </div>
 
     <div class="terminal" ref="terminalRef" v-html="formattedLogs"></div>
+
+    <!-- 💡 推送成功后提醒同步 Gitee -->
+    <div class="gitee-tip" v-if="giteeHint">
+      <div class="gitee-head">⚠ 已推送到 GitHub　—　别忘了同步 Gitee</div>
+      <div class="gitee-body">
+        客户端会先读 GitHub，连不上才切 Gitee。Gitee 落后的话，朋友在墙内可能拉到旧版本。
+        <span v-if="pushedVersion" class="gitee-ver">本次版本：{{ pushedVersion }}</span>
+      </div>
+      <div class="gitee-actions">
+        <a :href="giteeHint.repoUrl" target="_blank" rel="noopener">打开 Gitee 仓库</a>
+        <a :href="giteeHint.settingsUrl" target="_blank" rel="noopener">镜像管理</a>
+        <button class="gitee-close" @click="giteeHint = null">知道了</button>
+      </div>
+      <div class="gitee-hint">路径：仓库页 → 管理 → 仓库镜像管理 → 手动同步</div>
+    </div>
   </div>
 
   <script>
@@ -139,6 +178,8 @@
         const config = ref({ repoUrl: '', userName: '', userEmail: '', token: '' });
         const isConfigOpen = ref(false);
         const commitMsg = ref('Update world settings from admin panel');
+        const giteeHint = ref(null);
+        const pushedVersion = ref('');
         const isPushing = ref(false);
         const logs = ref('');
         const terminalRef = ref(null);
@@ -213,6 +254,12 @@
             
             if (data.log) logs.value += data.log;
             else if (data.error) logs.value += `[ERROR] ${data.error}\n`;
+
+            // 💡 推送成功 → 显示 Gitee 同步提醒
+            if (data.success) {
+              giteeHint.value = data.gitee || null;
+              pushedVersion.value = data.versionId || '';
+            }
             
           } catch (e) {
             logs.value += `[ERROR] 请求失败，请检查 Node.js 服务是否运行。\n`;
@@ -225,6 +272,7 @@
 
         return { 
           config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
+          giteeHint, pushedVersion,
           saveConfig, pushToGithub 
         };
       }

@@ -813,9 +813,74 @@ function buildArchiveUrls(repo, branch) {
   ];
 }
 
-// ================= 💡 Git 凭据安全处理 =================
+// ================= 💡 版本特征码（version.json） =================
+// 客户端靠它判断「远端是不是比我新」，比 commit 号直观，也不依赖 Git / API。
+const VERSION_FILE = path.join(__dirname, 'version.json');
+
+function makeVersionId(d) {
+  const t = d || new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  // 精确到秒：同一分钟里连着推两次也能区分开
+  return `${t.getFullYear()}${p(t.getMonth() + 1)}${p(t.getDate())}-${p(t.getHours())}${p(t.getMinutes())}${p(t.getSeconds())}`;
+}
+
+async function readLocalVersion() {
+  if (!fs.existsSync(VERSION_FILE)) return { id: '', pushedAt: '' };
+  try {
+    const v = await fs.readJson(VERSION_FILE);
+    return { id: String(v.id || ''), pushedAt: String(v.pushedAt || '') };
+  } catch (e) {
+    return { id: '', pushedAt: '' };
+  }
+}
+
+function versionRawUrls(repo, branch) {
+  if (repo.host === 'gitee.com') {
+    return [`https://gitee.com/${repo.owner}/${repo.repo}/raw/${branch}/version.json`];
+  }
+  return [
+    `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}/version.json`,
+    `https://github.com/${repo.owner}/${repo.repo}/raw/${branch}/version.json`
+  ];
+}
+
+// 读取远端 version.json（公开仓库，匿名可读）
+async function fetchRemoteVersion(repo, branch) {
+  let lastErr = null;
+  for (const u of versionRawUrls(repo, branch)) {
+    try {
+      const text = await httpsGetText(u, 12000);
+      const v = JSON.parse(text);
+      if (v && v.id) return { id: String(v.id), pushedAt: String(v.pushedAt || '') };
+      throw new Error('version.json 里没有 id 字段');
+    } catch (e) {
+      lastErr = e;
+    }
+  }
+  throw lastErr || new Error('读取 version.json 失败');
+}
+
+// 推送后给前端的 Gitee 同步提示
+async function readGiteeHint() {
+  try {
+    const cfg = await readUpdateConfig();
+    const g = cfg.sources.find((s) => s.repo.host === 'gitee.com');
+    if (!g) return null;
+    return {
+      repoUrl: g.repo.pageUrl,
+      settingsUrl: `${g.repo.pageUrl}/settings`,
+      branch: g.branch
+    };
+  } catch (e) {
+    return null;
+  }
+}
+
+
 // 原则：remote 里永远只存「干净地址」，Token 只在执行命令的那一瞬间通过 HTTP 头传递，
 //       不再写进 .git/config，也不会出现在 URL / 日志里。
+// ================= 💡 Git 凭据安全处理 =================
+// 原则：remote 里永远只存「干净地址」，Token 只在执行命令的那一瞬间通过 HTTP 头传递，
 function cleanGitUrl(repoUrl) {
   let u = String(repoUrl || '').trim().replace(/\.git$/i, '');
   if (!u) return '';
@@ -1083,12 +1148,34 @@ async function anonymousCheckUpdate(res) {
     return res.json({ success: false, error: '未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）' });
   }
 
+  const local = await readLocalVersion();
   const hits = [];
   const errors = [];
+
   for (const s of cfg.sources) {
+    // 💡 首选 version.json 特征码：不依赖 commit 号，也不受「一键更新.bat 只换文件」的影响
+    try {
+      const remote = await fetchRemoteVersion(s.repo, s.branch);
+      const changed = !local.id || remote.id !== local.id;
+      hits.push({
+        source: s,
+        mode: 'version',
+        changed: changed,
+        text: `${s.repo.host}: 远端版本 ${remote.id}` + (local.id ? `（本地 ${local.id}）` : '（本地还没有版本文件）')
+      });
+      continue;
+    } catch (e) {
+      // 远端还没有 version.json（老仓库）→ 退回 commit 比对
+    }
+
     try {
       const latest = await fetchLatestCommit(s.repo, s.branch);
-      hits.push({ source: s, latest: latest, changed: latest.sha !== s.lastCommit });
+      hits.push({
+        source: s,
+        mode: 'commit',
+        changed: latest.sha !== s.lastCommit,
+        text: `${s.repo.host}: ${latest.sha.substring(0, 7)} - ${latest.message} (${latest.date})`
+      });
     } catch (e) {
       errors.push(`${s.repo.host}: ${e.message}`);
     }
@@ -1119,9 +1206,9 @@ async function anonymousCheckUpdate(res) {
     count: changed.length,
     mode: 'anonymous',
     source: shown[0].source.repo.host,
-    logs: hasUpdate
-      ? shown.map((h) => `${h.source.repo.host}: ${h.latest.sha.substring(0, 7)} - ${h.latest.message} (${h.latest.date})`)
-      : []
+    localVersion: local.id,
+    remoteVersion: shown[0] && shown[0].mode === 'version' ? shown[0].text : '',
+    logs: hasUpdate ? shown.map((h) => h.text) : []
   });
 }
 
@@ -1278,6 +1365,20 @@ website/docs/**/*.md
 
     await runCmd('git branch -M main');
     await runCmd('git rm --cached git-config.json -f');
+
+    // 💡 写入版本特征码：客户端靠它判断「远端是不是比我新」
+    //    放在 git add 之前，保证它一定进这次提交
+    const versionInfo = {
+      id: makeVersionId(),
+      pushedAt: new Date().toISOString(),
+      note: String(message || '').replace(/"/g, '').slice(0, 60)
+    };
+    try {
+      await fs.writeJson(VERSION_FILE, versionInfo, { spaces: 2 });
+      logs.push(`> 版本特征码: ${versionInfo.id}\n`);
+    } catch (e) {
+      logs.push(`> 版本特征码写入失败（不影响推送）: ${e.message}\n`);
+    }
     
     // 💡 核心修复 2：强制清空 Git 缓存，让新加的 .gitignore 立即生效
     await runCmd('git rm -r --cached . -f');
@@ -1313,8 +1414,15 @@ website/docs/**/*.md
     logs.push(safeOutput + '\n');
 
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
+
+    const giteeHint = await readGiteeHint();
     logs.push(`\n[SUCCESS] 代码推送成功（私人文章和设定已安全过滤）！\n`);
-    res.json({ success: true, log: logs.join('\n') });
+    if (giteeHint) {
+      logs.push(`[TODO] 版本 ${versionInfo.id} 已上 GitHub，请记得同步 Gitee：\n`);
+      logs.push(`       ${giteeHint.repoUrl}\n`);
+      logs.push(`       （仓库页 → 管理 → 仓库镜像管理 → 手动同步）\n`);
+    }
+    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint });
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
@@ -2078,7 +2186,7 @@ async function runUpdateFlow() {
   const sourceDir = path.join(tempDir, dirs[0]);
 
   // 4. 核心保护机制：只覆盖系统文件，保留私人数据
-  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
+  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
 
   updateJobSet({ stage: 'backup' });
   updateJobLog('正在备份当前代码…');
