@@ -35,7 +35,6 @@
     .main-area { flex: 1; display: flex; flex-direction: column; background: #1e1e1e; }
     .toolbar { padding: 15px 20px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
     
-    /* 顶部卷名修改输入框 */
     .top-vol-input { 
       background: transparent; border: 1px solid transparent; border-bottom: 1px dashed #666; 
       color: #fff; font-size: 18px; font-weight: bold; outline: none; padding: 2px 5px; 
@@ -49,33 +48,97 @@
     .btn-success:hover { background: #3fb950; }
     .btn-outline { background: transparent; border: 1px solid #444; color: #ccc; }
     .btn-outline:hover { background: #333; color: #fff; }
+    .btn-export { background: #d29922; color: #fff; }
+    .btn-export:hover { background: #e3a92b; }
 
     .chapters-container { flex: 1; overflow-y: auto; padding: 20px; }
     
     /* 章节卡片 */
     .chapter-card { 
       background: #252526; border: 1px solid #444; border-radius: 8px; padding: 15px; margin-bottom: 15px; 
-      cursor: grab; transition: border-color 0.2s, background 0.2s, transform 0.1s;
-      position: relative; display: flex; flex-direction: column; gap: 10px;
+      transition: border-color 0.2s, background 0.2s, transform 0.1s;
+      position: relative; display: flex; flex-direction: column; gap: 12px;
     }
     .chapter-card:hover { border-color: #0e639c; }
-    .chapter-card:active { cursor: grabbing; }
+    
     .chapter-card.dragging { opacity: 0.4; border: 1px dashed #0e639c; background: #1a1a1a; }
     .chapter-card.drag-over { border-top: 3px solid #0e639c; margin-top: -3px; }
 
     .card-header { display: flex; gap: 10px; align-items: center; }
+    .drag-handle { color: #666; cursor: grab; font-size: 18px; user-select: none; }
+    .drag-handle:active { cursor: grabbing; }
+    
+    .toggle-btn { background: transparent; border: none; color: #888; cursor: pointer; padding: 0 5px; font-size: 14px; }
+    .toggle-btn:hover { color: #fff; }
+
     .chapter-title-input { flex: 1; background: transparent; border: none; color: #fff; font-size: 16px; font-weight: bold; outline: none; padding: 4px; border-radius: 4px; transition: background 0.2s;}
     .chapter-title-input:focus { background: #121212; }
+
+    .status-badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; user-select: none; }
     
-    .chapter-desc-input { width: 100%; background: #1a1a1a; border: 1px solid #333; color: #aaa; font-size: 13px; padding: 10px; border-radius: 4px; outline: none; resize: vertical; min-height: 60px; line-height: 1.5; font-family: inherit;}
+    .meta-row { display: flex; gap: 10px; flex-wrap: wrap; }
+    .meta-group { display: flex; align-items: center; gap: 6px; font-size: 13px; color: #888; flex: 1; min-width: 150px;}
+    
+    .custom-input, .custom-select { 
+      background: #1a1a1a; border: 1px solid #333; color: #ccc; padding: 6px 10px; border-radius: 4px; 
+      outline: none; font-size: 13px; width: 100%; font-family: inherit; transition: border 0.2s;
+    }
+    .custom-input:focus, .custom-select:focus { border-color: #0e639c; color: #fff; }
+    
+    .chapter-desc-input { width: 100%; background: #1a1a1a; border: 1px solid #333; color: #ccc; font-size: 13px; padding: 10px; border-radius: 4px; outline: none; resize: vertical; min-height: 60px; line-height: 1.6; font-family: inherit;}
     .chapter-desc-input:focus { border-color: #0e639c; color: #fff; }
 
-    .card-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 5px;}
+    /* 💡 小节区域 */
+    .sections-container {
+      margin-left: 25px; padding-left: 15px; border-left: 2px solid #333;
+      display: flex; flex-direction: column; gap: 8px; margin-top: 5px;
+    }
+    .section-item {
+      display: flex; align-items: flex-start; gap: 10px; background: #1a1a1a;
+      padding: 8px 12px; border-radius: 6px; border: 1px solid #2d2d2d; transition: 0.2s;
+    }
+    .section-item:hover { border-color: #444; }
+    .section-index { font-size: 13px; font-weight: bold; color: #0e639c; width: 30px; flex-shrink: 0; margin-top: 4px;}
+    .section-inputs { flex: 1; display: flex; flex-direction: column; gap: 6px; }
+    .section-title-input { background: transparent; border: none; color: #ddd; font-size: 13px; font-weight: bold; outline: none; padding: 2px 0; }
+    .section-title-input:focus { border-bottom: 1px dashed #0e639c; }
+    .section-desc-input { background: transparent; border: none; color: #888; font-size: 12px; outline: none; padding: 2px 0; resize: none; min-height: 24px; }
+    .section-desc-input:focus { color: #ccc; }
+    .btn-del-sec { background: transparent; border: none; color: #a82626; cursor: pointer; font-size: 14px; padding: 4px; border-radius: 4px; }
+    .btn-del-sec:hover { background: rgba(168, 38, 38, 0.2); }
+    .btn-add-sec { 
+      background: transparent; border: 1px dashed #444; color: #888; padding: 6px; border-radius: 4px; 
+      cursor: pointer; font-size: 12px; text-align: left; transition: 0.2s; margin-top: 5px; width: 100%;
+    }
+    .btn-add-sec:hover { border-color: #0e639c; color: #0e639c; background: rgba(14, 99, 156, 0.05); }
+
+    .card-actions { display: flex; justify-content: space-between; align-items: center; margin-top: 5px; border-top: 1px dashed #333; padding-top: 10px;}
     .move-select { background: #121212; border: 1px solid #444; color: #aaa; padding: 4px 8px; border-radius: 4px; font-size: 12px; outline: none; cursor: pointer; }
     .delete-btn { background: transparent; border: none; color: #a82626; cursor: pointer; font-size: 13px; padding: 4px 8px; border-radius: 4px; }
     .delete-btn:hover { background: rgba(168, 38, 38, 0.2); }
 
     .empty-tip { text-align: center; color: #666; margin-top: 50px; font-size: 15px; }
+    
+    /* 💡 模态框样式 */
+    .custom-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 99999; }
+    .custom-modal { background: #252526; border: 1px solid #444; border-radius: 8px; width: 400px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: scaleIn 0.2s ease-out; }
+    @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .custom-modal h3 { margin: 0 0 10px 0; color: #fff; font-size: 16px; }
+    .custom-modal p { color: #aaa; font-size: 13px; line-height: 1.5; margin-bottom: 15px; }
+    .custom-modal .modal-input { width: 100%; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px 12px; border-radius: 6px; outline: none; margin-bottom: 20px; font-size: 14px; transition: border 0.2s; }
+    .custom-modal .modal-input:focus { border-color: #0e639c; }
+    .custom-modal .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .custom-modal button { padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; border: none; transition: 0.2s; }
+    .custom-modal button.cancel { background: #333; color: #ccc; }
+    .custom-modal button.cancel:hover { background: #444; }
+    .custom-modal button.confirm { background: #0e639c; color: #fff; }
+    .custom-modal button.confirm:hover { background: #1177bb; }
+    .custom-modal button.confirm.danger { background: #a82626; }
+    .custom-modal button.confirm.danger:hover { background: #c92a2a; }
+
+    ::-webkit-scrollbar { width: 8px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
   </style>
 </head>
 <body>
@@ -94,7 +157,6 @@
           :class="{ active: currentVolIndex === index }"
           @click="currentVolIndex = index"
         >
-          <!-- 💡 双击文字进入编辑模式 -->
           <span 
             v-if="editingVolIndex !== index" 
             class="vol-title-text" 
@@ -103,7 +165,6 @@
           >
             {{ vol.title }}
           </span>
-          <!-- 💡 编辑模式的输入框 -->
           <input 
             v-else 
             type="text" 
@@ -113,7 +174,6 @@
             @keyup.enter="editingVolIndex = null"
             v-focus
           />
-
           <span class="delete-vol" @click.stop="deleteVolume(index)">✖</span>
         </div>
       </div>
@@ -124,17 +184,12 @@
       <div class="toolbar">
         <div v-if="currentVol" style="display: flex; align-items: center; gap: 10px;">
           <span style="color: #888; font-size: 16px;">正在编辑：</span>
-          <!-- 💡 顶部直接修改卷名 -->
-          <input 
-            type="text" 
-            class="top-vol-input" 
-            v-model="currentVol.title" 
-            title="在此处直接修改卷名"
-          />
+          <input type="text" class="top-vol-input" v-model="currentVol.title" title="在此处直接修改卷名" />
         </div>
         <h1 v-else style="margin:0; font-size: 18px; color: #fff;">暂无卷轴</h1>
 
         <div style="display: flex; gap: 10px;">
+          <button class="btn btn-export" @click="exportOutline">📥 导出大纲</button>
           <button class="btn btn-success" @click="saveData">💾 保存大纲</button>
           <button class="btn" @click="addChapter" v-if="currentVol">+ 添加章节</button>
         </div>
@@ -157,13 +212,66 @@
           @drop="handleDrop(index)"
           @dragend="handleDragEnd"
         >
+          <!-- 头部 -->
           <div class="card-header">
-            <span style="color: #666; cursor: grab;">⋮⋮</span>
-            <input type="text" class="chapter-title-input" v-model="chapter.title" placeholder="章节标题" />
+            <div class="drag-handle" title="按住拖拽排序">⋮⋮</div>
+            <button class="toggle-btn" @click="chapter._collapsed = !chapter._collapsed">
+              {{ chapter._collapsed ? '▶' : '▼' }}
+            </button>
+            <input type="text" class="chapter-title-input" v-model="chapter.title" placeholder="第X章：章节标题" />
+            
+            <select class="custom-select" v-model="chapter.status" style="width: 90px; font-weight: bold;" :class="'status-' + chapter.status">
+              <option value="todo">⏳ 未写</option>
+              <option value="draft">✍️ 草稿</option>
+              <option value="done">✅ 完成</option>
+            </select>
           </div>
           
-          <textarea class="chapter-desc-input" v-model="chapter.desc" placeholder="填写本章的剧情梗概..."></textarea>
+          <!-- 展开内容 -->
+          <div v-show="!chapter._collapsed" style="display: flex; flex-direction: column; gap: 12px;">
+            
+            <!-- 属性行 -->
+            <div class="meta-row">
+              <div class="meta-group">
+                <span style="white-space: nowrap;">👤 出场人物:</span>
+                <input type="text" class="custom-input" v-model="chapter.characters" placeholder="例如：主角, 老师" />
+              </div>
+              <div class="meta-group">
+                <span style="white-space: nowrap;">🎭 结构节点:</span>
+                <select class="custom-select" v-model="chapter.stage">
+                  <option value="">无特定节点</option>
+                  <option value="起">起 (起因/铺垫)</option>
+                  <option value="承">承 (发展/深化)</option>
+                  <option value="转">转 (转折/高潮)</option>
+                  <option value="合">合 (结局/收尾)</option>
+                  <option value="伏笔">📌 伏笔/暗线</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 章梗概 -->
+            <textarea class="chapter-desc-input" v-model="chapter.desc" placeholder="填写本章的主线梗概、冲突点..."></textarea>
+
+            <!-- 💡 新增：小节列表 -->
+            <div class="sections-container" v-if="chapter.sections && chapter.sections.length > 0">
+              <div v-for="(sec, sIndex) in chapter.sections" :key="sec.id" class="section-item">
+                <div class="section-index">{{ index + 1 }}.{{ sIndex + 1 }}</div>
+                <div class="section-inputs">
+                  <input type="text" class="section-title-input" v-model="sec.title" placeholder="小节标题 (如：初入异界)" />
+                  <textarea class="section-desc-input" v-model="sec.desc" placeholder="小节简述..." rows="1"></textarea>
+                </div>
+                <button class="btn-del-sec" @click="deleteSection(chapter, sIndex)" title="删除小节">✖</button>
+              </div>
+            </div>
+            
+            <!-- 添加小节按钮 -->
+            <button class="btn-add-sec" @click="addSection(chapter)">
+              + 在「{{ chapter.title || '本章' }}」下添加小节
+            </button>
+
+          </div>
           
+          <!-- 底部操作 -->
           <div class="card-actions">
             <div style="display: flex; align-items: center; gap: 8px;">
               <span style="font-size: 12px; color: #666;">移动到:</span>
@@ -179,6 +287,30 @@
         </div>
       </div>
     </div>
+
+    <!-- 💡 自定义模态框 -->
+    <div class="custom-modal-overlay" v-if="modal.show" @click.self="closeModal">
+      <div class="custom-modal">
+        <h3>{{ modal.title }}</h3>
+        <p v-html="modal.message"></p>
+        
+        <!-- 输入框模式 -->
+        <input 
+          v-if="modal.type === 'prompt'" 
+          type="text" 
+          class="modal-input" 
+          v-model="modal.inputValue" 
+          @keyup.enter="handleConfirm"
+          ref="modalInput"
+        />
+
+        <div class="modal-actions">
+          <button class="cancel" @click="closeModal" v-if="modal.type === 'confirm'">取消</button>
+          <button class="confirm" :class="{ danger: modal.isDanger }" @click="handleConfirm">{{ modal.type === 'alert' ? '确定' : '确认' }}</button>
+        </div>
+      </div>
+    </div>
+
   </div>
 
   <script>
@@ -189,20 +321,36 @@
       setup() {
         const data = ref([]);
         const currentVolIndex = ref(0);
-        const editingVolIndex = ref(null); // 记录当前哪个卷在编辑状态
+        const editingVolIndex = ref(null);
 
         const currentVol = computed(() => data.value[currentVolIndex.value] || null);
 
-        // 自定义指令：让输入框自动聚焦
         const vFocus = {
-          mounted: (el) => {
-            el.focus();
-            el.select(); // 自动全选文字，方便直接覆盖输入
-          }
+          mounted: (el) => { el.focus(); el.select(); }
         };
 
-        const startEditVol = (index) => {
-          editingVolIndex.value = index;
+        const startEditVol = (index) => { editingVolIndex.value = index; };
+
+        // ========== 模态框逻辑 ==========
+        const modalInput = ref(null);
+        const modal = ref({ show: false, type: 'alert', title: '', message: '', isDanger: false, inputValue: '', onConfirm: null });
+        
+        const closeModal = () => { modal.value.show = false; };
+        
+        const handleConfirm = () => {
+          if (modal.value.onConfirm) {
+            modal.value.onConfirm(modal.value.inputValue);
+          }
+          closeModal();
+        };
+
+        const openPrompt = (title, message, defaultValue, onConfirm, isDanger = false) => {
+          modal.value = { show: true, type: 'prompt', title, message, isDanger, inputValue: defaultValue, onConfirm };
+          nextTick(() => { if (modalInput.value) modalInput.value.focus(); });
+        };
+
+        const openConfirm = (title, message, onConfirm, isDanger = false) => {
+          modal.value = { show: true, type: 'confirm', title, message, isDanger, inputValue: '', onConfirm };
         };
 
         // ========== 拖拽逻辑 ==========
@@ -214,16 +362,11 @@
           e.dataTransfer.effectAllowed = 'move';
           e.dataTransfer.setData('text/plain', index);
         };
-
         const handleDragOver = (index) => {
           if (dragIndex.value === null || dragIndex.value === index) return;
           dragOverIndex.value = index;
         };
-
-        const handleDragLeave = () => {
-          dragOverIndex.value = null;
-        };
-
+        const handleDragLeave = () => { dragOverIndex.value = null; };
         const handleDrop = (dropIndex) => {
           if (dragIndex.value === null || dragIndex.value === dropIndex) return;
           const chapters = currentVol.value.chapters;
@@ -232,45 +375,39 @@
           dragIndex.value = null;
           dragOverIndex.value = null;
         };
-
-        const handleDragEnd = () => {
-          dragIndex.value = null;
-          dragOverIndex.value = null;
-        };
+        const handleDragEnd = () => { dragIndex.value = null; dragOverIndex.value = null; };
 
         // ========== 增删改操作 ==========
         const addVolume = () => {
-          const volName = prompt('请输入新卷的名称：', `第${data.value.length + 1}卷：新篇章`);
-          if (!volName) return;
-          data.value.push({
-            id: 'v_' + Date.now(),
-            title: volName,
-            chapters: []
+          openPrompt('新建卷', '请输入新卷的名称：', `第${data.value.length + 1}卷：新篇章`, (volName) => {
+            if (!volName || !volName.trim()) return;
+            data.value.push({ id: 'v_' + Date.now(), title: volName.trim(), chapters: [] });
+            currentVolIndex.value = data.value.length - 1;
           });
-          currentVolIndex.value = data.value.length - 1;
         };
 
         const deleteVolume = (index) => {
-          if (confirm(`确认删除 [${data.value[index].title}] 及其所有章节吗？`)) {
+          openConfirm('⚠️ 确认删除', `确认删除 <b>[${data.value[index].title}]</b> 及其所有章节吗？此操作不可逆！`, () => {
             data.value.splice(index, 1);
             if (currentVolIndex.value >= data.value.length) {
               currentVolIndex.value = Math.max(0, data.value.length - 1);
             }
-          }
+          }, true);
         };
 
         const addChapter = () => {
           currentVol.value.chapters.push({
             id: 'c_' + Date.now(),
             title: `第${currentVol.value.chapters.length + 1}章：未命名`,
-            desc: ''
+            desc: '', characters: '', stage: '', status: 'todo', _collapsed: false,
+            sections: []
           });
         };
 
         const deleteChapter = (index) => {
-          if (confirm('确认删除该章节吗？')) {
+          openConfirm('⚠️ 确认删除', '确认删除该章节及其下所有小节吗？', () => {
             currentVol.value.chapters.splice(index, 1);
-          }
+          }, true);
         };
 
         const moveChapterToVol = (chapterIndex, targetVolIndex) => {
@@ -279,11 +416,83 @@
           showToast('已移动到指定卷');
         };
 
+        // 💡 小节操作
+        const addSection = (chapter) => {
+          if (!chapter.sections) chapter.sections = [];
+          chapter.sections.push({ id: 's_' + Date.now(), title: '', desc: '' });
+        };
+
+        const deleteSection = (chapter, secIndex) => {
+          openConfirm('⚠️ 确认删除', '确认删除该小节吗？', () => {
+            chapter.sections.splice(secIndex, 1);
+          }, true);
+        };
+
+        // ========== 导出大纲功能 ==========
+        const exportOutline = () => {
+          if (data.value.length === 0) return showToast('大纲为空，无法导出', true);
+
+          let mdContent = `# 《幻想域》全文大纲\n\n`;
+          
+          data.value.forEach(vol => {
+            mdContent += `## ${vol.title}\n\n`;
+            if (vol.chapters.length === 0) {
+              mdContent += `*(本卷暂无章节)*\n\n`;
+              return;
+            }
+
+            vol.chapters.forEach((ch, cIdx) => {
+              const statusMap = { 'todo': '⏳ 未写', 'draft': '✍️ 草稿', 'done': '✅ 完成' };
+              const statusStr = statusMap[ch.status] || '未写';
+              
+              mdContent += `### ${ch.title} [${statusStr}]\n`;
+              
+              const meta = [];
+              if (ch.stage) meta.push(`**剧情节点:** ${ch.stage}`);
+              if (ch.characters) meta.push(`**出场人物:** ${ch.characters}`);
+              if (meta.length > 0) mdContent += `> ${meta.join(' | ')}\n\n`;
+              
+              if (ch.desc) mdContent += `${ch.desc}\n\n`;
+
+              if (ch.sections && ch.sections.length > 0) {
+                ch.sections.forEach((sec, sIdx) => {
+                  mdContent += `- **${cIdx + 1}.${sIdx + 1} ${sec.title || '未命名小节'}**`;
+                  if (sec.desc) mdContent += `：${sec.desc}`;
+                  mdContent += `\n`;
+                });
+                mdContent += `\n`;
+              }
+              
+              mdContent += `---\n\n`;
+            });
+          });
+
+          const blob = new Blob([mdContent], { type: 'text/markdown;charset=utf-8' });
+          const url = URL.createObjectURL(blob);
+          const a = document.createElement('a');
+          a.href = url;
+          a.download = `全文大纲_${new Date().toLocaleDateString().replace(/\//g, '-')}.md`;
+          document.body.appendChild(a);
+          a.click();
+          document.body.removeChild(a);
+          URL.revokeObjectURL(url);
+          showToast('✅ 大纲已导出为 Markdown');
+        };
+
         // ========== 数据加载与保存 ==========
         const loadData = async () => {
           try {
             const res = await fetch(`${API_BASE}/plotline?t=${Date.now()}`);
-            data.value = await res.json();
+            const rawData = await res.json();
+            
+            data.value = rawData.map(vol => ({
+              ...vol,
+              chapters: vol.chapters.map(ch => ({
+                characters: '', stage: '', status: 'todo', _collapsed: false,
+                sections: [],
+                ...ch
+              }))
+            }));
           } catch (e) {
             showToast('加载大纲失败', true);
           }
@@ -291,10 +500,15 @@
 
         const saveData = async () => {
           try {
+            const dataToSave = data.value.map(vol => ({
+              ...vol,
+              chapters: vol.chapters.map(({ _collapsed, ...rest }) => rest)
+            }));
+
             await fetch(`${API_BASE}/plotline`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(data.value)
+              body: JSON.stringify(dataToSave)
             });
             showToast('✅ 大纲保存成功');
           } catch (e) {
@@ -314,10 +528,10 @@
 
         return { 
           data, currentVolIndex, currentVol, editingVolIndex, startEditVol, vFocus,
-          dragIndex, dragOverIndex,
-          handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd,
+          dragIndex, dragOverIndex, handleDragStart, handleDragOver, handleDragLeave, handleDrop, handleDragEnd,
           addVolume, deleteVolume, addChapter, deleteChapter, moveChapterToVol,
-          saveData
+          addSection, deleteSection, exportOutline, saveData,
+          modal, closeModal, handleConfirm, modalInput
         };
       }
     }).mount('#app');

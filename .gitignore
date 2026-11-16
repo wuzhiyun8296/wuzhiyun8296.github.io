@@ -5,6 +5,10 @@ website/node_modules/
 website/.vitepress/cache/
 website/.vitepress/dist/
 
+# 屏蔽本地辅助脚本和软著合并文件
+merge-codes.js
+软著源代码合并.txt
+
 # 隐私保护：防止私人数据被推送到公开仓库
 library/
 website/docs/public/

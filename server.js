@@ -835,12 +835,16 @@ app.post('/api/git/push', async (req, res) => {
     const gitignorePath = path.join(__dirname, '.gitignore');
     
     // 💡 核心修复 1：重写 .gitignore，彻底屏蔽所有私人数据
-    const ignoreContent = `node_modules/
+        const ignoreContent = `node_modules/
 git-config.json
 .git/
 website/node_modules/
 website/.vitepress/cache/
 website/.vitepress/dist/
+
+# 屏蔽本地辅助脚本和软著合并文件
+merge-codes.js
+软著源代码合并.txt
 
 # 隐私保护：防止私人数据被推送到公开仓库
 library/
@@ -1168,17 +1172,31 @@ app.get('/api/export/init', async (req, res) => {
       const destPath = path.join(tempDir, item);
       if (!fs.existsSync(srcPath)) continue;
 
-      if (item === 'website') {
+            if (item === 'website') {
         await fs.copy(srcPath, destPath, {
           filter: (src) => {
+            // 1. 排除缓存和依赖
             if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
             if (src.includes('docs/public/assets')) return false;
+            if (src.includes('site-icon')) return true; // 💡 允许导出网站的 Favicon 图标
             if (src.includes('docs/novel/chapters')) return false;
+            
+            // 2. 💡 核心保护：只保留系统自带模板，剔除你写的私人文章
+            if (src.includes('website/docs') && src.endsWith('.md')) {
+              const fileName = path.basename(src);
+              // 允许导出的系统模板文件白名单
+              const systemFiles = [
+                'index.md', 'novel.md', 'timeline.md', 'characters.md', 
+                'graph.md', 'finance.md', 'world-tree.md', 'map.md', 
+                'plotline.md', 'audit.md', 'protection.md', 'github.md', 
+                'home-editor.md', 'plugin-builder.md', 'diagnostic.md'
+              ];
+              // 如果你自己写的文章名字不在这个白名单里，直接跳过不打包
+              if (!systemFiles.includes(fileName)) return false;
+            }
             return true;
           }
         });
-      } else {
-        await fs.copy(srcPath, destPath);
       }
     }
 
@@ -1248,17 +1266,30 @@ app.get('/api/export/template', async (req, res) => {
       const destPath = path.join(tempDir, item);
       if (!fs.existsSync(srcPath)) continue;
 
-      if (item === 'website') {
+            if (item === 'website') {
         await fs.copy(srcPath, destPath, {
           filter: (src) => {
+            // 1. 排除缓存和依赖
             if (src.includes('node_modules') || src.includes('.vitepress/dist') || src.includes('.vitepress/cache')) return false;
             if (src.includes('docs/public/assets')) return false;
             if (src.includes('docs/novel/chapters')) return false;
+            
+            // 2. 💡 核心保护：只保留系统自带模板，剔除你写的私人文章
+            if (src.includes('website/docs') && src.endsWith('.md')) {
+              const fileName = path.basename(src);
+              // 允许导出的系统模板文件白名单
+              const systemFiles = [
+                'index.md', 'novel.md', 'timeline.md', 'characters.md', 
+                'graph.md', 'finance.md', 'world-tree.md', 'map.md', 
+                'plotline.md', 'audit.md', 'protection.md', 'github.md', 
+                'home-editor.md', 'plugin-builder.md', 'diagnostic.md'
+              ];
+              // 如果你自己写的文章名字不在这个白名单里，直接跳过不打包
+              if (!systemFiles.includes(fileName)) return false;
+            }
             return true;
           }
         });
-      } else {
-        await fs.copy(srcPath, destPath);
       }
     }
 
