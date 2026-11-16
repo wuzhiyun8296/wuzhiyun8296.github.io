@@ -9,12 +9,8 @@ website/.vitepress/dist/
 merge-codes.js
 软著源代码合并.txt
 
-# 隐私保护：防止私人数据被推送到公开仓库
+# 只屏蔽原始手稿（不带水印）；站点用的同步章节要发布
 library/
-website/docs/public/
-website/docs/novel/chapters/
-website/docs/assets/
-website/docs/**/*.md
 
 # 更新过程的临时产物 / 更新前自动备份（不能进仓库）
 update.zip
