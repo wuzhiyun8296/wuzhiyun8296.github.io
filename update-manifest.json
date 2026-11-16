@@ -1,6 +1,6 @@
 {
-  "version": "20261117-004440",
-  "count": 36,
+  "version": "20261117-004840",
+  "count": 34,
   "files": [
     "admin.html",
     "package.json",
@@ -34,9 +34,7 @@
     "website/docs/components/WorldNavTree.vue",
     "website/docs/components/WorldTree.vue",
     "website/docs/components/WorldTreeRender.vue",
-    "website/docs/epoch-map-data.json",
     "website/docs/novel/NovelPage.vue",
-    "website/docs/website/docs/public/epoch-map-data.json",
     "website/docs/武器/.gitkeep"
   ]
 }

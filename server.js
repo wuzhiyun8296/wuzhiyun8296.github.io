@@ -2294,6 +2294,7 @@ async function collectUpdateFiles() {
     if (p.indexOf('website/docs/novel/chapters/') === 0) return true;
     if (p.indexOf('website/docs/assets/') === 0) return true;
     if (/^website\/docs\/.*\.md$/i.test(p)) return true;   // 私人文章不进更新包
+    if (/^website\/docs\/.*\.json$/i.test(p)) return true; // 站点数据（纪元地图等）也不外发
     if (/\.log$/i.test(p)) return true;
     if (/\.zip$/i.test(p)) return true;
     return false;

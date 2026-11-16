@@ -30,7 +30,5 @@ website/docs/components/TreeNode.vue
 website/docs/components/WorldNavTree.vue
 website/docs/components/WorldTree.vue
 website/docs/components/WorldTreeRender.vue
-website/docs/epoch-map-data.json
 website/docs/novel/NovelPage.vue
-website/docs/website/docs/public/epoch-map-data.json
 website/docs/武器/.gitkeep
