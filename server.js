@@ -742,31 +742,133 @@ const GIT_CONFIG_FILE = path.join(__dirname, 'git-config.json');
 // ================= 💡 匿名更新配置（公开仓库，无需 Token） =================
 const UPDATE_CONFIG_FILE = path.join(__dirname, 'update-config.json');
 
-// 只需要一个公开仓库地址；token 完全不参与
+// 读取更新源配置：支持「多源」——先从 GitHub 下，失败自动切 Gitee
+// 新格式: { "sources": [ { repoUrl, branch, lastCommit }, ... ] }
+// 旧格式: { "repoUrl": "...", "branch": "main", "lastCommit": "..." } 仍然兼容
 async function readUpdateConfig() {
-  const base = { repoUrl: '', branch: 'main', lastCommit: '' };
-  if (!fs.existsSync(UPDATE_CONFIG_FILE)) return base;
-  try {
-    return Object.assign(base, await fs.readJson(UPDATE_CONFIG_FILE));
-  } catch (e) {
-    return base;
+  let cfg = {};
+  if (fs.existsSync(UPDATE_CONFIG_FILE)) {
+    try { cfg = await fs.readJson(UPDATE_CONFIG_FILE); } catch (e) { cfg = {}; }
   }
+
+  let raw = Array.isArray(cfg.sources) ? cfg.sources.slice() : [];
+  if (!raw.length && cfg.repoUrl) {
+    raw = [{ repoUrl: cfg.repoUrl, branch: cfg.branch, lastCommit: cfg.lastCommit }];
+  }
+
+  const sources = [];
+  for (const s of raw) {
+    if (!s || !s.repoUrl) continue;
+    const parsed = parseRepoUrl(s.repoUrl);
+    if (!parsed) continue;
+    sources.push({
+      repoUrl: parsed.pageUrl,
+      branch: String(s.branch || cfg.branch || 'main'),
+      lastCommit: String(s.lastCommit || cfg.lastCommit || ''),
+      repo: parsed
+    });
+  }
+  return { sources: sources };
 }
 
-// 从任意 GitHub 地址里抠出 owner / repo（支持 https 链接、带 .git、带子路径）
-function parseGithubRepo(url) {
-  const m = String(url || '').trim().replace(/\.git$/i, '').match(/github\.com[\/:]([^\/]+)\/([^\/\?#\s]+)/i);
+// 从仓库地址里抠出「托管平台 / owner / repo」
+// 同时支持 github.com 和 gitee.com（https 链接、带 .git、带子路径都行）
+function parseRepoUrl(url) {
+  const raw = String(url || '').trim().replace(/\.git$/i, '');
+  const m = raw.match(/(github\.com|gitee\.com)[\/:]([^\/]+)\/([^\/\?#\s]+)/i);
   if (!m) return null;
-  return { owner: m[1], repo: m[2].replace(/\.git$/i, '') };
+  const host = m[1].toLowerCase();
+  const owner = m[2];
+  const repo = m[3].replace(/\.git$/i, '');
+  return {
+    host: host,
+    owner: owner,
+    repo: repo,
+    pageUrl: `https://${host}/${owner}/${repo}`,
+    gitUrl: `https://${host}/${owner}/${repo}.git`
+  };
 }
+
+// 各平台的归档 zip 地址（第一个是主通道，第二个备用）
+function buildArchiveUrls(repo, branch) {
+  if (repo.host === 'gitee.com') {
+    return [
+      `https://gitee.com/${repo.owner}/${repo.repo}/repository/archive/${branch}.zip`,
+      `https://gitee.com/${repo.owner}/${repo.repo}/repository/archive/refs/heads/${branch}.zip`
+    ];
+  }
+  return [
+    `https://codeload.github.com/${repo.owner}/${repo.repo}/zip/refs/heads/${branch}`,
+    `https://github.com/${repo.owner}/${repo.repo}/archive/refs/heads/${branch}.zip`
+  ];
+}
+
+// ================= 💡 Git 凭据安全处理 =================
+// 原则：remote 里永远只存「干净地址」，Token 只在执行命令的那一瞬间通过 HTTP 头传递，
+//       不再写进 .git/config，也不会出现在 URL / 日志里。
+function cleanGitUrl(repoUrl) {
+  let u = String(repoUrl || '').trim().replace(/\.git$/i, '');
+  if (!u) return '';
+  if (/^git@/i.test(u)) {
+    const m = u.match(/^git@([^:]+):(.+)$/);
+    if (m) return `https://${m[1]}/${m[2]}.git`;
+  }
+  if (!/^https?:\/\//i.test(u)) u = 'https://' + u;
+  // 剥掉可能混进来的 user:token@
+  u = u.replace(/^(https:\/\/)[^@\/]+@/i, '$1');
+  return u + '.git';
+}
+
+// 生成给 git 用的认证参数：禁用凭据助手 + 一次性 Authorization 头
+// Gitee 的 HTTPS 认证必须是「用户名:私人令牌」；GitHub 两种都收，所以有用户名就用用户名
+function basicAuthHeaderArg(token, userName) {
+  const t = String(token || '').trim();
+  if (!t) return '';
+  const u = String(userName || '').trim();
+  const pair = u ? `${u}:${t}` : `x-access-token:${t}`;
+  const b64 = Buffer.from(pair, 'utf8').toString('base64');
+  return ` -c credential.helper= -c http.extraheader="Authorization: Basic ${b64}"`;
+}
+
+// 把输出里的 token / base64 / https://xxx@ / Authorization 头全部打成 ***
+function redactSecrets(text, secrets) {
+  let out = String(text == null ? '' : text);
+  for (const s of (secrets || [])) {
+    const t = String(s || '').trim();
+    if (!t) continue;
+    out = out.split(t).join('***');
+  }
+  return out
+    .replace(/Basic\s+[A-Za-z0-9+/=]{8,}/g, 'Basic ***')
+    .replace(/https:\/\/[^@\s\/]+@/g, 'https://***@');
+}
+
+// 把 origin 改写成干净地址（顺手把历史遗留的 token 从 .git/config 里清掉）
+async function sanitizeOriginRemote(runCmd, repoUrl) {
+  const clean = cleanGitUrl(repoUrl);
+  if (!clean) return false;
+  const cur = await runCmd('git remote get-url origin');
+  const curUrl = String(cur.output || '').trim();
+  if (cur.success && curUrl === clean) return false;
+  if (cur.success) {
+    await runCmd(`git remote set-url origin "${clean}"`);
+  } else {
+    await runCmd(`git remote add origin "${clean}"`);
+  }
+  return true;
+}
+
 
 // 执行外部命令并拿回 stdout（用于 TLS 降级：系统 curl / git 走 Windows 证书库）
 function execCapture(cmd, timeoutMs = 180000) {
   return new Promise((resolve) => {
-    exec(cmd, {
+    // Windows 控制台默认 GBK，强制切 UTF-8，否则中文报错会变成乱码
+    const full = process.platform === 'win32' ? `chcp 65001>nul & ${cmd}` : cmd;
+    exec(full, {
       cwd: __dirname,
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024 * 8,
+      windowsHide: true,
       env: Object.assign({}, process.env, { GIT_TERMINAL_PROMPT: '0' })
     }, (error, stdout, stderr) => {
       resolve({ ok: !error, stdout: String(stdout || ''), stderr: String(stderr || ''), error });
@@ -797,83 +899,173 @@ function httpsGetJson(url) {
   });
 }
 
-// 下载文件：先试 Node 原生 https，失败（本地代理/杀软改了证书链）再降级到系统 curl
-async function downloadWithFallback(url, dest) {
-  try {
-    await new Promise((resolve, reject) => {
-      const file = fs.createWriteStream(dest);
-      const follow = (target) => {
-        https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
-          if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
-            response.resume();
-            return follow(response.headers.location);
-          }
-          if (response.statusCode !== 200) {
-            response.resume();
-            return reject(new Error(`下载失败，HTTP 状态码: ${response.statusCode}`));
-          }
-          response.pipe(file);
-          file.on('finish', () => { file.close(() => resolve()); });
-        }).on('error', (err) => {
-          try { fs.unlinkSync(dest); } catch (e) {}
-          reject(err);
-        });
-      };
-      follow(url);
-    });
-    return 'node';
-  } catch (e) {
-    try { await fs.remove(dest); } catch (err) {}
-    const r = await execCapture(`curl -L --fail --silent --show-error --max-time 300 -o "${dest}" "${url}"`);
-    if (!r.ok || !fs.existsSync(dest)) {
-      throw new Error('下载失败：' + ((r.stderr || e.message || '').trim() || '未知错误'));
+// 下载文件：多个镜像地址 + 两条通道
+// 通道 1：Node 原生 https；通道 2：系统 curl（走 Windows 证书库，能穿代理/杀软）
+async function downloadWithFallback(urls, dest) {
+  const list = Array.isArray(urls) ? urls : [urls];
+  const errors = [];
+
+  for (const url of list) {
+    try {
+      await new Promise((resolve, reject) => {
+        const file = fs.createWriteStream(dest);
+        const follow = (target) => {
+          https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
+            if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
+              response.resume();
+              return follow(response.headers.location);
+            }
+            if (response.statusCode !== 200) {
+              response.resume();
+              return reject(new Error(`HTTP ${response.statusCode}`));
+            }
+            response.pipe(file);
+            file.on('finish', () => { file.close(() => resolve()); });
+          }).on('error', (err) => {
+            try { fs.unlinkSync(dest); } catch (e) {}
+            reject(err);
+          });
+        };
+        follow(url);
+      });
+      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'node', url };
+      throw new Error('文件为空');
+    } catch (e) {
+      errors.push('node:' + e.message);
+      try { await fs.remove(dest); } catch (err) {}
     }
-    return 'curl';
+
+    const r = await execCapture(`curl -L --fail --silent --show-error --max-time 300 -o "${dest}" "${url}"`);
+    if (r.ok && fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'curl', url };
+    errors.push('curl:' + ((r.stderr || '').trim() || '失败'));
+    try { await fs.remove(dest); } catch (err) {}
   }
+
+  throw new Error('下载失败（已尝试 ' + list.length + ' 个地址）：' + errors.join(' / '));
+}
+
+// 原生 https GET → 文本（用于 Atom 订阅这类非 JSON 接口）
+function httpsGetText(url, timeoutMs = 12000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': 'my-world-system-updater' } }, (resp) => {
+      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+        resp.resume();
+        return httpsGetText(resp.headers.location, timeoutMs).then(resolve).catch(reject);
+      }
+      if (resp.statusCode !== 200) { resp.resume(); return reject(new Error('HTTP ' + resp.statusCode)); }
+      let body = '';
+      resp.setEncoding('utf8');
+      resp.on('data', (c) => { body += c; });
+      resp.on('end', () => resolve(body));
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('超时')));
+  });
 }
 
 // 查询公开仓库最新 commit（匿名，无需 token）
-// 先走 GitHub API；若 Node 证书链有问题，自动降级到 git ls-remote
-async function fetchLatestCommit(owner, repo, branch) {
+// GitHub：API → github.com 的 Atom 订阅 → git ls-remote
+// Gitee ：API v5 → git ls-remote
+// 任意一条通就行，电脑没装 Git 也有前两条兜底
+async function fetchLatestCommit(repo, branch) {
+  const errors = [];
+
+  // 1) 平台 API
   try {
-    const data = await httpsGetJson(`https://api.github.com/repos/${owner}/${repo}/commits/${branch}`);
+    if (repo.host === 'gitee.com') {
+      const data = await httpsGetJson(`https://gitee.com/api/v5/repos/${repo.owner}/${repo.repo}/branches/${branch}`);
+      const c = data.commit || {};
+      const inner = c.commit || {};
+      const sha = c.sha || data.sha;
+      if (!sha) throw new Error('返回中没有 commit sha');
+      const date = (inner.committer && inner.committer.date) || (inner.author && inner.author.date) || '';
+      return { sha: sha, date: date, message: '(gitee api)' };
+    }
+    const data = await httpsGetJson(`https://api.github.com/repos/${repo.owner}/${repo.repo}/commits/${branch}`);
     const commit = data.commit || {};
     return {
       sha: data.sha,
       date: (commit.author && commit.author.date) || '',
       message: String(commit.message || '').split('\n')[0]
     };
-  } catch (apiErr) {
-    const r = await execCapture(`git -c credential.helper= ls-remote "https://github.com/${owner}/${repo}" "refs/heads/${branch}"`, 60000);
-    const line = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean).find((s) => s.indexOf('refs/heads/' + branch) > -1);
-    if (r.ok && line) {
-      return { sha: line.split(/\s+/)[0], date: '', message: '(git ls-remote)' };
-    }
-    throw new Error(apiErr.message + (r.stderr ? ' / git: ' + r.stderr.trim() : ''));
+  } catch (e) {
+    errors.push('API(' + e.message + ')');
   }
+
+  // 2) GitHub 的 Atom 订阅：不依赖 API、不依赖 Git（Gitee 没有这个入口）
+  if (repo.host === 'github.com') {
+    try {
+      const text = await httpsGetText(`https://github.com/${repo.owner}/${repo.repo}/commits/${branch}.atom`);
+      const m = text.match(/Grit::Commit\/([0-9a-f]{40})/i) || text.match(/\/commit\/([0-9a-f]{40})/i);
+      if (!m) throw new Error('无法解析返回内容');
+      const d = text.match(/<updated>([^<]+)<\/updated>/i);
+      return { sha: m[1], date: d ? d[1] : '', message: '(atom)' };
+    } catch (e) {
+      errors.push('Atom(' + e.message + ')');
+    }
+  }
+
+  // 3) git ls-remote（任意平台通用，但需要系统里装了 Git）
+  try {
+    const r = await execCapture(`git -c credential.helper= ls-remote "${repo.gitUrl}" "refs/heads/${branch}"`, 45000);
+    const line = r.stdout.split('\n').map((s) => s.trim()).filter(Boolean).find((s) => s.indexOf('refs/heads/' + branch) > -1);
+    if (r.ok && line) return { sha: line.split(/\s+/)[0], date: '', message: '(git ls-remote)' };
+    throw new Error(r.stderr ? r.stderr.trim() : '未找到分支 ' + branch);
+  } catch (e) {
+    errors.push('git(' + e.message + ')');
+  }
+
+  throw new Error(errors.join(' / '));
 }
 
 // 免 Token 的「检测更新」：拿公开仓库最新 commit 和本地记录的 lastCommit 比对
 // 返回结构与老的 /api/git/check-update 完全一致，后台前端无需任何改动
 async function anonymousCheckUpdate(res) {
   const cfg = await readUpdateConfig();
-  const repo = parseGithubRepo(cfg.repoUrl);
-  if (!repo) {
-    return res.json({ success: false, error: '未配置更新源：请把公开仓库地址填进 update-config.json 的 repoUrl 字段（不需要 Token）' });
+  if (!cfg.sources.length) {
+    return res.json({ success: false, error: '未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）' });
   }
-  try {
-    const latest = await fetchLatestCommit(repo.owner, repo.repo, cfg.branch || 'main');
-    const hasUpdate = latest.sha !== cfg.lastCommit;
+
+  const hits = [];
+  const errors = [];
+  for (const s of cfg.sources) {
+    try {
+      const latest = await fetchLatestCommit(s.repo, s.branch);
+      hits.push({ source: s, latest: latest, changed: latest.sha !== s.lastCommit });
+    } catch (e) {
+      errors.push(`${s.repo.host}: ${e.message}`);
+    }
+  }
+
+  // 所有源都连不上：不把用户堵死，允许直接尝试下载更新
+  // （下载走的是归档地址 / curl，和版本查询不是同一条路）
+  if (!hits.length) {
     return res.json({
       success: true,
-      hasUpdate,
-      count: hasUpdate ? 1 : 0,
-      logs: hasUpdate ? [`${latest.sha.substring(0, 7)} - ${latest.message} (${latest.date})`] : [],
-      mode: 'anonymous'
+      hasUpdate: true,
+      count: 1,
+      degraded: true,
+      mode: 'anonymous',
+      logs: [
+        '⚠ 所有更新源都无法读取版本：' + errors.join(' / '),
+        '已允许直接尝试更新（会依次尝试 GitHub → Gitee）；若下载也失败，请手动覆盖更新包'
+      ]
     });
-  } catch (e) {
-    return res.json({ success: false, error: '连接 GitHub 失败：' + e.message });
   }
+
+  const changed = hits.filter((h) => h.changed);
+  const hasUpdate = changed.length > 0;
+  const shown = changed.length ? changed : hits;
+  return res.json({
+    success: true,
+    hasUpdate: hasUpdate,
+    count: changed.length,
+    mode: 'anonymous',
+    source: shown[0].source.repo.host,
+    logs: hasUpdate
+      ? shown.map((h) => `${h.source.repo.host}: ${h.latest.sha.substring(0, 7)} - ${h.latest.message} (${h.latest.date})`)
+      : []
+  });
 }
 
 // 更新前自动备份将被覆盖的代码（防止冲掉本地未提交的修改），只保留最近 3 次
@@ -1020,14 +1212,12 @@ website/docs/**/*.md
     await runCmd(`git config user.name "${cleanName}"`);
     await runCmd(`git config user.email "${cleanEmail}"`);
 
-    let rawUrl = config.repoUrl.trim();
-    if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
-    const safeToken = config.token.trim();
-    const authUrl = `https://${safeToken}@${rawUrl}`; 
+    const safeToken = String(config.token || '').trim();
+    const authArg = basicAuthHeaderArg(safeToken);
 
-    await runCmd(`git remote remove origin`);
-    await runCmd(`git remote add origin ${authUrl}`);
-    logs.push(`> 配置远程仓库: 成功\n`);
+    // 💡 安全：origin 只存干净地址；token 只在命令里用请求头传，不落盘
+    await sanitizeOriginRemote(runCmd, config.repoUrl);
+    logs.push(`> 配置远程仓库: 成功（远程地址已去除 Token）\n`);
 
     await runCmd('git branch -M main');
     await runCmd('git rm --cached git-config.json -f');
@@ -1042,9 +1232,27 @@ website/docs/**/*.md
 
     logs.push(`> 正在推送到 GitHub...\n`);
     // 💡 核心修复 3：使用 -f 强推，用干净代码覆盖掉云端已有的隐私文件
-    let res3 = await runCmd('git push -u origin main -f');
-    
-    let safeOutput = res3.output.replace(new RegExp(safeToken, 'g'), '***');
+    let res3 = await runCmd(`git${authArg} push -u origin main -f`);
+
+    // 万一某些 Git 版本不认 http.extraheader，就用「一次性带 token 的 URL」重试。
+    // 注意：这里刻意不加 -u，否则会把带 token 的地址写进 branch 配置
+    if (!res3.success) {
+      logs.push(`> 常规认证失败，改用备用认证方式重试...\n`);
+      const bareUrl = String(config.repoUrl || '').trim()
+        .replace(/^https?:\/\//i, '').replace(/^[^@\/]+@/, '').replace(/\.git$/i, '');
+      const credPart = String(config.userName || '').trim()
+        ? `${encodeURIComponent(String(config.userName).trim())}:${encodeURIComponent(safeToken)}`
+        : safeToken;
+      const tmpUrl = `https://${credPart}@${bareUrl}.git`;
+      const res4 = await runCmd(`git -c credential.helper= push "${tmpUrl}" main -f`);
+      if (res4.success) {
+        res3 = res4;
+      } else {
+        res3.output = res3.output + '\n' + res4.output;
+      }
+    }
+
+    let safeOutput = redactSecrets(res3.output, [safeToken]);
     logs.push(safeOutput + '\n');
 
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
@@ -1071,18 +1279,15 @@ app.get('/api/git/check-update', async (req, res) => {
 
   try {
     const config = await fs.readJson(GIT_CONFIG_FILE);
-    let rawUrl = config.repoUrl.trim();
-    if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
-    const safeToken = config.token.trim();
-    const authUrl = `https://${safeToken}@${rawUrl}`;
-    
-    // 确保连接到正确的仓库
-    await runCmd('git remote remove origin');
-    await runCmd(`git remote add origin ${authUrl}`);
+    const safeToken = String(config.token || '').trim();
+    const authArg = basicAuthHeaderArg(safeToken);
+
+    // 确保连接到正确的仓库（remote 只存干净地址，token 走请求头）
+    await sanitizeOriginRemote(runCmd, config.repoUrl);
 
     // 拉取远程分支信息（只拉取不合并）
-    const fetchRes = await runCmd('git fetch origin main');
-    if (!fetchRes.success) return res.json({ success: false, error: '拉取远程信息失败，请检查网络或 Token：' + fetchRes.output.replace(new RegExp(safeToken, 'g'), '***') });
+    const fetchRes = await runCmd(`git${authArg} fetch origin main`);
+    if (!fetchRes.success) return res.json({ success: false, error: '拉取远程信息失败，请检查网络或 Token：' + redactSecrets(fetchRes.output, [safeToken]) });
 
     // 检查落后多少个 commit
     const countRes = await runCmd('git rev-list HEAD...origin/main --count');
@@ -1113,28 +1318,26 @@ app.get('/api/git/pull', async (req, res) => {
   let logs = [];
   try {
     const config = await fs.readJson(GIT_CONFIG_FILE);
-    let rawUrl = config.repoUrl.trim();
-    if (rawUrl.startsWith('https://')) rawUrl = rawUrl.substring(8);
-    const safeToken = config.token.trim();
-    const authUrl = `https://${safeToken}@${rawUrl}`;
-    
-    await runCmd('git remote remove origin');
-    await runCmd(`git remote add origin ${authUrl}`);
+    const safeToken = String(config.token || '').trim();
+    const authArg = basicAuthHeaderArg(safeToken);
+
+    // remote 只存干净地址，token 走一次性请求头
+    await sanitizeOriginRemote(runCmd, config.repoUrl);
     
     logs.push('> 正在暂存本地修改（防止冲突）...');
     await runCmd('git add .');
     await runCmd('git stash');
     
     logs.push('> 正在拉取远程最新代码...');
-    const pullRes = await runCmd('git pull origin main');
+    const pullRes = await runCmd(`git${authArg} pull origin main`);
     
     logs.push('> 正在恢复你的本地文件...');
     const popRes = await runCmd('git stash pop');
     
     if (pullRes.success) {
-      res.json({ success: true, log: logs.join('\n') + '\n' + pullRes.output.replace(new RegExp(safeToken, 'g'), '***') + '\n' + popRes.output });
+      res.json({ success: true, log: logs.join('\n') + '\n' + redactSecrets(pullRes.output, [safeToken]) + '\n' + redactSecrets(popRes.output, [safeToken]) });
     } else {
-      res.json({ success: false, error: pullRes.output.replace(new RegExp(safeToken, 'g'), '***') });
+      res.json({ success: false, error: redactSecrets(pullRes.output, [safeToken]) });
     }
   } catch (e) {
     res.status(500).json({ success: false, error: e.message });
@@ -1709,26 +1912,39 @@ const https = require('https');
 app.get('/api/update/check', async (req, res) => anonymousCheckUpdate(res));
 
 app.get('/api/update/zip', async (req, res) => {
-  // 💡 优先读 update-config.json（公开仓库，免 Token），没有才回退到 git-config.json
+  // 💡 多源更新：按 update-config.json 里 sources 的顺序尝试
+  //    GitHub 优先，连不上/下不动就自动切到 Gitee，全程不需要 Token
   const upCfg = await readUpdateConfig();
-  let repoUrl = String(upCfg.repoUrl || '').trim();
-  if (!repoUrl && fs.existsSync(GIT_CONFIG_FILE)) {
-    try { repoUrl = String((await fs.readJson(GIT_CONFIG_FILE)).repoUrl || '').trim(); } catch (e) { /* ignore */ }
+  const sources = upCfg.sources.slice();
+  if (!sources.length && fs.existsSync(GIT_CONFIG_FILE)) {
+    try {
+      const r = parseRepoUrl((await fs.readJson(GIT_CONFIG_FILE)).repoUrl);
+      if (r) sources.push({ repoUrl: r.pageUrl, branch: 'main', lastCommit: '', repo: r });
+    } catch (e) { /* ignore */ }
   }
-  const gh = parseGithubRepo(repoUrl);
-  if (!gh) return res.status(400).json({ success: false, error: '未配置更新源：请在 update-config.json 里填写 repoUrl（公开仓库地址，不需要 Token）' });
+  if (!sources.length) return res.status(400).json({ success: false, error: '未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）' });
+
+  const zipPath = path.join(__dirname, 'update.zip');
+  const tempDir = path.join(__dirname, '.temp_update');
 
   try {
-    const owner = gh.owner;
-    const repo = gh.repo;
-    const branch = upCfg.branch || 'main';
-    // codeload 直接返回 200，比 /archive/ 的 302 跳转更稳
-    const zipUrl = `https://codeload.github.com/${owner}/${repo}/zip/refs/heads/${branch}`;
-    const zipPath = path.join(__dirname, 'update.zip');
-    const tempDir = path.join(__dirname, '.temp_update');
-
-    // 1. 下载 ZIP 包（Node 直连失败时自动降级到系统 curl）
-    const via = await downloadWithFallback(zipUrl, zipPath);
+    // 1. 依次尝试各个更新源，第一个下载成功的就用它
+    const failures = [];
+    let applied = null;
+    for (const s of sources) {
+      try {
+        const urls = buildArchiveUrls(s.repo, s.branch);
+        const dl = await downloadWithFallback(urls, zipPath);
+        applied = { source: s, via: dl.via };
+        break;
+      } catch (e) {
+        failures.push(`${s.repo.host}: ${e.message}`);
+        try { await fs.remove(zipPath); } catch (err) { /* ignore */ }
+      }
+    }
+    if (!applied) {
+      return res.status(500).json({ success: false, error: '所有更新源都下载失败：' + failures.join('  |  ') });
+    }
 
     // 2. 清理旧的临时目录并解压
     await fs.remove(tempDir);
@@ -1740,16 +1956,14 @@ app.get('/api/update/zip', async (req, res) => {
       });
     });
 
-    // 3. 找到解压后的文件夹 (GitHub 自动生成的文件夹名通常是 repo-main)
+    // 3. 找到解压后的文件夹（GitHub 是 repo-branch，Gitee 是 owner-repo-hash）
     const dirs = await fs.readdir(tempDir);
     const sourceDir = path.join(tempDir, dirs[0]);
 
-    // 4. 💡 核心保护机制：只覆盖特定文件，保留数据
-    const keepData = ['library', 'website/docs/public', 'git-config.json', '.gitignore', 'node_modules'];
-    const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website']; // 更新系统核心
+    // 4. 💡 核心保护机制：只覆盖系统文件，保留私人数据
+    const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
 
-    // 💡 覆盖前先备份到 .update_backup/<时间戳>/，防止冲掉本地未提交的改动
-    //    备份失败不阻断更新（比如磁盘只读），只是少了一层保险
+    // 覆盖前先备份到 .update_backup/<时间戳>/，备份失败不阻断更新
     let backup = { dir: '', saved: [] };
     try {
       backup = await backupBeforeUpdate(filesToUpdate);
@@ -1760,15 +1974,14 @@ app.get('/api/update/zip', async (req, res) => {
     for (const item of filesToUpdate) {
       const src = path.join(sourceDir, item);
       const dest = path.join(__dirname, item);
-      if (fs.existsSync(src)) {
-        if (item === 'website') {
-          // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
-          await fs.copy(src, dest, {
-            filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
-          });
-        } else {
-          await fs.copy(src, dest);
-        }
+      if (!fs.existsSync(src)) continue;
+      if (item === 'website') {
+        // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
+        await fs.copy(src, dest, {
+          filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
+        });
+      } else {
+        await fs.copy(src, dest);
       }
     }
 
@@ -1776,17 +1989,25 @@ app.get('/api/update/zip', async (req, res) => {
     await fs.remove(tempDir);
     await fs.remove(zipPath);
 
-    // 6. 记录本次更新到的 commit，作为下次「检测更新」的比对基准（失败不影响更新结果）
+    // 6. 记录各源的最新 commit，作为下次「检测更新」的比对基准（失败不影响更新结果）
+    const updated = [];
+    for (const s of sources) {
+      let sha = '';
+      try { sha = (await fetchLatestCommit(s.repo, s.branch)).sha; } catch (e) { sha = ''; }
+      updated.push({ repoUrl: s.repoUrl, branch: s.branch, lastCommit: sha || s.lastCommit || '' });
+    }
     try {
-      const latest = await fetchLatestCommit(owner, repo, branch);
-      await fs.writeJson(UPDATE_CONFIG_FILE, Object.assign({}, upCfg, {
-        repoUrl: upCfg.repoUrl || repoUrl,
-        branch: branch,
-        lastCommit: latest.sha
-      }), { spaces: 2 });
+      await fs.writeJson(UPDATE_CONFIG_FILE, { sources: updated }, { spaces: 2 });
     } catch (e) { /* ignore */ }
 
-    res.json({ success: true, message: '更新成功！私人数据已保留，请重启后台。', via: via, backup: backup.dir });
+    res.json({
+      success: true,
+      message: `更新成功（来源 ${applied.source.repo.host}，通道 ${applied.via}）！私人数据已保留，请重启后台。`,
+      source: applied.source.repo.host,
+      via: applied.via,
+      backup: backup.dir,
+      skipped: failures
+    });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }
@@ -2179,4 +2400,26 @@ app.listen(3001, () => {
   console.log('SUCCESS! Server is running on port 3001');
   console.log('URL: http://localhost:3001');
   console.log('=================================');
+
+  // 💡 启动时自动清理：把 .git/config 里历史遗留的明文 Token 换成干净地址
+  (async () => {
+    try {
+      if (!fs.existsSync(GIT_CONFIG_FILE)) return;
+      const cfg = await fs.readJson(GIT_CONFIG_FILE);
+      const clean = cleanGitUrl(cfg.repoUrl);
+      if (!clean) return;
+      const runCmd = (cmd) => new Promise((resolve) => {
+        exec(cmd, { cwd: __dirname }, (error, stdout, stderr) => {
+          resolve({ success: !error, output: String(stdout || stderr || '') });
+        });
+      });
+      const cur = await runCmd('git remote get-url origin');
+      const curUrl = String(cur.output || '').trim();
+      if (cur.success && curUrl && curUrl !== clean) {
+        await runCmd(`git remote set-url origin "${clean}"`);
+        console.log('[SECURITY] 已从 origin 远程地址中移除明文 Token');
+        console.log('[SECURITY] origin =', clean);
+      }
+    } catch (e) { /* 静默：清理失败不影响启动 */ }
+  })();
 });
