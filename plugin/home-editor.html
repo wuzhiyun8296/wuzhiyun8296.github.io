@@ -19,7 +19,6 @@
     .btn-save:hover { background: #3fb950; }
     .btn-outline { background: #333; color: #ddd; border: 1px solid #444; }
     .btn-outline:hover { background: #444; color: #fff; }
-
     .layout { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 60px); }
     
     .left-panel { width: 50%; padding: 20px 20px 100px 20px; overflow-y: auto; border-right: 1px solid #333; height: 100%; }
@@ -58,14 +57,12 @@
     .btn-upload:hover { background: #1177bb; }
     .hint { font-size: 12px; color: #666; line-height: 1.4; }
     .file-input { display: none; }
-
     /* 卡片列表 */
     .feature-card { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 15px; margin-bottom: 15px; position: relative; }
     .btn-del { position: absolute; top: 10px; right: 10px; background: #a82626; color: #fff; border: none; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
     .btn-del:hover { background: #c92a2a; }
     .btn-add { background: transparent; border: 1px dashed #0e639c; color: #0e639c; padding: 10px; border-radius: 6px; width: 100%; cursor: pointer; font-weight: bold; transition: 0.2s; }
     .btn-add:hover { background: rgba(14, 99, 156, 0.1); }
-
     /* 右侧预览区 */
     .preview-container { max-width: 800px; margin: 0 auto; }
     .hero-section { text-align: center; margin-bottom: 60px; }
@@ -79,7 +76,6 @@
     .hero-btn.primary:hover { background: #1177bb; }
     .hero-btn.secondary { background: transparent; color: #ccc; border: 1px solid #555; }
     .hero-btn.secondary:hover { background: #333; color: #fff; }
-
     .features-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 20px; }
     .feature-item { background: #252526; border: 1px solid #333; padding: 24px; border-radius: 12px; transition: 0.3s; }
     .feature-item:hover { transform: translateY(-5px); border-color: #444; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
@@ -99,10 +95,9 @@
       <div class="actions">
         <button class="btn btn-save" @click="saveConfig">💾 保存修改</button>
         <button class="btn btn-outline" @click="exportTemplate">📦 一键导出空模板 (ZIP)</button>
-        <button class="btn btn-outline" @click="copySource">📋 复制首页源码</button>
+        <button class="btn btn-outline" @click="copySource">📋 复制首页VitePress源码</button>
       </div>
     </div>
-
     <div class="layout">
       <div class="left-panel">
         
@@ -134,7 +129,6 @@
             <input type="file" ref="iconInput" class="file-input" accept="image/*" @change="uploadIcon">
           </div>
         </div>
-
         <h3 class="section-title">🌟 顶部展示区 (Hero)</h3>
         <div class="form-group">
           <label>大标题 (Name)</label>
@@ -160,7 +154,6 @@
             <input type="text" v-model="homeData.btn2Link" placeholder="按钮2链接 (如: /timeline)">
           </div>
         </div>
-
         <h3 class="section-title">
           ✨ 特性卡片 (Features)
         </h3>
@@ -177,7 +170,6 @@
         </div>
         <button class="btn-add" @click="addFeature">+ 添加卡片</button>
       </div>
-
       <div class="right-panel">
         <div class="preview-container">
           <div class="hero-section">
@@ -185,8 +177,8 @@
             <h2 class="hero-text">{{ homeData.text || '副标题' }}</h2>
             <p class="hero-tagline">{{ homeData.tagline || '一句话简介' }}</p>
             <div class="btn-group">
-              <a v-if="homeData.btn1Text" :href="homeData.btn1Link || '#'" class="hero-btn primary">{{ homeData.btn1Text }}</a>
-              <a v-if="homeData.btn2Text" :href="homeData.btn2Link || '#'" class="hero-btn secondary">{{ homeData.btn2Text }}</a>
+              <a v-show="homeData.btn1Text.trim()" :href="homeData.btn1Link || '#'" class="hero-btn primary">{{ homeData.btn1Text }}</a>
+              <a v-show="homeData.btn2Text.trim()" :href="homeData.btn2Link || '#'" class="hero-btn secondary">{{ homeData.btn2Text }}</a>
             </div>
           </div>
           
@@ -196,21 +188,34 @@
               <p>{{ item.desc || '这里显示卡片的描述内容。' }}</p>
             </div>
           </div>
+          <!-- 预览区底部按钮 -->
+          <div style="margin-top:72px; text-align:center;">
+            <a href="#/" style="
+              display: inline-block;
+              padding: 8px 20px;
+              border-radius: 999px;
+              background-color:#0e639c;
+              color: #ffffff;
+              text-decoration: none;
+              font-weight: 500;
+              font-size: 14px;
+            ">
+              🧭 进入快捷导航中心
+            </a>
+          </div>
         </div>
       </div>
     </div>
   </div>
-
   <script>
     const { createApp, ref, onMounted } = Vue;
     const API_BASE = 'http://localhost:3001/api';
     const CONFIG_PATH = 'public/home-config.json'; 
-
     createApp({
       setup() {
-        const homeData = ref({
+        const defaultHome = {
           siteTitle: '幻想域设定集',
-          siteIcon: '/icon.svg', // 💡 修正：加上根路径，防止 iframe 下路径错误
+          siteIcon: '/icon.svg',
           name: '幻想域',
           text: 'The Veiled Kindred Spirits',
           tagline: '当物理与魔法交织，帝国的齿轮在暗中转动。',
@@ -219,34 +224,32 @@
           btn2Text: '查看编年史',
           btn2Link: '/timeline',
           features: [
-            { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动...' },
-            { title: '魔法与物理', desc: '拥有魔力者方能施展魔法...' },
-            { title: '幻想域联盟', desc: '穿越者组成的秘密联盟...' }
+            { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动，贝勒（Bale）为唯一法定货币。十二圆桌骑士共同监管。' },
+            { title: '魔法与物理', desc: '拥有魔力者方能施展魔法，而穿越者对此免疫。在这个阶级固化的世界里，反抗的种子正在发芽。' },
+            { title: '幻想域联盟', desc: '穿越者组成的秘密联盟，致力于推翻帝国统治，建立一个人魔共存的理想国。' }
           ]
-        });
-
-        // 💡 新增：控制裂图状态
+        };
+        const homeData = ref({...defaultHome});
         const iconError = ref(false);
-
         const showToast = (msg, isError = false) => {
           const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
           const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
           toast.style = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
           document.body.appendChild(toast); setTimeout(() => toast.remove(), 2500);
         };
-
         const loadConfig = async () => {
           try {
             const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(CONFIG_PATH)}`);
             const data = await res.json();
             if (data.content) {
-              homeData.value = { ...homeData.value, ...JSON.parse(data.content) };
+              const parsed = JSON.parse(data.content);
+              homeData.value = Object.assign({}, defaultHome, parsed);
             }
           } catch (e) {
-            console.error('读取首页配置失败', e);
+            console.warn('读取首页配置，使用默认配置', e);
+            homeData.value = {...defaultHome};
           }
         };
-
         const saveConfig = async () => {
           try {
             const res = await fetch(`${API_BASE}/file`, {
@@ -259,7 +262,9 @@
             });
             const result = await res.json();
             if (result.success) {
-              showToast('✅ 首页配置已保存成功！');
+              // 调用后端接口自动生成并写入 index.md
+              await fetch(`${API_BASE}/generate-index-md`, {method:"POST"});
+              showToast('✅ 已保存配置，index.md自动更新完成！');
               if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'REFRESH_SITE_META' }, '*');
               }
@@ -267,17 +272,14 @@
               showToast('❌ 保存失败', true);
             }
           } catch (e) {
-            showToast('❌ 网络请求失败', true);
+            showToast('❌ 请求失败，请确认server.js已添加接口并且重启后端', true);
           }
         };
-
         const uploadIcon = async (event) => {
           const file = event.target.files[0];
           if (!file) return;
-
           const formData = new FormData();
           formData.append('image', file);
-
           try {
             const res = await fetch(`${API_BASE}/upload`, {
               method: 'POST',
@@ -286,7 +288,7 @@
             const data = await res.json();
             if (data.url) {
               homeData.value.siteIcon = data.url;
-              iconError.value = false; // 💡 上传成功后重置错误状态
+              iconError.value = false;
               showToast('✅ 图标上传成功，请点击保存修改');
             } else {
               showToast('❌ 上传失败: ' + (data.error || '未知错误'), true);
@@ -295,20 +297,54 @@
             showToast('❌ 网络请求失败', true);
           }
         };
-
         const addFeature = () => { homeData.value.features.push({ title: '新特性', desc: '描述内容' }); };
         const removeFeature = (index) => { homeData.value.features.splice(index, 1); };
-
         const exportTemplate = () => { window.location.href = `${API_BASE}/export/template`; };
+
         const copySource = () => {
-          const html = `<div class="hero"><h1>${homeData.value.name}</h1><p>${homeData.value.tagline}</p></div>`;
-          navigator.clipboard.writeText(html).then(() => showToast('✅ 简易源码已复制'));
+          const hd = homeData.value;
+          const acts = [];
+          if(hd.btn1Text?.trim()) {
+            acts.push(`    - theme: brand\n      text: "${hd.btn1Text.replace(/"/g,'\\"')}"\n      link: "${hd.btn1Link||'#'}"`);
+          }
+          if(hd.btn2Text?.trim()) {
+            acts.push(`    - theme: alt\n      text: "${hd.btn2Text.replace(/"/g,'\\"')}"\n      link: "${hd.btn2Link||'#'}"`);
+          }
+          const actionsYaml = acts.length ? `  actions:\n${acts.join('\n')}` : '';
+          const featYaml = hd.features.map(f=>`  - title: "${(f.title||'').replace(/"/g,'\\"')}"\n    details: "${(f.desc||'').replace(/"/g,'\\"')}"`).join('\n');
+
+          const fullMd = `---
+layout: home
+hero:
+  name: "${hd.name||''}"
+  text: "${hd.text||''}"
+  tagline: "${hd.tagline||''}"
+${actionsYaml}
+features:
+${featYaml}
+---
+
+<div style="margin-top:72px; text-align:center;">
+  <a href="/world-navigation" style="
+    display: inline-block;
+    padding: 8px 20px;
+    border-radius: 999px;
+    background-color: var(--vp-c-brand);
+    color: var(--vp-c-text-inverse, #ffffff);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+  ">
+    🧭 进入快捷导航中心
+  </a>
+</div>
+`;
+          navigator.clipboard.writeText(fullMd).then(() => showToast('✅ VitePress首页markdown源码已复制！'));
         };
 
         onMounted(() => {
           loadConfig();
         });
-
         return { homeData, iconError, saveConfig, uploadIcon, addFeature, removeFeature, exportTemplate, copySource };
       }
     }).mount('#app');

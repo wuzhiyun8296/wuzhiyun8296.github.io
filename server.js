@@ -1623,6 +1623,59 @@ app.get('/api/update/zip', async (req, res) => {
   }
 });
 
+// 自动生成首页 index.md 接口
+app.post('/api/generate-index-md', async (req, res) => {
+  try {
+    const configPath = path.join(PUBLIC_DIR, 'home-config.json');
+    if (!fs.existsSync(configPath)) {
+      return res.json({ success: false, error: "配置文件不存在，请先保存配置" });
+    }
+    const hd = await fs.readJson(configPath);
+    const acts = [];
+    if(hd.btn1Text?.trim()) {
+      acts.push(`    - theme: brand\n      text: "${String(hd.btn1Text).replace(/"/g,'\\"')}"\n      link: "${hd.btn1Link||'#'}"`);
+    }
+    if(hd.btn2Text?.trim()) {
+      acts.push(`    - theme: alt\n      text: "${String(hd.btn2Text).replace(/"/g,'\\"')}"\n      link: "${hd.btn2Link||'#'}"`);
+    }
+    const actionsYaml = acts.length ? `  actions:\n${acts.join('\n')}` : '';
+    const featYaml = hd.features.map(f=>`  - title: "${String(f.title||'').replace(/"/g,'\\"')}"\n    details: "${String(f.desc||'').replace(/"/g,'\\"')}"`).join('\n');
+
+    const fullMd = `---
+layout: home
+hero:
+  name: "${String(hd.name||'').replace(/"/g,'\\"')}"
+  text: "${String(hd.text||'').replace(/"/g,'\\"')}"
+  tagline: "${String(hd.tagline||'').replace(/"/g,'\\"')}"
+${actionsYaml}
+features:
+${featYaml}
+---
+
+<div style="margin-top:72px; text-align:center;">
+  <a href="/world-navigation" style="
+    display: inline-block;
+    padding: 8px 20px;
+    border-radius: 999px;
+    background-color: var(--vp-c-brand);
+    color: var(--vp-c-text-inverse, #ffffff);
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 14px;
+  ">
+    🧭 进入快捷导航中心
+  </a>
+</div>
+`;
+    const indexMdPath = path.join(DOCS_DIR, "index.md");
+    await fs.writeFile(indexMdPath, fullMd, "utf-8");
+    return res.json({success:true,msg:"index.md 已由后端自动生成写入磁盘"});
+  } catch(err){
+    return res.status(500).json({success:false,error:err.message});
+  }
+});
+
+
 // 启动服务
 app.listen(3001, () => {
   console.log('=================================');
