@@ -870,11 +870,12 @@ async function sanitizeOriginRemote(runCmd, repoUrl) {
 
 
 // 执行外部命令并拿回 stdout（用于 TLS 降级：系统 curl / git 走 Windows 证书库）
-function execCapture(cmd, timeoutMs = 180000) {
+// onStderr：可选的实时回调，用来解析 curl 的进度条
+function execCapture(cmd, timeoutMs = 180000, onStderr) {
   return new Promise((resolve) => {
     // Windows 控制台默认 GBK，强制切 UTF-8，否则中文报错会变成乱码
     const full = process.platform === 'win32' ? `chcp 65001>nul & ${cmd}` : cmd;
-    exec(full, {
+    const child = exec(full, {
       cwd: __dirname,
       timeout: timeoutMs,
       maxBuffer: 1024 * 1024 * 8,
@@ -883,6 +884,11 @@ function execCapture(cmd, timeoutMs = 180000) {
     }, (error, stdout, stderr) => {
       resolve({ ok: !error, stdout: String(stdout || ''), stderr: String(stderr || ''), error });
     });
+    if (typeof onStderr === 'function' && child && child.stderr) {
+      child.stderr.on('data', (chunk) => {
+        try { onStderr(String(chunk)); } catch (e) { /* ignore */ }
+      });
+    }
   });
 }
 
@@ -911,16 +917,27 @@ function httpsGetJson(url) {
 
 // 下载文件：多个镜像地址 + 两条通道
 // 通道 1：Node 原生 https；通道 2：系统 curl（走 Windows 证书库，能穿代理/杀软）
-async function downloadWithFallback(urls, dest) {
+// curl 的 stderr 里混着进度条（#=O 和百分比），报错时要把它清理掉
+function cleanCurlStderr(raw) {
+  let out = String(raw || '');
+  out = out.replace(/[\r\n]+/g, ' ');
+  out = out.replace(/#[#=O\s-]*/g, ' ');              // 进度条的 # = O 字符
+  out = out.replace(/\b\d{1,3}(?:\.\d+)?%\b/g, ' ');  // 百分比
+  out = out.replace(/\s{2,}/g, ' ').trim();
+  return out;
+}
+
+async function downloadWithFallback(urls, dest, onProgress) {
   const list = Array.isArray(urls) ? urls : [urls];
   const errors = [];
+  const report = (p) => { if (typeof onProgress === 'function') { try { onProgress(p); } catch (e) {} } };
 
   for (const url of list) {
     try {
       await new Promise((resolve, reject) => {
         const file = fs.createWriteStream(dest);
         const follow = (target) => {
-          https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
+          const req = https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
               response.resume();
               return follow(response.headers.location);
@@ -929,12 +946,27 @@ async function downloadWithFallback(urls, dest) {
               response.resume();
               return reject(new Error(`HTTP ${response.statusCode}`));
             }
+            // 💡 有 Content-Length 就能算出百分比，实时回报给前端
+            const total = parseInt(response.headers['content-length'] || '0', 10);
+            let got = 0;
+            response.on('data', (chunk) => {
+              got += chunk.length;
+              report({ received: got, total: total });
+            });
             response.pipe(file);
             file.on('finish', () => { file.close(() => resolve()); });
-          }).on('error', (err) => {
+            response.on('error', (err) => {
+              try { fs.unlinkSync(dest); } catch (e) {}
+              reject(err);
+            });
+          });
+          req.on('error', (err) => {
             try { fs.unlinkSync(dest); } catch (e) {}
             reject(err);
           });
+          // 💡 45 秒没有任何数据往来就放弃，交给系统 curl 重试。
+          //    否则连接被半开时这里会永远挂着，前端只能一直转圈。
+          req.setTimeout(45000, () => req.destroy(new Error('连接超时')));
         };
         follow(url);
       });
@@ -945,9 +977,24 @@ async function downloadWithFallback(urls, dest) {
       try { await fs.remove(dest); } catch (err) {}
     }
 
-    const r = await execCapture(`curl -L --fail --silent --show-error --max-time 300 -o "${dest}" "${url}"`);
-    if (r.ok && fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'curl', url };
-    errors.push('curl:' + ((r.stderr || '').trim() || '失败'));
+    // 备用通道：系统 curl（走 Windows 证书库），--progress-bar 的百分比从 stderr 解析
+    const r = await execCapture(
+      `curl -L --fail --progress-bar --connect-timeout 20 --max-time 300 -o "${dest}" "${url}"`,
+      320000,
+      (chunk) => {
+        const m = String(chunk).match(/(\d{1,3}(?:\.\d+)?)%/g);
+        if (m && m.length) {
+          const pct = parseFloat(m[m.length - 1].replace('%', ''));
+          if (!isNaN(pct)) report({ percent: pct });
+        }
+      }
+    );
+    if (r.ok) {
+      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'curl', url };
+      errors.push('curl:文件不完整');
+    } else {
+      errors.push('curl:' + (cleanCurlStderr(r.stderr) || '失败'));
+    }
     try { await fs.remove(dest); } catch (err) {}
   }
 
@@ -1923,7 +1970,48 @@ const https = require('https');
 // 免 Token 的检测更新入口（浏览器直接打开也行，方便没有后台界面的老版本调用）
 app.get('/api/update/check', async (req, res) => anonymousCheckUpdate(res));
 
-app.get('/api/update/zip', async (req, res) => {
+// ================= 💡 更新任务（带实时进度，前端轮询取状态） =================
+let updateJob = {
+  id: 0, running: false, stage: 'idle', source: '', percent: null,
+  message: '', logs: [], startedAt: 0, finishedAt: 0, ok: false, error: '',
+  via: '', backup: '', skipped: []
+};
+
+function updateJobReset() {
+  updateJob = {
+    id: Date.now(), running: true, stage: 'start', source: '', percent: null,
+    message: '准备更新…', logs: [], startedAt: Date.now(), finishedAt: 0,
+    ok: false, error: '', via: '', backup: '', skipped: []
+  };
+}
+function updateJobSet(patch) { Object.assign(updateJob, patch); }
+function updateJobLog(msg) {
+  let text = String(msg == null ? '' : msg);
+  if (text.length > 200) text = text.slice(0, 200) + '…';
+  updateJob.logs.push(text);
+  if (updateJob.logs.length > 40) updateJob.logs.shift();
+  updateJob.message = text;
+}
+function updateJobSnapshot() {
+  return {
+    id: updateJob.id,
+    running: updateJob.running,
+    stage: updateJob.stage,
+    source: updateJob.source,
+    percent: updateJob.percent,
+    message: updateJob.message,
+    logs: updateJob.logs.slice(-10),
+    elapsed: updateJob.startedAt ? Math.round((Date.now() - updateJob.startedAt) / 1000) : 0,
+    ok: updateJob.ok,
+    error: updateJob.error,
+    via: updateJob.via,
+    backup: updateJob.backup,
+    skipped: updateJob.skipped,
+    finishedAt: updateJob.finishedAt
+  };
+}
+
+async function runUpdateFlow() {
   // 💡 多源更新：按 update-config.json 里 sources 的顺序尝试
   //    GitHub 优先，连不上/下不动就自动切到 Gitee，全程不需要 Token
   const upCfg = await readUpdateConfig();
@@ -1934,92 +2022,160 @@ app.get('/api/update/zip', async (req, res) => {
       if (r) sources.push({ repoUrl: r.pageUrl, branch: 'main', lastCommit: '', repo: r });
     } catch (e) { /* ignore */ }
   }
-  if (!sources.length) return res.status(400).json({ success: false, error: '未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）' });
+  if (!sources.length) throw new Error('未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）');
 
   const zipPath = path.join(__dirname, 'update.zip');
   const tempDir = path.join(__dirname, '.temp_update');
 
-  try {
-    // 1. 依次尝试各个更新源，第一个下载成功的就用它
-    const failures = [];
-    let applied = null;
-    for (const s of sources) {
-      try {
-        const urls = buildArchiveUrls(s.repo, s.branch);
-        const dl = await downloadWithFallback(urls, zipPath);
-        applied = { source: s, via: dl.via };
-        break;
-      } catch (e) {
-        failures.push(`${s.repo.host}: ${e.message}`);
-        try { await fs.remove(zipPath); } catch (err) { /* ignore */ }
+  // 1. 依次尝试各个更新源
+  const failures = [];
+  let applied = null;
+  for (let i = 0; i < sources.length; i++) {
+    const s = sources[i];
+    const host = s.repo.host;
+    updateJobSet({ stage: 'download', source: host, percent: null });
+    updateJobLog(`正在从 ${host} 下载…`);
+
+    const onProgress = (p) => {
+      if (typeof p.percent === 'number') {
+        updateJobSet({ percent: Math.max(0, Math.min(100, Math.round(p.percent))) });
+      } else if (p.total > 0) {
+        updateJobSet({ percent: Math.max(0, Math.min(100, Math.round((p.received / p.total) * 100))) });
       }
-    }
-    if (!applied) {
-      return res.status(500).json({ success: false, error: '所有更新源都下载失败：' + failures.join('  |  ') });
-    }
+    };
 
-    // 2. 清理旧的临时目录并解压
-    await fs.remove(tempDir);
-    await fs.ensureDir(tempDir);
-    await new Promise((resolve, reject) => {
-      exec(`tar -xf "${zipPath}" -C "${tempDir}"`, (error) => {
-        if (error) reject(error);
-        else resolve();
-      });
-    });
-
-    // 3. 找到解压后的文件夹（GitHub 是 repo-branch，Gitee 是 owner-repo-hash）
-    const dirs = await fs.readdir(tempDir);
-    const sourceDir = path.join(tempDir, dirs[0]);
-
-    // 4. 💡 核心保护机制：只覆盖系统文件，保留私人数据
-    const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
-
-    // 覆盖前先备份到 .update_backup/<时间戳>/，备份失败不阻断更新
-    let backup = { dir: '', saved: [] };
     try {
-      backup = await backupBeforeUpdate(filesToUpdate);
+      const urls = buildArchiveUrls(s.repo, s.branch);
+      const dl = await downloadWithFallback(urls, zipPath, onProgress);
+      applied = { source: s, via: dl.via };
+      updateJobSet({ percent: 100 });
+      updateJobLog(`✅ 下载成功（${host}，通道 ${dl.via}）`);
+      break;
     } catch (e) {
-      backup = { dir: '', saved: [], error: e.message };
+      failures.push(`${host}: ${e.message}`);
+      updateJobSet({ percent: null });
+      const next = sources[i + 1];
+      updateJobLog(`⚠ ${host} 下载失败：${e.message}` + (next ? `，正在切换到 ${next.repo.host}…` : ''));
+      try { await fs.remove(zipPath); } catch (err) { /* ignore */ }
     }
+  }
+  if (!applied) throw new Error('所有更新源都下载失败：' + failures.join('  |  '));
 
-    for (const item of filesToUpdate) {
-      const src = path.join(sourceDir, item);
-      const dest = path.join(__dirname, item);
-      if (!fs.existsSync(src)) continue;
-      if (item === 'website') {
-        // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
-        await fs.copy(src, dest, {
-          filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
-        });
-      } else {
-        await fs.copy(src, dest);
+  // 2. 解压
+  updateJobSet({ stage: 'extract', percent: null });
+  updateJobLog('正在解压…');
+  await fs.remove(tempDir);
+  await fs.ensureDir(tempDir);
+  await new Promise((resolve, reject) => {
+    exec(`tar -xf "${zipPath}" -C "${tempDir}"`, (error) => {
+      if (error) reject(error);
+      else resolve();
+    });
+  });
+
+  // 3. 找到解压后的文件夹（GitHub 是 repo-branch，Gitee 是 owner-repo-hash）
+  const dirs = await fs.readdir(tempDir);
+  const sourceDir = path.join(tempDir, dirs[0]);
+
+  // 4. 核心保护机制：只覆盖系统文件，保留私人数据
+  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'plugin', 'website'];
+
+  updateJobSet({ stage: 'backup' });
+  updateJobLog('正在备份当前代码…');
+  let backup = { dir: '', saved: [] };
+  try {
+    backup = await backupBeforeUpdate(filesToUpdate);
+  } catch (e) {
+    backup = { dir: '', saved: [], error: e.message };
+  }
+
+  updateJobSet({ stage: 'apply' });
+  updateJobLog('正在覆盖系统文件…');
+  for (const item of filesToUpdate) {
+    const src = path.join(sourceDir, item);
+    const dest = path.join(__dirname, item);
+    if (!fs.existsSync(src)) continue;
+    if (item === 'website') {
+      // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
+      await fs.copy(src, dest, {
+        filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
+      });
+    } else {
+      await fs.copy(src, dest);
+    }
+  }
+
+  // 5. 清理垃圾
+  await fs.remove(tempDir);
+  await fs.remove(zipPath);
+
+  // 6. 记录各源的最新 commit，作为下次「检测更新」的比对基准
+  updateJobSet({ stage: 'record' });
+  updateJobLog('正在记录版本信息…');
+  const updated = [];
+  for (const s of sources) {
+    let sha = '';
+    try { sha = (await fetchLatestCommit(s.repo, s.branch)).sha; } catch (e) { sha = ''; }
+    updated.push({ repoUrl: s.repoUrl, branch: s.branch, lastCommit: sha || s.lastCommit || '' });
+  }
+  try {
+    await fs.writeJson(UPDATE_CONFIG_FILE, { sources: updated }, { spaces: 2 });
+  } catch (e) { /* ignore */ }
+
+  updateJobSet({
+    stage: 'done', running: false, ok: true, percent: 100,
+    finishedAt: Date.now(), via: applied.via, backup: backup.dir, skipped: failures
+  });
+  updateJobLog(`✅ 更新完成（来源 ${applied.source.repo.host}）`);
+}
+
+// 启动更新任务（立即返回，前端轮询 /api/update/status）
+app.get('/api/update/start', async (req, res) => {
+  if (updateJob.running) return res.json({ success: true, job: updateJobSnapshot(), already: true });
+
+  updateJobReset();
+  updateJobLog('准备更新…');
+  res.json({ success: true, job: updateJobSnapshot() });
+
+  runUpdateFlow().catch((e) => {
+    updateJobSet({ running: false, ok: false, error: e.message, stage: 'error', finishedAt: Date.now() });
+    updateJobLog('❌ ' + e.message);
+  });
+});
+
+// 查询更新进度
+app.get('/api/update/status', (req, res) => {
+  res.json({ success: true, job: updateJobSnapshot() });
+});
+
+// 老的「一次性」更新接口（兼容 .bat 和旧客户端）：跑完整流程再返回
+app.get('/api/update/zip', async (req, res) => {
+  try {
+    if (updateJob.running) {
+      const t0 = Date.now();
+      while (updateJob.running && Date.now() - t0 < 300000) {
+        await new Promise((r) => setTimeout(r, 500));
+      }
+    } else {
+      updateJobReset();
+      try {
+        await runUpdateFlow();
+      } catch (e) {
+        updateJobSet({ running: false, ok: false, error: e.message, stage: 'error', finishedAt: Date.now() });
       }
     }
 
-    // 5. 清理垃圾
-    await fs.remove(tempDir);
-    await fs.remove(zipPath);
-
-    // 6. 记录各源的最新 commit，作为下次「检测更新」的比对基准（失败不影响更新结果）
-    const updated = [];
-    for (const s of sources) {
-      let sha = '';
-      try { sha = (await fetchLatestCommit(s.repo, s.branch)).sha; } catch (e) { sha = ''; }
-      updated.push({ repoUrl: s.repoUrl, branch: s.branch, lastCommit: sha || s.lastCommit || '' });
+    if (updateJob.ok) {
+      return res.json({
+        success: true,
+        message: `更新成功（来源 ${updateJob.source}，通道 ${updateJob.via}）！私人数据已保留，请重启后台。`,
+        source: updateJob.source,
+        via: updateJob.via,
+        backup: updateJob.backup,
+        skipped: updateJob.skipped
+      });
     }
-    try {
-      await fs.writeJson(UPDATE_CONFIG_FILE, { sources: updated }, { spaces: 2 });
-    } catch (e) { /* ignore */ }
-
-    res.json({
-      success: true,
-      message: `更新成功（来源 ${applied.source.repo.host}，通道 ${applied.via}）！私人数据已保留，请重启后台。`,
-      source: applied.source.repo.host,
-      via: applied.via,
-      backup: backup.dir,
-      skipped: failures
-    });
+    return res.status(500).json({ success: false, error: updateJob.error || '更新失败' });
   } catch (error) {
     res.status(500).json({ success: false, error: error.message });
   }

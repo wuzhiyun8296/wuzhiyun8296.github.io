@@ -136,6 +136,18 @@
       0%, 80%, 100% { transform: scale(0.5); opacity: .35; }
       40% { transform: scale(1); opacity: 1; }
     }
+
+    /* 下载进度条 */
+    .modal-progress {
+      height: 8px; margin: 14px 0 4px;
+      background: #333; border-radius: 6px; overflow: hidden;
+    }
+    .modal-progress i {
+      display: block; height: 100%; width: 0;
+      background: linear-gradient(90deg, #0e639c, #4aa3df);
+      border-radius: 6px;
+      transition: width .25s ease;
+    }
   </style>
 </head>
 <body>
@@ -160,6 +172,9 @@
       <div class="custom-modal-box">
         <h3>{{ modal.title }}</h3>
         <p v-if="modal.message" v-html="modal.message"></p>
+        <div v-if="typeof modal.progress === 'number'" class="modal-progress">
+          <i :style="{ width: modal.progress + '%' }"></i>
+        </div>
         <div v-if="modal.loading" class="modal-spinner"><span></span><span></span><span></span></div>
         
         <div class="modal-input-group" v-if="modal.type === 'prompt'">
@@ -347,7 +362,7 @@
           show: false, type: '', title: '', message: '',
           input1: '', input2: '', placeholder1: '', placeholder2: '',
           callback: null, isDanger: false, updateLogs: '',
-          hideActions: false, loading: false
+          hideActions: false, loading: false, progress: null
         };
         const modal = ref({ ...MODAL_DEFAULT });
         const openModal = (options) => { modal.value = { ...MODAL_DEFAULT, ...options, show: true }; };
@@ -360,26 +375,51 @@
           closeModal();
         };
 
-        // 💡 检测更新 → 有更新就自动下载并覆盖 → 提示更新完成
+        // 💡 检测更新 → 有更新就自动下载并覆盖 → 实时显示进度 → 提示更新完成
         const isCheckingUpdate = ref(false);
+        const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
         const doUpdate = async (logsHtml) => {
           openModal({
             type: 'confirm',
-            title: '⏳ 正在下载更新',
-            message: '正在下载最新版本，下载完成后会自动覆盖文件。<br><b>请不要关闭这个页面，也不要关掉后台窗口。</b>',
+            title: '⏳ 正在更新',
+            message: '准备更新…',
             updateLogs: logsHtml || '',
             loading: true,
-            hideActions: true
+            hideActions: true,
+            progress: null
           });
 
+          const started = Date.now();
           try {
-            // 全程免 Token 的多源下载接口（GitHub 优先，失败自动切 Gitee）
-            const res = await fetch(`${API_BASE}/update/zip`);
-            const data = await res.json();
+            // 启动任务：后端立刻返回，真正的下载在后台跑
+            await fetch(`${API_BASE}/update/start?t=${Date.now()}`);
+            await sleep(300);
 
-            if (data.success) {
-              const extra = data.source ? `<div style="margin-top:8px;font-size:12px;color:#888;">来源：${data.source}　下载通道：${data.via || '-'}</div>` : '';
+            let job = null;
+            while (true) {
+              await sleep(500);
+              const res = await fetch(`${API_BASE}/update/status?t=${Date.now()}`);
+              const data = await res.json();
+              job = data.job || null;
+              if (!job) break;
+
+              // 实时刷新界面：阶段文案 + 百分比 + 进度条 + 日志
+              const pctText = (typeof job.percent === 'number') ? `　${job.percent}%` : '';
+              modal.value.message = `${job.message || '处理中…'}${pctText}` +
+                `<br><span style="font-size:12px;color:#888;">已用时 ${job.elapsed || 0} 秒</span>`;
+              modal.value.progress = (typeof job.percent === 'number') ? job.percent : null;
+              modal.value.updateLogs = (job.logs || []).map((l) => `<div>${l}</div>`).join('');
+
+              if (!job.running) break;
+              if (Date.now() - started > 6 * 60 * 1000) {
+                modal.value.loading = false;
+                break;
+              }
+            }
+
+            if (job && job.ok) {
+              const extra = `<div style="margin-top:8px;font-size:12px;color:#888;">来源：${job.source}　下载通道：${job.via || '-'}　耗时：${job.elapsed || 0} 秒</div>`;
               openModal({
                 type: 'confirm',
                 title: '✅ 更新完成',
@@ -391,12 +431,18 @@
               openModal({
                 type: 'confirm',
                 title: '❌ 更新失败',
-                message: (data.error || '未知错误') + '<br><br>可以稍后再试，或让作者发更新包手动覆盖。',
+                message: (job && job.error ? job.error : '超时未完成') +
+                  '<br><br>可以稍后再试，或让作者发更新包手动覆盖。',
                 isDanger: true
               });
             }
           } catch (e) {
-            openModal({ type: 'confirm', title: '❌ 请求失败', message: e.message, isDanger: true });
+            openModal({
+              type: 'confirm',
+              title: '❌ 请求失败',
+              message: `浏览器没能连上后台（${e.message}）。<br><br>请确认那个黑色的命令行窗口还开着，然后再试一次。`,
+              isDanger: true
+            });
           }
         };
 
