@@ -1414,7 +1414,10 @@ app.post('/api/git/push', async (req, res) => {
 
     const gitignorePath = path.join(__dirname, '.gitignore');
     
-    // 💡 核心修复 1：重写 .gitignore，彻底屏蔽所有私人数据
+    // 💡 重写 .gitignore
+    //    ⚠ 这里决定了「哪些内容会公开到 GitHub Pages」
+    //    当前策略：整站公开（页面 md / public 数据 / 立绘图片 / 同步后的小说章节都要推）
+    //    只屏蔽：原始手稿(library)、敏感配置(git-config.json)、构建产物和临时文件
         const ignoreContent = `node_modules/
 git-config.json
 .git/
@@ -1426,12 +1429,8 @@ website/.vitepress/dist/
 merge-codes.js
 软著源代码合并.txt
 
-# 隐私保护：防止私人数据被推送到公开仓库
+# 只屏蔽原始手稿（不带水印）；站点用的同步章节要发布
 library/
-website/docs/public/
-website/docs/novel/chapters/
-website/docs/assets/
-website/docs/**/*.md
 
 # 更新过程的临时产物 / 更新前自动备份（不能进仓库）
 update.zip
