@@ -627,8 +627,24 @@
         };
 
         const handleIframeMessage = (e) => {
-          if (e.data && e.data.type === 'REFRESH_PLUGINS') {
+          if (!e.data) return;
+          if (e.data.type === 'REFRESH_PLUGINS') {
             loadDynamicPlugins();
+          }
+          // 💡 一键推送成功后，用弹窗提醒去同步 Gitee
+          if (e.data.type === 'GITEE_SYNC_HINT') {
+            const d = e.data;
+            openModal({
+              type: 'confirm',
+              title: '📤 已推送到 GitHub',
+              message: `本次版本：<b>${d.version || '-'}</b><br><br>` +
+                '客户端会先读 GitHub，连不上才切 Gitee。<br>' +
+                '<b>Gitee 没同步的话，墙内的朋友会拉不到新版。</b>' +
+                (d.repoUrl ? `<br><br>Gitee 仓库：<br><a href="${d.repoUrl}" target="_blank" style="color:#4aa3df;">${d.repoUrl}</a>` : '') +
+                (d.settingsUrl ? `<br><br>镜像管理：<a href="${d.settingsUrl}" target="_blank" style="color:#4aa3df;">点这里打开</a>` : '') +
+                '<br><br><span style="color:#888;font-size:12px;">路径：仓库页 → 管理 → 仓库镜像管理 → 手动同步</span>',
+              callback: () => { if (d.repoUrl) window.open(d.repoUrl, '_blank'); }
+            });
           }
         };
 

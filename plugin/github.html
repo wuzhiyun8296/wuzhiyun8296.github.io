@@ -259,6 +259,16 @@
             if (data.success) {
               giteeHint.value = data.gitee || null;
               pushedVersion.value = data.versionId || '';
+
+              // 通知外层主控台弹窗提醒（比 iframe 里的提示条显眼）
+              if (window.parent && window.parent !== window && data.gitee) {
+                window.parent.postMessage({
+                  type: 'GITEE_SYNC_HINT',
+                  version: data.versionId || '',
+                  repoUrl: data.gitee.repoUrl || '',
+                  settingsUrl: data.gitee.settingsUrl || ''
+                }, '*');
+              }
             }
             
           } catch (e) {
