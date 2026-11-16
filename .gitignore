@@ -14,4 +14,12 @@ library/
 website/docs/public/
 website/docs/novel/chapters/
 website/docs/assets/
-website/docs/**/*.md 
+website/docs/**/*.md
+
+# 更新过程的临时产物 / 更新前自动备份（不能进仓库）
+update.zip
+update-*.zip
+.temp_update/
+.update_backup/
+dev_log.txt
+server_log.txt

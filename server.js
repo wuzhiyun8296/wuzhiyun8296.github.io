@@ -978,6 +978,67 @@ function httpsGetJson(url) {
 
 // 下载文件：多个镜像地址 + 两条通道
 // 通道 1：Node 原生 https；通道 2：系统 curl（走 Windows 证书库，能穿代理/杀软）
+// 校验文件头是不是真的 ZIP（PK\x03\x04）：防止把 HTML 验证页 / 限流页当成压缩包
+function looksLikeZip(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(4);
+    const n = fs.readSync(fd, buf, 0, 4, 0);
+    fs.closeSync(fd);
+    return n >= 2 && buf[0] === 0x50 && buf[1] === 0x4b;
+  } catch (e) {
+    return false;
+  }
+}
+
+// 判断一下下回来的东西是不是 HTML（用于给出更准确的报错）
+function looksLikeHtml(file) {
+  try {
+    const fd = fs.openSync(file, 'r');
+    const buf = Buffer.alloc(8);
+    fs.readSync(fd, buf, 0, 8, 0);
+    fs.closeSync(fd);
+    const head = buf.toString('utf8').toLowerCase();
+    return head.indexOf('<') > -1;
+  } catch (e) {
+    return false;
+  }
+}
+
+// 下载用的浏览器 UA：部分国内站点会按 UA 拦 curl / 拦截非浏览器请求
+const UPDATE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
+
+// 原生 https GET → Buffer（按字节取，避免把图片/ico 当文本弄坏）
+function httpsGetBuffer(url, timeoutMs = 20000) {
+  return new Promise((resolve, reject) => {
+    const req = https.get(url, { headers: { 'User-Agent': UPDATE_UA } }, (resp) => {
+      if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
+        resp.resume();
+        return httpsGetBuffer(resp.headers.location, timeoutMs).then(resolve).catch(reject);
+      }
+      if (resp.statusCode !== 200) { resp.resume(); return reject(new Error('HTTP ' + resp.statusCode)); }
+      const chunks = [];
+      resp.on('data', (c) => chunks.push(c));
+      resp.on('end', () => resolve(Buffer.concat(chunks)));
+      resp.on('error', reject);
+    });
+    req.on('error', reject);
+    req.setTimeout(timeoutMs, () => req.destroy(new Error('超时')));
+  });
+}
+
+// 各通道的「单文件 raw 基址」
+// Gitee 的 zip 归档已经需要登录，但 raw 单文件仍然匿名可读，所以整包下载改成按文件拉取
+function rawBaseUrls(repo, branch) {
+  if (repo.host === 'gitee.com') {
+    return [`https://gitee.com/${repo.owner}/${repo.repo}/raw/${branch}`];
+  }
+  return [
+    `https://raw.githubusercontent.com/${repo.owner}/${repo.repo}/${branch}`,
+    `https://cdn.jsdelivr.net/gh/${repo.owner}/${repo.repo}@${branch}`
+  ];
+}
+
 // curl 的 stderr 里混着进度条（#=O 和百分比），报错时要把它清理掉
 function cleanCurlStderr(raw) {
   let out = String(raw || '');
@@ -1013,7 +1074,7 @@ async function downloadWithFallback(urls, dest, onProgress) {
         };
 
         const follow = (target) => {
-          const req = https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
+          const req = https.get(target, { headers: { 'User-Agent': UPDATE_UA } }, (response) => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
               response.resume();
               return follow(response.headers.location);
@@ -1045,8 +1106,11 @@ async function downloadWithFallback(urls, dest, onProgress) {
         };
         follow(url);
       });
-      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'node', url };
-      throw new Error('文件为空');
+      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024 && looksLikeZip(dest)) return { via: 'node', url };
+      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024 && looksLikeHtml(dest)) {
+        throw new Error('返回的是网页不是压缩包（可能被站点验证/限流拦截）');
+      }
+      throw new Error('文件为空或不是压缩包');
     } catch (e) {
       errors.push('node:' + e.message);
       try { await fs.remove(dest); } catch (err) { /* ignore */ }
@@ -1054,7 +1118,7 @@ async function downloadWithFallback(urls, dest, onProgress) {
 
     // 备用通道：系统 curl（走 Windows 证书库），--progress-bar 的百分比从 stderr 解析
     const r = await execCapture(
-      `curl -L --fail --progress-bar --connect-timeout 10 --max-time 180 -o "${dest}" "${url}"`,
+      `curl -L --fail --progress-bar -A "${UPDATE_UA}" --connect-timeout 10 --max-time 180 -o "${dest}" "${url}"`,
       200000,
       (chunk) => {
         const m = String(chunk).match(/(\d{1,3}(?:\.\d+)?)%/g);
@@ -1065,8 +1129,12 @@ async function downloadWithFallback(urls, dest, onProgress) {
       }
     );
     if (r.ok) {
-      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'curl', url };
-      errors.push('curl:文件不完整');
+      if (fs.existsSync(dest) && fs.statSync(dest).size > 1024 && looksLikeZip(dest)) return { via: 'curl', url };
+      if (fs.existsSync(dest) && looksLikeHtml(dest)) {
+        errors.push('curl:返回的是网页不是压缩包（可能被站点验证/限流拦截）');
+      } else {
+        errors.push('curl:文件不完整或不是压缩包');
+      }
     } else {
       const rawErr = String(r.stderr || '');
       let msg = cleanCurlStderr(rawErr) || '失败';
@@ -1363,7 +1431,15 @@ library/
 website/docs/public/
 website/docs/novel/chapters/
 website/docs/assets/
-website/docs/**/*.md 
+website/docs/**/*.md
+
+# 更新过程的临时产物 / 更新前自动备份（不能进仓库）
+update.zip
+update-*.zip
+.temp_update/
+.update_backup/
+dev_log.txt
+server_log.txt
 `;
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
@@ -1401,7 +1477,24 @@ website/docs/**/*.md
     await runCmd('git rm -r --cached . -f');
     
     await runCmd('git add .');
-    
+
+    // 💡 生成「按文件更新」用的清单：客户端逐个 raw 下载，不再依赖 zip 归档
+    //    （Gitee 的归档下载已经要求登录，raw 单文件仍然匿名可读）
+    try {
+      const files = await collectUpdateFiles();
+      await fs.writeFile(path.join(__dirname, 'update-files.txt'), files.join('\n') + '\n', 'utf-8');
+      await fs.writeJson(path.join(__dirname, 'update-manifest.json'), {
+        version: versionInfo.id,
+        count: files.length,
+        files: files
+      }, { spaces: 2 });
+      logs.push(`> 更新清单: ${files.length} 个文件\n`);
+
+      await runCmd('git add update-files.txt update-manifest.json');
+    } catch (e) {
+      logs.push(`> ⚠ 更新清单生成失败（不影响推送）: ${e.message}\n`);
+    }
+
     let res2 = await runCmd(`git commit -m "${message.replace(/"/g, '\\"')}"`);
     logs.push(`> git commit: ${res2.success ? '成功' : '跳过(无修改)'}\n`);
 
@@ -2136,9 +2229,100 @@ function updateJobSnapshot() {
   };
 }
 
+// 按文件清单逐个拉取（不依赖 zip 归档：Gitee 的归档下载已经需要登录）
+async function applyRawUpdate(sources) {
+  const FILE_LIST = 'update-files.txt';
+  const tried = [];
+  let chosen = null;
+
+  for (const s of sources) {
+    for (const base of rawBaseUrls(s.repo, s.branch)) {
+      try {
+        const buf = await httpsGetBuffer(`${base}/${FILE_LIST}`, 15000);
+        const text = buf.toString('utf8');
+        const list = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+        if (!list.length || list.some((x) => x.indexOf('/') === -1 && !/\.\w+$/.test(x))) {
+          throw new Error('清单格式异常');
+        }
+        chosen = { base, source: s, list };
+        break;
+      } catch (e) {
+        tried.push(`${base} → ${e.message}`);
+      }
+    }
+    if (chosen) break;
+  }
+
+  if (!chosen) throw new Error('所有通道都取不到文件清单：' + tried.join('  |  '));
+
+  const total = chosen.list.length;
+  let done = 0;
+  const failed = [];
+  updateJobLog(`✅ 通道可用（${chosen.source.repo.host}），共 ${total} 个文件，开始下载…`);
+
+  for (const rel of chosen.list) {
+    if (!rel || rel.indexOf('..') > -1) continue;
+    const url = `${chosen.base}/${rel.split('\\').join('/')}`;
+    try {
+      const buf = await httpsGetBuffer(url, 30000);
+      await fs.outputFile(path.join(__dirname, rel), buf);
+    } catch (e) {
+      failed.push(`${rel}: ${e.message}`);
+      updateJobLog(`⚠ 文件失败：${rel}`);
+    }
+    done++;
+    updateJobSet({ percent: Math.round((done / total) * 100) });
+    if (done % 10 === 0 && done < total) updateJobLog(`已下载 ${done}/${total}`);
+  }
+
+  if (done - failed.length === 0) {
+    throw new Error('清单里的文件一个都没下下来：' + failed.slice(0, 3).join(' / '));
+  }
+  return { base: chosen.base, source: chosen.source, total: total, failed: failed };
+}
+
+// 客户端要更新的文件白名单：显式枚举目录，避免把备份、日志、私人 md 带出去
+async function collectUpdateFiles() {
+  const roots = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
+  const out = [];
+
+  const skipPath = (rel) => {
+    const p = String(rel).replace(/\\/g, '/');
+    if (p.indexOf('node_modules/') > -1) return true;
+    if (p.indexOf('website/.vitepress/cache') === 0) return true;
+    if (p.indexOf('website/.vitepress/dist') === 0) return true;
+    if (p.indexOf('website/docs/public/') === 0) return true;
+    if (p.indexOf('website/docs/novel/chapters/') === 0) return true;
+    if (p.indexOf('website/docs/assets/') === 0) return true;
+    if (/^website\/docs\/.*\.md$/i.test(p)) return true;   // 私人文章不进更新包
+    if (/\.log$/i.test(p)) return true;
+    if (/\.zip$/i.test(p)) return true;
+    return false;
+  };
+
+  const walk = async (abs, rel) => {
+    let st;
+    try { st = await fs.stat(abs); } catch (e) { return; }
+    if (st.isDirectory()) {
+      let entries = [];
+      try { entries = await fs.readdir(abs); } catch (e) { return; }
+      for (const name of entries) {
+        if (name === 'node_modules') continue;
+        const childRel = rel ? `${rel}/${name}` : name;
+        if (skipPath(childRel)) continue;
+        await walk(path.join(abs, name), childRel);
+      }
+    } else if (!skipPath(rel)) {
+      out.push(rel);
+    }
+  };
+
+  for (const r of roots) await walk(path.join(__dirname, r), r);
+  return out.sort();
+}
+
 async function runUpdateFlow() {
   // 💡 多源更新：按 update-config.json 里 sources 的顺序尝试
-  //    GitHub 优先，连不上/下不动就自动切到 Gitee，全程不需要 Token
   const upCfg = await readUpdateConfig();
   const sources = upCfg.sources.slice();
   if (!sources.length && fs.existsSync(GIT_CONFIG_FILE)) {
@@ -2149,64 +2333,11 @@ async function runUpdateFlow() {
   }
   if (!sources.length) throw new Error('未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）');
 
-  // 💡 用带时间戳的临时文件名：上一次进程被杀后残留的 update.zip 可能还被锁着，
-  //    固定文件名会让下一次下载直接 Permission denied。
+  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
   const zipPath = path.join(__dirname, `update-${Date.now()}.zip`);
   const tempDir = path.join(__dirname, '.temp_update');
 
-  // 1. 依次尝试各个更新源
-  const failures = [];
-  let applied = null;
-  for (let i = 0; i < sources.length; i++) {
-    const s = sources[i];
-    const host = s.repo.host;
-    updateJobSet({ stage: 'download', source: host, percent: null });
-    updateJobLog(`正在从 ${host} 下载…`);
-
-    const onProgress = (p) => {
-      if (typeof p.percent === 'number') {
-        updateJobSet({ percent: Math.max(0, Math.min(100, Math.round(p.percent))) });
-      } else if (p.total > 0) {
-        updateJobSet({ percent: Math.max(0, Math.min(100, Math.round((p.received / p.total) * 100))) });
-      }
-    };
-
-    try {
-      const urls = buildArchiveUrls(s.repo, s.branch);
-      const dl = await downloadWithFallback(urls, zipPath, onProgress);
-      applied = { source: s, via: dl.via };
-      updateJobSet({ percent: 100 });
-      updateJobLog(`✅ 下载成功（${host}，通道 ${dl.via}）`);
-      break;
-    } catch (e) {
-      failures.push(`${host}: ${e.message}`);
-      updateJobSet({ percent: null });
-      const next = sources[i + 1];
-      updateJobLog(`⚠ ${host} 下载失败：${e.message}` + (next ? `，正在切换到 ${next.repo.host}…` : ''));
-      try { await fs.remove(zipPath); } catch (err) { /* ignore */ }
-    }
-  }
-  if (!applied) throw new Error('所有更新源都下载失败：' + failures.join('  |  '));
-
-  // 2. 解压
-  updateJobSet({ stage: 'extract', percent: null });
-  updateJobLog('正在解压…');
-  await fs.remove(tempDir);
-  await fs.ensureDir(tempDir);
-  await new Promise((resolve, reject) => {
-    exec(`tar -xf "${zipPath}" -C "${tempDir}"`, (error) => {
-      if (error) reject(error);
-      else resolve();
-    });
-  });
-
-  // 3. 找到解压后的文件夹（GitHub 是 repo-branch，Gitee 是 owner-repo-hash）
-  const dirs = await fs.readdir(tempDir);
-  const sourceDir = path.join(tempDir, dirs[0]);
-
-  // 4. 核心保护机制：只覆盖系统文件，保留私人数据
-  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
-
+  // 0. 先备份（不管走哪条通道，都要在被覆盖前备份）
   updateJobSet({ stage: 'backup' });
   updateJobLog('正在备份当前代码…');
   let backup = { dir: '', saved: [] };
@@ -2216,27 +2347,88 @@ async function runUpdateFlow() {
     backup = { dir: '', saved: [], error: e.message };
   }
 
-  updateJobSet({ stage: 'apply' });
-  updateJobLog('正在覆盖系统文件…');
-  for (const item of filesToUpdate) {
-    const src = path.join(sourceDir, item);
-    const dest = path.join(__dirname, item);
-    if (!fs.existsSync(src)) continue;
-    if (item === 'website') {
-      // 针对 website 特殊处理，跳过 public 目录以免覆盖私人设定
-      await fs.copy(src, dest, {
-        filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
-      });
-    } else {
-      await fs.copy(src, dest);
-    }
+  const failures = [];
+  let applied = null;
+
+  // 1. 首选：按文件清单逐个下载（Gitee raw / GitHub raw / jsDelivr 均可）
+  updateJobSet({ stage: 'download', source: sources[0].repo.host, percent: 0 });
+  updateJobLog('正在读取文件清单…');
+  try {
+    const r = await applyRawUpdate(sources);
+    applied = { source: r.source, via: 'raw' };
+  } catch (e) {
+    failures.push('raw: ' + e.message);
+    updateJobLog('⚠ 按文件更新失败，改用压缩包方式…');
   }
 
-  // 5. 清理垃圾
-  await fs.remove(tempDir);
-  await fs.remove(zipPath);
+  // 2. 兜底：老的「下载 zip 归档」方式
+  if (!applied) {
+    for (let i = 0; i < sources.length; i++) {
+      const s = sources[i];
+      const host = s.repo.host;
+      updateJobSet({ stage: 'download', source: host, percent: null });
+      updateJobLog(`正在从 ${host} 下载压缩包…`);
 
-  // 6. 记录各源的最新 commit，作为下次「检测更新」的比对基准
+      const onProgress = (p) => {
+        if (typeof p.percent === 'number') {
+          updateJobSet({ percent: Math.max(0, Math.min(100, Math.round(p.percent))) });
+        } else if (p.total > 0) {
+          updateJobSet({ percent: Math.max(0, Math.min(100, Math.round((p.received / p.total) * 100))) });
+        }
+      };
+
+      try {
+        const urls = buildArchiveUrls(s.repo, s.branch);
+        const dl = await downloadWithFallback(urls, zipPath, onProgress);
+        applied = { source: s, via: dl.via };
+        updateJobSet({ percent: 100 });
+        updateJobLog(`✅ 下载成功（${host}，通道 ${dl.via}）`);
+        break;
+      } catch (e) {
+        failures.push(`${host}: ${e.message}`);
+        updateJobSet({ percent: null });
+        const next = sources[i + 1];
+        updateJobLog(`⚠ ${host} 下载失败：${e.message}` + (next ? `，正在切换到 ${next.repo.host}…` : ''));
+        try { await fs.remove(zipPath); } catch (err) { /* ignore */ }
+      }
+    }
+    if (!applied) throw new Error('所有更新源都失败：' + failures.join('  |  '));
+
+    // 解压 + 覆盖
+    updateJobSet({ stage: 'extract', percent: null });
+    updateJobLog('正在解压…');
+    await fs.remove(tempDir);
+    await fs.ensureDir(tempDir);
+    await new Promise((resolve, reject) => {
+      exec(`tar -xf "${zipPath}" -C "${tempDir}"`, (error) => {
+        if (error) reject(error);
+        else resolve();
+      });
+    });
+
+    const dirs = await fs.readdir(tempDir);
+    const sourceDir = path.join(tempDir, dirs[0]);
+
+    updateJobSet({ stage: 'apply' });
+    updateJobLog('正在覆盖系统文件…');
+    for (const item of filesToUpdate) {
+      const src = path.join(sourceDir, item);
+      const dest = path.join(__dirname, item);
+      if (!fs.existsSync(src)) continue;
+      if (item === 'website') {
+        await fs.copy(src, dest, {
+          filter: (s) => !s.includes('docs/public') && !s.includes('docs/novel/chapters')
+        });
+      } else {
+        await fs.copy(src, dest);
+      }
+    }
+
+    await fs.remove(tempDir);
+    await fs.remove(zipPath);
+  }
+
+  // 3. 记录各源的最新 commit，作为 commit 比对模式的基准
   updateJobSet({ stage: 'record' });
   updateJobLog('正在记录版本信息…');
   const updated = [];
@@ -2253,7 +2445,7 @@ async function runUpdateFlow() {
     stage: 'done', running: false, ok: true, percent: 100,
     finishedAt: Date.now(), via: applied.via, backup: backup.dir, skipped: failures
   });
-  updateJobLog(`✅ 更新完成（来源 ${applied.source.repo.host}）`);
+  updateJobLog(`✅ 更新完成（来源 ${applied.source.repo.host}，方式 ${applied.via}）`);
 }
 
 // 启动更新任务（立即返回，前端轮询 /api/update/status）
