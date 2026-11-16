@@ -799,18 +799,14 @@ function parseRepoUrl(url) {
   };
 }
 
-// 各平台的归档 zip 地址（第一个是主通道，第二个备用）
+// 各平台的归档 zip 地址
+// 💡 每个平台只给一个地址：同一域名的「备用地址」在连不通时也会一起连不通，
+//    多试一遍只会白白多等一个超时周期，把切换时间拖长一倍。
 function buildArchiveUrls(repo, branch) {
   if (repo.host === 'gitee.com') {
-    return [
-      `https://gitee.com/${repo.owner}/${repo.repo}/repository/archive/${branch}.zip`,
-      `https://gitee.com/${repo.owner}/${repo.repo}/repository/archive/refs/heads/${branch}.zip`
-    ];
+    return [`https://gitee.com/${repo.owner}/${repo.repo}/repository/archive/${branch}.zip`];
   }
-  return [
-    `https://codeload.github.com/${repo.owner}/${repo.repo}/zip/refs/heads/${branch}`,
-    `https://github.com/${repo.owner}/${repo.repo}/archive/refs/heads/${branch}.zip`
-  ];
+  return [`https://codeload.github.com/${repo.owner}/${repo.repo}/zip/refs/heads/${branch}`];
 }
 
 // ================= 💡 版本特征码（version.json） =================
@@ -998,9 +994,24 @@ async function downloadWithFallback(urls, dest, onProgress) {
   const report = (p) => { if (typeof onProgress === 'function') { try { onProgress(p); } catch (e) {} } };
 
   for (const url of list) {
+    // 💡 每轮开始先清掉上一轮残留的临时文件（也可能是被别的进程锁着的）
+    try { await fs.remove(dest); } catch (e) { /* 删不掉就算了，下面会报 */ }
+
     try {
       await new Promise((resolve, reject) => {
         const file = fs.createWriteStream(dest);
+        let done = false;
+
+        // 失败必须「先关流再删文件」，否则 Windows 上句柄没释放 → 文件被锁 →
+        // 后面 curl 接手时会报 Permission denied / curl(23)，把真实错误盖掉。
+        const bail = (err) => {
+          if (done) return;
+          done = true;
+          try { file.destroy(); } catch (e) { /* ignore */ }
+          try { fs.unlinkSync(dest); } catch (e) { /* ignore */ }
+          reject(err);
+        };
+
         const follow = (target) => {
           const req = https.get(target, { headers: { 'User-Agent': 'my-world-system-updater' } }, (response) => {
             if (response.statusCode >= 300 && response.statusCode < 400 && response.headers.location) {
@@ -1009,7 +1020,7 @@ async function downloadWithFallback(urls, dest, onProgress) {
             }
             if (response.statusCode !== 200) {
               response.resume();
-              return reject(new Error(`HTTP ${response.statusCode}`));
+              return bail(new Error(`HTTP ${response.statusCode}`));
             }
             // 💡 有 Content-Length 就能算出百分比，实时回报给前端
             const total = parseInt(response.headers['content-length'] || '0', 10);
@@ -1019,19 +1030,18 @@ async function downloadWithFallback(urls, dest, onProgress) {
               report({ received: got, total: total });
             });
             response.pipe(file);
-            file.on('finish', () => { file.close(() => resolve()); });
-            response.on('error', (err) => {
-              try { fs.unlinkSync(dest); } catch (e) {}
-              reject(err);
+            file.on('error', bail);
+            file.on('finish', () => {
+              if (done) return;
+              done = true;
+              file.close(() => resolve());
             });
+            response.on('error', bail);
           });
-          req.on('error', (err) => {
-            try { fs.unlinkSync(dest); } catch (e) {}
-            reject(err);
-          });
-          // 💡 45 秒没有任何数据往来就放弃，交给系统 curl 重试。
-          //    否则连接被半开时这里会永远挂着，前端只能一直转圈。
-          req.setTimeout(45000, () => req.destroy(new Error('连接超时')));
+          req.on('error', bail);
+          // 💡 20 秒没有任何数据往来就放弃，交给系统 curl 重试。
+          //    之前是 45 秒，被墙时会白等太久，切换 Gitee 也就慢。
+          req.setTimeout(20000, () => req.destroy(new Error('连接超时')));
         };
         follow(url);
       });
@@ -1039,13 +1049,13 @@ async function downloadWithFallback(urls, dest, onProgress) {
       throw new Error('文件为空');
     } catch (e) {
       errors.push('node:' + e.message);
-      try { await fs.remove(dest); } catch (err) {}
+      try { await fs.remove(dest); } catch (err) { /* ignore */ }
     }
 
     // 备用通道：系统 curl（走 Windows 证书库），--progress-bar 的百分比从 stderr 解析
     const r = await execCapture(
-      `curl -L --fail --progress-bar --connect-timeout 20 --max-time 300 -o "${dest}" "${url}"`,
-      320000,
+      `curl -L --fail --progress-bar --connect-timeout 10 --max-time 180 -o "${dest}" "${url}"`,
+      200000,
       (chunk) => {
         const m = String(chunk).match(/(\d{1,3}(?:\.\d+)?)%/g);
         if (m && m.length) {
@@ -1058,7 +1068,14 @@ async function downloadWithFallback(urls, dest, onProgress) {
       if (fs.existsSync(dest) && fs.statSync(dest).size > 1024) return { via: 'curl', url };
       errors.push('curl:文件不完整');
     } else {
-      errors.push('curl:' + (cleanCurlStderr(r.stderr) || '失败'));
+      const rawErr = String(r.stderr || '');
+      let msg = cleanCurlStderr(rawErr) || '失败';
+      if (/Permission denied|curl: \(23\)/i.test(rawErr)) {
+        msg = '写入失败（文件被占用或目录不可写）：' + msg;
+      } else if (/timed out|timeout/i.test(rawErr)) {
+        msg = '连接超时';
+      }
+      errors.push('curl:' + msg);
     }
     try { await fs.remove(dest); } catch (err) {}
   }
@@ -2132,7 +2149,9 @@ async function runUpdateFlow() {
   }
   if (!sources.length) throw new Error('未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）');
 
-  const zipPath = path.join(__dirname, 'update.zip');
+  // 💡 用带时间戳的临时文件名：上一次进程被杀后残留的 update.zip 可能还被锁着，
+  //    固定文件名会让下一次下载直接 Permission denied。
+  const zipPath = path.join(__dirname, `update-${Date.now()}.zip`);
   const tempDir = path.join(__dirname, '.temp_update');
 
   // 1. 依次尝试各个更新源
@@ -2697,5 +2716,20 @@ app.listen(3001, () => {
         console.log('[SECURITY] origin =', clean);
       }
     } catch (e) { /* 静默：清理失败不影响启动 */ }
+  })();
+
+  // 💡 启动时清理历史遗留的 update*.zip（以前下载失败留下的 0 字节残骸，
+  //    有些会被句柄锁住导致删不掉，能删就删，删不掉也不影响新的更新流程）
+  (async () => {
+    try {
+      const files = await fs.readdir(__dirname);
+      let removed = 0;
+      for (const f of files) {
+        if (/^update[\s\S]*\.zip$/i.test(f)) {
+          try { await fs.remove(path.join(__dirname, f)); removed++; } catch (e) { /* 被锁住，跳过 */ }
+        }
+      }
+      if (removed) console.log(`[CLEANUP] 已清理 ${removed} 个残留的 update*.zip`);
+    } catch (e) { /* ignore */ }
   })();
 });

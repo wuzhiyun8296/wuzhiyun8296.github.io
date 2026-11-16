@@ -406,8 +406,11 @@
 
               // 实时刷新界面：阶段文案 + 百分比 + 进度条 + 日志
               const pctText = (typeof job.percent === 'number') ? `　${job.percent}%` : '';
+              const hint = (job.stage === 'download' && (job.elapsed || 0) > 35)
+                ? '　连不上的话会自动切到下一个源…'
+                : '';
               modal.value.message = `${job.message || '处理中…'}${pctText}` +
-                `<br><span style="font-size:12px;color:#888;">已用时 ${job.elapsed || 0} 秒</span>`;
+                `<br><span style="font-size:12px;color:#888;">已用时 ${job.elapsed || 0} 秒${hint}</span>`;
               modal.value.progress = (typeof job.percent === 'number') ? job.percent : null;
               modal.value.updateLogs = (job.logs || []).map((l) => `<div>${l}</div>`).join('');
 
