@@ -603,41 +603,36 @@ const INBOX_FILE = path.join(LIBRARY_DIR, 'inbox.json');
 app.get('/api/dashboard/stats', async (req, res) => {
   try {
     let totalWords = 0;
-    let articleCount = 0;
-    
-    const countWords = (dir, isRoot = false) => {
+    let chapterCount = 0;
+
+    // 💡 统计口径：只算书库（library）里的小说章节
+    //    website/docs 下的一切内容（文章编辑、设定百科、同步稿）一律不计入
+    const countWords = (dir) => {
       if (!fs.existsSync(dir)) return;
       const files = fs.readdirSync(dir);
       for (const file of files) {
-        if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+        if (file.startsWith('.')) continue;
 
         const fullPath = path.join(dir, file);
         const stat = fs.statSync(fullPath);
         if (stat.isDirectory()) {
-          countWords(fullPath, false); 
+          countWords(fullPath);
         } else if (file.endsWith('.md')) {
-          if (isRoot && dir === DOCS_DIR) continue;
-
           const rawContent = fs.readFileSync(fullPath, 'utf-8');
-          
-          if (rawContent.includes('<script') || rawContent.includes('<template') || rawContent.includes('import ')) {
-            continue;
-          }
 
           let cleanText = rawContent
-            .replace(/<[^>]+>/g, '')                  
-            .replace(/!\[.*?\]\(.*?\)/g, '')          
-            .replace(/\[(.*?)\]\(.*?\)/g, '$1')       
-            .replace(/[#*_`~=\-|>\s\n\r]/g, '');     
-            
+            .replace(/<[^>]+>/g, '')
+            .replace(/!\[.*?\]\(.*?\)/g, '')
+            .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+            .replace(/[#*_`~=\-|>\s\n\r]/g, '');
+
           totalWords += cleanText.length;
-          articleCount++;
+          chapterCount++;
         }
       }
     };
-    
-    countWords(DOCS_DIR, true); 
-    countWords(LIBRARY_DIR, false); 
+
+    countWords(LIBRARY_DIR);
 
     const charFile = path.join(PUBLIC_DIR, 'characters.json');
     const charCount = fs.existsSync(charFile) ? (await fs.readJson(charFile)).length : 0;
@@ -652,7 +647,7 @@ app.get('/api/dashboard/stats', async (req, res) => {
       markerCount = mapData.markers ? mapData.markers.length : 0;
     }
 
-    res.json({ totalWords, articleCount, charCount, treeCount, markerCount });
+    res.json({ totalWords, chapterCount, charCount, treeCount, markerCount });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -1623,55 +1618,383 @@ app.get('/api/update/zip', async (req, res) => {
   }
 });
 
-// 自动生成首页 index.md 接口
-app.post('/api/generate-index-md', async (req, res) => {
-  try {
-    const configPath = path.join(PUBLIC_DIR, 'home-config.json');
-    if (!fs.existsSync(configPath)) {
-      return res.json({ success: false, error: "配置文件不存在，请先保存配置" });
-    }
-    const hd = await fs.readJson(configPath);
-    const acts = [];
-    if(hd.btn1Text?.trim()) {
-      acts.push(`    - theme: brand\n      text: "${String(hd.btn1Text).replace(/"/g,'\\"')}"\n      link: "${hd.btn1Link||'#'}"`);
-    }
-    if(hd.btn2Text?.trim()) {
-      acts.push(`    - theme: alt\n      text: "${String(hd.btn2Text).replace(/"/g,'\\"')}"\n      link: "${hd.btn2Link||'#'}"`);
-    }
-    const actionsYaml = acts.length ? `  actions:\n${acts.join('\n')}` : '';
-    const featYaml = hd.features.map(f=>`  - title: "${String(f.title||'').replace(/"/g,'\\"')}"\n    details: "${String(f.desc||'').replace(/"/g,'\\"')}"`).join('\n');
+// ================= 首页 Markdown 生成器（后台可配置） =================
+const HOME_DEFAULTS = {
+  siteTitle: '幻想域设定集',
+  siteIcon: '/icon.svg',
+  name: '幻想域',
+  text: 'The Veiled Kindred Spirits',
+  tagline: '当物理与魔法交织，帝国的齿轮在暗中转动。',
+  btn1Text: '探索世界',
+  btn1Link: '/world-navigation',
+  btn2Text: '查看编年史',
+  btn2Link: '/timeline',
+  features: [
+    { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动，贝勒（Bale）为唯一法定货币，由十二圆桌骑士共同监管。' },
+    { title: '魔法与物理', desc: '拥有魔力者方能施展魔法，而穿越者对此免疫。在阶级固化的世界里，反抗的种子正在发芽。' },
+    { title: '幻想域联盟', desc: '穿越者组成的秘密联盟，致力于推翻帝国统治，建立一个人魔共存的理想国。' }
+  ],
+  modulesTitle: '世界导览',
+  modulesLead: '六个入口，通往幻想域的每一处角落。',
+  modules: [
+    { icon: '🌍', title: '世界观树', desc: '帝国、教会与联盟的设定总纲，按层级逐层展开。', href: '/world-navigation' },
+    { icon: '⏳', title: '幻想域编年史', desc: '按时间轴梳理的纪元更迭与帝国大事记。', href: '/timeline' },
+    { icon: '👤', title: '人物档案', desc: '各阵营核心成员的档案、立绘与生平。', href: '/characters' },
+    { icon: '🕸️', title: '关系图谱', desc: '拖拽式查看人物与势力之间错综复杂的暗线。', href: '/graph' },
+    { icon: '🗺️', title: '世界地图', desc: '大陆诸国、战略要冲与地标的交互式地图。', href: '/map' },
+    { icon: '💰', title: '金融中心', desc: '实时物价、货币汇率与股市波动的推演沙盘。', href: '/finance' }
+  ],
+  routesTitle: '三条入门路线',
+  routesLead: '第一次来到幻想域，可以任选一条线开始。',
+  routes: [
+    { step: '01', name: '新读者路线', desc: '世界观树 → 编年史 → 正文第一章。先建立地理与历史坐标，再进入故事。', linkText: '从世界观树开始 →', href: '/world-navigation' },
+    { step: '02', name: '人物志路线', desc: '人物档案 → 关系图谱 → 挑一个角色追到底。看清谁在借谁的手。', linkText: '从人物档案开始 →', href: '/characters' },
+    { step: '03', name: '商道与魔法路线', desc: '帝国商贸法典 → 金融中心 → 看一场没有硝烟的经济战。', linkText: '从金融中心开始 →', href: '/finance' }
+  ],
+  navEntry: {
+    enabled: true,
+    icon: '🧭',
+    text: '快捷导航中心',
+    desc: '工具与交互页面的总入口，人物、地图、金融等模块都在这里。',
+    link: '/navigation'
+  }
+};
 
-    const fullMd = `---
+const HOME_ESCAPES = { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' };
+function homeEsc(v) {
+  return String(v == null ? '' : v).replace(/[&<>"]/g, (c) => HOME_ESCAPES[c]);
+}
+function yamlEsc(v) {
+  return String(v == null ? '' : v).replace(/\\/g, '\\\\').replace(/"/g, '\\"');
+}
+
+function buildHomeMarkdown(raw) {
+  const hd = Object.assign({}, HOME_DEFAULTS, raw || {});
+
+  const acts = [];
+  if (String(hd.btn1Text || '').trim()) {
+    acts.push(`    - theme: brand\n      text: "${yamlEsc(hd.btn1Text)}"\n      link: "${hd.btn1Link || '#'}"`);
+  }
+  if (String(hd.btn2Text || '').trim()) {
+    acts.push(`    - theme: alt\n      text: "${yamlEsc(hd.btn2Text)}"\n      link: "${hd.btn2Link || '#'}"`);
+  }
+  const actionsYaml = acts.length ? `  actions:\n${acts.join('\n')}` : '';
+  const featYaml = (Array.isArray(hd.features) ? hd.features : [])
+    .filter((f) => f && String(f.title || '').trim())
+    .map((f) => `  - title: "${yamlEsc(f.title)}"\n    details: "${yamlEsc(f.desc)}"`)
+    .join('\n');
+
+  // ---------- 世界导览卡片 ----------
+  const modules = (Array.isArray(hd.modules) ? hd.modules : []).filter((m) => m && String(m.title || '').trim());
+  const moduleCards = modules.map((m) => [
+    `    <a class="home-card" href="${homeEsc(m.href || '#')}">`,
+    `      <span class="home-card-icon">${homeEsc(m.icon || '•')}</span>`,
+    `      <span class="home-card-body">`,
+    `        <span class="home-card-name">${homeEsc(m.title)}</span>`,
+    `        <span class="home-card-desc">${homeEsc(m.desc)}</span>`,
+    `      </span>`,
+    `    </a>`
+  ].join('\n')).join('\n');
+
+  const modulesSection = modules.length ? `<section class="home-section">
+  <h2 class="home-heading">${homeEsc(hd.modulesTitle || '世界导览')}</h2>
+  <p class="home-lead">${homeEsc(hd.modulesLead)}</p>
+  <div class="home-grid">
+${moduleCards}
+  </div>
+</section>` : '';
+
+  // ---------- 入门路线 ----------
+  const routes = (Array.isArray(hd.routes) ? hd.routes : []).filter((r) => r && String(r.name || '').trim());
+  const routeCards = routes.map((r, i) => [
+    `    <div class="home-route">`,
+    `      <div class="home-route-step">${homeEsc(r.step || String(i + 1).padStart(2, '0'))}</div>`,
+    `      <div class="home-route-name">${homeEsc(r.name)}</div>`,
+    `      <p class="home-route-desc">${homeEsc(r.desc)}</p>`,
+    `      <a class="home-route-link" href="${homeEsc(r.href || '#')}">${homeEsc(r.linkText || '进入 →')}</a>`,
+    `    </div>`
+  ].join('\n')).join('\n');
+
+  const routesSection = routes.length ? `<section class="home-section">
+  <h2 class="home-heading">${homeEsc(hd.routesTitle || '入门路线')}</h2>
+  <p class="home-lead">${homeEsc(hd.routesLead)}</p>
+  <div class="home-route-grid">
+${routeCards}
+  </div>
+</section>` : '';
+
+  // ---------- 导航页入口（可关闭） ----------
+  const ne = Object.assign({}, HOME_DEFAULTS.navEntry, hd.navEntry || {});
+  const entryHtml = ne.enabled === false ? '' : `<a class="home-entry" href="${homeEsc(ne.link || '/navigation')}">
+  <span class="home-entry-icon">${homeEsc(ne.icon || '🧭')}</span>
+  <span class="home-entry-body">
+    <span class="home-entry-name">${homeEsc(ne.text || '快捷导航中心')}</span>
+    <span class="home-entry-desc">${homeEsc(ne.desc)}</span>
+  </span>
+  <span class="home-entry-go">进入 →</span>
+</a>`;
+
+  const bodyHtml = `
+${modulesSection}
+${routesSection}
+${entryHtml}
+
+<style scoped>
+/* ---------- 版式基础 ---------- */
+.home-section {
+  margin-top: 64px;
+}
+
+.home-heading {
+  margin: 0 0 8px;
+  padding-top: 0;
+  border-top: none;
+  font-size: 24px;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-align: center;
+  color: var(--vp-c-text-1);
+}
+
+.home-heading .header-anchor {
+  display: none;
+}
+
+.home-lead {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.7;
+  text-align: center;
+  color: var(--vp-c-text-3);
+}
+
+/* ---------- 导览卡片 ---------- */
+.home-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.home-card {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  padding: 18px 20px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-soft);
+  text-decoration: none;
+  color: var(--vp-c-text-1);
+  transition: transform 0.18s ease, border-color 0.18s ease,
+    box-shadow 0.18s ease, background-color 0.18s ease;
+}
+
+.home-card:hover {
+  transform: translateY(-3px);
+  border-color: var(--vp-c-brand-1);
+  background: var(--vp-c-bg-alt);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.home-card-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 12px;
+  background: var(--vp-c-brand-soft);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.home-card-body {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.home-card-name {
+  font-size: 15px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--vp-c-text-1);
+}
+
+.home-card-desc {
+  margin-top: 6px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+/* ---------- 入门路线 ---------- */
+.home-route-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+  gap: 16px;
+  margin-top: 32px;
+}
+
+.home-route {
+  position: relative;
+  padding: 20px 22px 18px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-soft);
+  transition: border-color 0.18s ease;
+}
+
+.home-route:hover {
+  border-color: var(--vp-c-brand-1);
+}
+
+.home-route-step {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.16em;
+  color: var(--vp-c-brand-1);
+}
+
+.home-route-name {
+  margin-top: 6px;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.home-route-desc {
+  margin: 8px 0 14px;
+  font-size: 13px;
+  line-height: 1.65;
+  color: var(--vp-c-text-2);
+}
+
+.home-route-link {
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+  text-decoration: none;
+}
+
+.home-route-link:hover {
+  text-decoration: underline;
+}
+
+/* ---------- 导航页入口 ---------- */
+.home-entry {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-top: 56px;
+  padding: 18px 24px;
+  border: 1px solid var(--vp-c-divider);
+  border-radius: 14px;
+  background: var(--vp-c-bg-soft);
+  text-decoration: none;
+  color: var(--vp-c-text-1);
+  transition: transform 0.18s ease, border-color 0.18s ease, box-shadow 0.18s ease;
+}
+
+.home-entry:hover {
+  transform: translateY(-2px);
+  border-color: var(--vp-c-brand-1);
+  box-shadow: 0 10px 26px rgba(0, 0, 0, 0.18);
+}
+
+.home-entry-icon {
+  flex: none;
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  background: var(--vp-c-brand-soft);
+  font-size: 20px;
+  line-height: 1;
+}
+
+.home-entry-body {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.home-entry-name {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--vp-c-text-1);
+}
+
+.home-entry-desc {
+  margin-top: 4px;
+  font-size: 13px;
+  line-height: 1.6;
+  color: var(--vp-c-text-2);
+}
+
+.home-entry-go {
+  flex: none;
+  font-size: 13px;
+  font-weight: 500;
+  color: var(--vp-c-brand-1);
+}
+
+@media (max-width: 640px) {
+  .home-section {
+    margin-top: 48px;
+  }
+  .home-heading {
+    font-size: 20px;
+  }
+  .home-grid,
+  .home-route-grid {
+    grid-template-columns: 1fr;
+  }
+}
+</style>
+`;
+
+  const fullMd = `---
 layout: home
+aside: false
+outline: false
+
 hero:
-  name: "${String(hd.name||'').replace(/"/g,'\\"')}"
-  text: "${String(hd.text||'').replace(/"/g,'\\"')}"
-  tagline: "${String(hd.tagline||'').replace(/"/g,'\\"')}"
+  name: "${yamlEsc(hd.name)}"
+  text: "${yamlEsc(hd.text)}"
+  tagline: "${yamlEsc(hd.tagline)}"
 ${actionsYaml}
 features:
 ${featYaml}
 ---
+${bodyHtml}`;
 
-<div style="margin-top:72px; text-align:center;">
-  <a href="/world-navigation" style="
-    display: inline-block;
-    padding: 8px 20px;
-    border-radius: 999px;
-    background-color: var(--vp-c-brand);
-    color: var(--vp-c-text-inverse, #ffffff);
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 14px;
-  ">
-    🧭 进入快捷导航中心
-  </a>
-</div>
-`;
-    const indexMdPath = path.join(DOCS_DIR, "index.md");
-    await fs.writeFile(indexMdPath, fullMd, "utf-8");
-    return res.json({success:true,msg:"index.md 已由后端自动生成写入磁盘"});
-  } catch(err){
-    return res.status(500).json({success:false,error:err.message});
+  return fullMd;
+}
+
+// 生成并写入 website/docs/index.md
+app.post('/api/generate-index-md', async (req, res) => {
+  try {
+    const configPath = path.join(PUBLIC_DIR, 'home-config.json');
+    const hd = fs.existsSync(configPath) ? await fs.readJson(configPath) : {};
+    const fullMd = buildHomeMarkdown(hd);
+    await fs.writeFile(path.join(DOCS_DIR, 'index.md'), fullMd, 'utf-8');
+    return res.json({ success: true, msg: 'index.md 已由后端自动生成写入磁盘' });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
+// 按当前配置返回首页源码（后台「复制源码」用，不写盘）
+app.post('/api/home-source', (req, res) => {
+  try {
+    const hd = (req.body && req.body.config) ? req.body.config : {};
+    return res.json({ success: true, markdown: buildHomeMarkdown(hd) });
+  } catch (err) {
+    return res.status(500).json({ success: false, error: err.message });
   }
 });
 

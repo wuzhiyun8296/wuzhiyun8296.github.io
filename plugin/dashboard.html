@@ -114,8 +114,8 @@
           <div class="stat-label">总计字数</div>
         </div>
         <div class="stat-card">
-          <div class="stat-num">{{ stats.articleCount }}</div>
-          <div class="stat-label">文章/章节总数</div>
+          <div class="stat-num">{{ stats.chapterCount }}</div>
+          <div class="stat-label">小说章节总数</div>
         </div>
         <div class="stat-card">
           <div class="stat-num">{{ stats.charCount }}</div>
@@ -185,7 +185,7 @@
 
     createApp({
       setup() {
-        const stats = ref({ totalWords: 0, articleCount: 0, charCount: 0, markerCount: 0 });
+        const stats = ref({ totalWords: 0, chapterCount: 0, charCount: 0, markerCount: 0 });
         const config = ref({});
         const configLoaded = ref(false);
 

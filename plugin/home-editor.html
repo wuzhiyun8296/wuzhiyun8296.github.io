@@ -9,10 +9,10 @@
     * { box-sizing: border-box; }
     html, body { margin: 0; padding: 0; height: 100%; overflow: hidden; }
     body { background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; }
-    
+
     .top-bar { display: flex; justify-content: space-between; align-items: center; padding: 15px 25px; background: #252526; border-bottom: 1px solid #333; flex-shrink: 0; height: 60px;}
     .top-bar h2 { margin: 0; color: #fff; font-size: 18px; display: flex; align-items: center; gap: 10px; }
-    
+
     .actions { display: flex; gap: 10px; }
     .btn { padding: 8px 16px; border-radius: 6px; font-size: 13px; font-weight: bold; cursor: pointer; border: none; transition: 0.2s; display: flex; align-items: center; gap: 6px; }
     .btn-save { background: #2ea043; color: #fff; }
@@ -20,10 +20,10 @@
     .btn-outline { background: #333; color: #ddd; border: 1px solid #444; }
     .btn-outline:hover { background: #444; color: #fff; }
     .layout { display: flex; flex: 1; overflow: hidden; height: calc(100vh - 60px); }
-    
+
     .left-panel { width: 50%; padding: 20px 20px 100px 20px; overflow-y: auto; border-right: 1px solid #333; height: 100%; }
     .right-panel { width: 50%; padding: 40px 40px 100px 40px; overflow-y: auto; background: #121212; height: 100%; }
-    
+
     .section-title { color: #fff; font-size: 16px; margin-top: 30px; margin-bottom: 20px; display: flex; justify-content: space-between; align-items: center; border-bottom: 1px dashed #444; padding-bottom: 10px;}
     .section-title:first-child { margin-top: 0; }
     .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 8px; }
@@ -31,28 +31,28 @@
     input[type="text"], textarea { background: #1e1e1e; border: 1px solid #444; color: #ddd; padding: 10px 12px; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; width: 100%; font-family: inherit; }
     input:focus, textarea:focus { border-color: #0e639c; }
     textarea { resize: vertical; min-height: 80px; }
-    
+
     /* 💡 图标上传美化样式 */
-    .icon-upload-wrapper { 
-      display: flex; align-items: center; gap: 16px; padding: 16px; 
-      background: #1e1e1e; border: 1px dashed #444; border-radius: 8px; transition: border-color 0.2s; 
+    .icon-upload-wrapper {
+      display: flex; align-items: center; gap: 16px; padding: 16px;
+      background: #1e1e1e; border: 1px dashed #444; border-radius: 8px; transition: border-color 0.2s;
     }
     .icon-upload-wrapper:hover { border-color: #0e639c; }
-    
-    .icon-preview { 
-      width: 64px; height: 64px; background: #252526; border: 1px solid #444; 
-      border-radius: 8px; display: flex; justify-content: center; align-items: center; 
+
+    .icon-preview {
+      width: 64px; height: 64px; background: #252526; border: 1px solid #444;
+      border-radius: 8px; display: flex; justify-content: center; align-items: center;
       overflow: hidden; cursor: pointer; transition: transform 0.2s, border-color 0.2s; flex-shrink: 0;
     }
     .icon-preview:hover { transform: scale(1.05); border-color: #555; }
     .icon-preview img { width: 100%; height: 100%; object-fit: contain; padding: 8px; box-sizing: border-box; }
     .icon-preview .placeholder { font-size: 28px; opacity: 0.5; }
-    
+
     .icon-actions { display: flex; flex-direction: column; gap: 6px; }
-    .btn-upload { 
-      background: #0e639c; color: #fff; border: none; padding: 8px 16px; 
-      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold; 
-      transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px; 
+    .btn-upload {
+      background: #0e639c; color: #fff; border: none; padding: 8px 16px;
+      border-radius: 6px; cursor: pointer; font-size: 13px; font-weight: bold;
+      transition: background 0.2s; display: flex; align-items: center; justify-content: center; gap: 6px;
     }
     .btn-upload:hover { background: #1177bb; }
     .hint { font-size: 12px; color: #666; line-height: 1.4; }
@@ -69,7 +69,7 @@
     .hero-name { font-size: 48px; font-weight: 900; color: #fff; margin: 0 0 10px 0; letter-spacing: 2px; }
     .hero-text { font-size: 20px; color: #888; margin: 0 0 20px 0; letter-spacing: 1px; }
     .hero-tagline { font-size: 15px; color: #aaa; margin-bottom: 30px; }
-    
+
     .btn-group { display: flex; justify-content: center; gap: 15px; }
     .hero-btn { padding: 10px 24px; border-radius: 30px; text-decoration: none; font-weight: bold; font-size: 14px; transition: 0.2s; }
     .hero-btn.primary { background: #0e639c; color: #fff; border: 1px solid #0e639c; }
@@ -81,7 +81,25 @@
     .feature-item:hover { transform: translateY(-5px); border-color: #444; box-shadow: 0 10px 20px rgba(0,0,0,0.3); }
     .feature-item h3 { color: #fff; margin: 0 0 10px 0; font-size: 16px; }
     .feature-item p { color: #888; font-size: 13px; line-height: 1.6; margin: 0; }
-    
+
+    /* 复选框行 */
+    .form-group.check-row { flex-direction: row; align-items: center; gap: 8px; }
+    .form-group.check-row input[type="checkbox"] { width: auto; margin: 0; cursor: pointer; }
+
+    /* 预览：世界导览 / 入门路线 / 导航入口 */
+    .pv-section { margin-top: 56px; }
+    .pv-title { text-align: center; color: #fff; font-size: 22px; font-weight: 700; margin: 0 0 8px 0; letter-spacing: 1px; }
+    .pv-lead { text-align: center; color: #777; font-size: 13px; margin: 0 0 24px 0; }
+    .pv-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(215px, 1fr)); gap: 14px; }
+    .pv-card { display: flex; align-items: flex-start; gap: 12px; background: #252526; border: 1px solid #333; border-radius: 12px; padding: 16px; }
+    .pv-icon { flex: none; width: 36px; height: 36px; border-radius: 10px; background: rgba(14, 99, 156, 0.18); display: flex; align-items: center; justify-content: center; font-size: 18px; }
+    .pv-name { color: #fff; font-size: 14px; font-weight: 600; }
+    .pv-desc { color: #888; font-size: 12px; line-height: 1.6; margin-top: 4px; }
+    .pv-route { background: #252526; border: 1px solid #333; border-radius: 12px; padding: 16px; }
+    .pv-step { color: #0e639c; font-size: 12px; font-weight: 700; letter-spacing: 2px; }
+    .pv-link { color: #0e639c; font-size: 12px; margin-top: 10px; }
+    .pv-entry { display: flex; align-items: center; gap: 14px; margin-top: 40px; padding: 16px 20px; background: #252526; border: 1px solid #333; border-radius: 12px; }
+
     ::-webkit-scrollbar { width: 8px; }
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
@@ -100,22 +118,22 @@
     </div>
     <div class="layout">
       <div class="left-panel">
-        
+
         <h3 class="section-title">⚙️ 基础站点信息</h3>
         <div class="form-group">
           <label>浏览器标签页标题</label>
           <input type="text" v-model="homeData.siteTitle" placeholder="例如：幻想域设定集">
         </div>
-        
+
         <!-- 💡 美化后的图标上传区域 -->
         <div class="form-group">
           <label>网站图标 (Favicon)</label>
           <div class="icon-upload-wrapper">
             <div class="icon-preview" @click="$refs.iconInput.click()" title="点击更换图标">
-              <img 
-                v-if="homeData.siteIcon && !iconError" 
-                :src="homeData.siteIcon" 
-                @error="iconError = true" 
+              <img
+                v-if="homeData.siteIcon && !iconError"
+                :src="homeData.siteIcon"
+                @error="iconError = true"
                 alt="icon"
               >
               <span v-if="!homeData.siteIcon || iconError" class="placeholder">🖼️</span>
@@ -129,6 +147,7 @@
             <input type="file" ref="iconInput" class="file-input" accept="image/*" @change="uploadIcon">
           </div>
         </div>
+
         <h3 class="section-title">🌟 顶部展示区 (Hero)</h3>
         <div class="form-group">
           <label>大标题 (Name)</label>
@@ -142,7 +161,7 @@
           <label>一句话简介 (Tagline)</label>
           <input type="text" v-model="homeData.tagline" placeholder="例如：当物理与魔法交织...">
         </div>
-        
+
         <div class="form-group">
           <label>按钮组</label>
           <div style="display: flex; gap: 10px; margin-bottom: 10px;">
@@ -154,10 +173,11 @@
             <input type="text" v-model="homeData.btn2Link" placeholder="按钮2链接 (如: /timeline)">
           </div>
         </div>
+
         <h3 class="section-title">
           ✨ 特性卡片 (Features)
         </h3>
-        <div v-for="(item, index) in homeData.features" :key="index" class="feature-card">
+        <div v-for="(item, index) in homeData.features" :key="'f' + index" class="feature-card">
           <button class="btn-del" @click="removeFeature(index)">✖</button>
           <div class="form-group">
             <label>卡片标题</label>
@@ -169,6 +189,95 @@
           </div>
         </div>
         <button class="btn-add" @click="addFeature">+ 添加卡片</button>
+
+        <h3 class="section-title">🧩 世界导览卡片</h3>
+        <div class="form-group">
+          <label>版块标题</label>
+          <input type="text" v-model="homeData.modulesTitle" placeholder="世界导览">
+        </div>
+        <div class="form-group">
+          <label>版块导语</label>
+          <input type="text" v-model="homeData.modulesLead" placeholder="六个入口，通往幻想域的每一处角落。">
+        </div>
+        <div v-for="(item, index) in homeData.modules" :key="'m' + index" class="feature-card">
+          <button class="btn-del" @click="removeModule(index)">✖</button>
+          <div class="form-group">
+            <label>图标（填一个 emoji）</label>
+            <input type="text" v-model="item.icon" placeholder="🌍">
+          </div>
+          <div class="form-group">
+            <label>卡片标题</label>
+            <input type="text" v-model="item.title" placeholder="世界观树">
+          </div>
+          <div class="form-group">
+            <label>卡片描述</label>
+            <textarea v-model="item.desc" placeholder="帝国、教会与联盟的设定总纲..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>跳转链接</label>
+            <input type="text" v-model="item.href" placeholder="/world-navigation">
+          </div>
+        </div>
+        <button class="btn-add" @click="addModule">+ 添加导览卡片</button>
+
+        <h3 class="section-title">🛣️ 入门路线</h3>
+        <div class="form-group">
+          <label>版块标题</label>
+          <input type="text" v-model="homeData.routesTitle" placeholder="三条入门路线">
+        </div>
+        <div class="form-group">
+          <label>版块导语</label>
+          <input type="text" v-model="homeData.routesLead" placeholder="第一次来到幻想域，可以任选一条线开始。">
+        </div>
+        <div v-for="(item, index) in homeData.routes" :key="'r' + index" class="feature-card">
+          <button class="btn-del" @click="removeRoute(index)">✖</button>
+          <div class="form-group">
+            <label>序号（如 01）</label>
+            <input type="text" v-model="item.step" placeholder="01">
+          </div>
+          <div class="form-group">
+            <label>路线名称</label>
+            <input type="text" v-model="item.name" placeholder="新读者路线">
+          </div>
+          <div class="form-group">
+            <label>路线描述</label>
+            <textarea v-model="item.desc" placeholder="世界观树 → 编年史 → 正文第一章..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>链接文字</label>
+            <input type="text" v-model="item.linkText" placeholder="从世界观树开始 →">
+          </div>
+          <div class="form-group">
+            <label>跳转链接</label>
+            <input type="text" v-model="item.href" placeholder="/world-navigation">
+          </div>
+        </div>
+        <button class="btn-add" @click="addRoute">+ 添加路线</button>
+
+        <h3 class="section-title">🧭 导航页入口</h3>
+        <div class="feature-card">
+          <div class="form-group check-row">
+            <input type="checkbox" id="navEntryEnabled" v-model="homeData.navEntry.enabled">
+            <label for="navEntryEnabled" style="margin:0;">在首页底部显示这个入口</label>
+          </div>
+          <div class="form-group">
+            <label>图标</label>
+            <input type="text" v-model="homeData.navEntry.icon" placeholder="🧭">
+          </div>
+          <div class="form-group">
+            <label>标题</label>
+            <input type="text" v-model="homeData.navEntry.text" placeholder="快捷导航中心">
+          </div>
+          <div class="form-group">
+            <label>描述</label>
+            <textarea v-model="homeData.navEntry.desc" placeholder="工具与交互页面的总入口..."></textarea>
+          </div>
+          <div class="form-group">
+            <label>跳转链接</label>
+            <input type="text" v-model="homeData.navEntry.link" placeholder="/navigation">
+          </div>
+        </div>
+
       </div>
       <div class="right-panel">
         <div class="preview-container">
@@ -181,27 +290,51 @@
               <a v-show="homeData.btn2Text.trim()" :href="homeData.btn2Link || '#'" class="hero-btn secondary">{{ homeData.btn2Text }}</a>
             </div>
           </div>
-          
+
           <div class="features-grid">
-            <div v-for="(item, index) in homeData.features" :key="index" class="feature-item">
+            <div v-for="(item, index) in homeData.features" :key="'pf' + index" class="feature-item">
               <h3>{{ item.title || '卡片标题' }}</h3>
               <p>{{ item.desc || '这里显示卡片的描述内容。' }}</p>
             </div>
           </div>
-          <!-- 预览区底部按钮 -->
-          <div style="margin-top:72px; text-align:center;">
-            <a href="#/" style="
-              display: inline-block;
-              padding: 8px 20px;
-              border-radius: 999px;
-              background-color:#0e639c;
-              color: #ffffff;
-              text-decoration: none;
-              font-weight: 500;
-              font-size: 14px;
-            ">
-              🧭 进入快捷导航中心
-            </a>
+
+          <!-- 预览：世界导览 -->
+          <div v-if="homeData.modules && homeData.modules.length" class="pv-section">
+            <h3 class="pv-title">{{ homeData.modulesTitle || '世界导览' }}</h3>
+            <p class="pv-lead">{{ homeData.modulesLead }}</p>
+            <div class="pv-grid">
+              <div v-for="(m, i) in homeData.modules" :key="'pm' + i" class="pv-card">
+                <div class="pv-icon">{{ m.icon || '•' }}</div>
+                <div style="min-width:0;">
+                  <div class="pv-name">{{ m.title || '卡片标题' }}</div>
+                  <div class="pv-desc">{{ m.desc }}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 预览：入门路线 -->
+          <div v-if="homeData.routes && homeData.routes.length" class="pv-section">
+            <h3 class="pv-title">{{ homeData.routesTitle || '入门路线' }}</h3>
+            <p class="pv-lead">{{ homeData.routesLead }}</p>
+            <div class="pv-grid">
+              <div v-for="(r, i) in homeData.routes" :key="'pr' + i" class="pv-route">
+                <div class="pv-step">{{ r.step || ('0' + (i + 1)) }}</div>
+                <div class="pv-name">{{ r.name || '路线名称' }}</div>
+                <div class="pv-desc">{{ r.desc }}</div>
+                <div class="pv-link">{{ r.linkText }}</div>
+              </div>
+            </div>
+          </div>
+
+          <!-- 预览：导航页入口 -->
+          <div v-if="homeData.navEntry && homeData.navEntry.enabled" class="pv-entry">
+            <div class="pv-icon">{{ homeData.navEntry.icon || '🧭' }}</div>
+            <div style="flex:1; min-width:0;">
+              <div class="pv-name">{{ homeData.navEntry.text || '快捷导航中心' }}</div>
+              <div class="pv-desc">{{ homeData.navEntry.desc }}</div>
+            </div>
+            <div class="pv-link">进入 →</div>
           </div>
         </div>
       </div>
@@ -210,9 +343,12 @@
   <script>
     const { createApp, ref, onMounted } = Vue;
     const API_BASE = 'http://localhost:3001/api';
-    const CONFIG_PATH = 'public/home-config.json'; 
+    const CONFIG_PATH = 'public/home-config.json';
+    const clone = (obj) => JSON.parse(JSON.stringify(obj));
+
     createApp({
       setup() {
+        // 全部字段都可在这里兜底，删掉 home-config.json 也能正常出首页
         const defaultHome = {
           siteTitle: '幻想域设定集',
           siteIcon: '/icon.svg',
@@ -227,54 +363,93 @@
             { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动，贝勒（Bale）为唯一法定货币。十二圆桌骑士共同监管。' },
             { title: '魔法与物理', desc: '拥有魔力者方能施展魔法，而穿越者对此免疫。在这个阶级固化的世界里，反抗的种子正在发芽。' },
             { title: '幻想域联盟', desc: '穿越者组成的秘密联盟，致力于推翻帝国统治，建立一个人魔共存的理想国。' }
-          ]
+          ],
+          modulesTitle: '世界导览',
+          modulesLead: '六个入口，通往幻想域的每一处角落。',
+          modules: [
+            { icon: '🌍', title: '世界观树', desc: '帝国、教会与联盟的设定总纲，按层级逐层展开。', href: '/world-navigation' },
+            { icon: '⏳', title: '幻想域编年史', desc: '按时间轴梳理的纪元更迭与帝国大事记。', href: '/timeline' },
+            { icon: '👤', title: '人物档案', desc: '各阵营核心成员的档案、立绘与生平。', href: '/characters' },
+            { icon: '🕸️', title: '关系图谱', desc: '拖拽式查看人物与势力之间错综复杂的暗线。', href: '/graph' },
+            { icon: '🗺️', title: '世界地图', desc: '大陆诸国、战略要冲与地标的交互式地图。', href: '/map' },
+            { icon: '💰', title: '金融中心', desc: '实时物价、货币汇率与股市波动的推演沙盘。', href: '/finance' }
+          ],
+          routesTitle: '三条入门路线',
+          routesLead: '第一次来到幻想域，可以任选一条线开始。',
+          routes: [
+            { step: '01', name: '新读者路线', desc: '世界观树 → 编年史 → 正文第一章。先建立地理与历史坐标，再进入故事。', linkText: '从世界观树开始 →', href: '/world-navigation' },
+            { step: '02', name: '人物志路线', desc: '人物档案 → 关系图谱 → 挑一个角色追到底。看清谁在借谁的手。', linkText: '从人物档案开始 →', href: '/characters' },
+            { step: '03', name: '商道与魔法路线', desc: '帝国商贸法典 → 金融中心 → 看一场没有硝烟的经济战。', linkText: '从金融中心开始 →', href: '/finance' }
+          ],
+          navEntry: {
+            enabled: true,
+            icon: '🧭',
+            text: '快捷导航中心',
+            desc: '工具与交互页面的总入口，人物、地图、金融等模块都在这里。',
+            link: '/navigation'
+          }
         };
-        const homeData = ref({...defaultHome});
+
+        const homeData = ref(clone(defaultHome));
         const iconError = ref(false);
+
+        // 老配置文件缺字段时，用默认值补齐，避免 undefined 报错
+        const normalize = (parsed) => {
+          const base = clone(defaultHome);
+          const merged = Object.assign({}, base, parsed || {});
+          merged.features = Array.isArray(merged.features) ? merged.features : base.features;
+          merged.modules = Array.isArray(merged.modules) ? merged.modules : base.modules;
+          merged.routes = Array.isArray(merged.routes) ? merged.routes : base.routes;
+          merged.navEntry = Object.assign({}, base.navEntry, merged.navEntry || {});
+          return merged;
+        };
+
         const showToast = (msg, isError = false) => {
           const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
           const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
           toast.style = `position:fixed; bottom:30px; left:50%; transform:translateX(-50%); background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
           document.body.appendChild(toast); setTimeout(() => toast.remove(), 2500);
         };
+
         const loadConfig = async () => {
           try {
             const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(CONFIG_PATH)}`);
             const data = await res.json();
             if (data.content) {
-              const parsed = JSON.parse(data.content);
-              homeData.value = Object.assign({}, defaultHome, parsed);
+              homeData.value = normalize(JSON.parse(data.content));
             }
           } catch (e) {
             console.warn('读取首页配置，使用默认配置', e);
-            homeData.value = {...defaultHome};
+            homeData.value = clone(defaultHome);
           }
         };
+
         const saveConfig = async () => {
           try {
             const res = await fetch(`${API_BASE}/file`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ 
-                path: CONFIG_PATH, 
-                content: JSON.stringify(homeData.value, null, 2) 
+              body: JSON.stringify({
+                path: CONFIG_PATH,
+                content: JSON.stringify(homeData.value, null, 2)
               })
             });
             const result = await res.json();
             if (result.success) {
               // 调用后端接口自动生成并写入 index.md
-              await fetch(`${API_BASE}/generate-index-md`, {method:"POST"});
-              showToast('✅ 已保存配置，index.md自动更新完成！');
+              await fetch(`${API_BASE}/generate-index-md`, { method: 'POST' });
+              showToast('✅ 已保存配置，index.md 自动更新完成！');
               if (window.parent && window.parent !== window) {
                 window.parent.postMessage({ type: 'REFRESH_SITE_META' }, '*');
               }
             } else {
-              showToast('❌ 保存失败', true);
+              showToast('❌ 保存失败：' + (result.error || '未知错误'), true);
             }
           } catch (e) {
-            showToast('❌ 请求失败，请确认server.js已添加接口并且重启后端', true);
+            showToast('❌ 请求失败，请确认后端 http://localhost:3001 已启动', true);
           }
         };
+
         const uploadIcon = async (event) => {
           const file = event.target.files[0];
           if (!file) return;
@@ -297,55 +472,49 @@
             showToast('❌ 网络请求失败', true);
           }
         };
+
         const addFeature = () => { homeData.value.features.push({ title: '新特性', desc: '描述内容' }); };
         const removeFeature = (index) => { homeData.value.features.splice(index, 1); };
+
+        const addModule = () => { homeData.value.modules.push({ icon: '✨', title: '新入口', desc: '入口描述', href: '/' }); };
+        const removeModule = (index) => { homeData.value.modules.splice(index, 1); };
+
+        const addRoute = () => {
+          const n = String(homeData.value.routes.length + 1).padStart(2, '0');
+          homeData.value.routes.push({ step: n, name: '新路线', desc: '路线描述', linkText: '立即查看 →', href: '/' });
+        };
+        const removeRoute = (index) => { homeData.value.routes.splice(index, 1); };
+
         const exportTemplate = () => { window.location.href = `${API_BASE}/export/template`; };
 
-        const copySource = () => {
-          const hd = homeData.value;
-          const acts = [];
-          if(hd.btn1Text?.trim()) {
-            acts.push(`    - theme: brand\n      text: "${hd.btn1Text.replace(/"/g,'\\"')}"\n      link: "${hd.btn1Link||'#'}"`);
+        // 💡 源码由后端统一生成，避免前后端两份模板走样
+        const copySource = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/home-source`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ config: homeData.value })
+            });
+            const data = await res.json();
+            if (!data.success) throw new Error(data.error || '生成失败');
+            await navigator.clipboard.writeText(data.markdown);
+            showToast('✅ 已按当前设置生成并复制 VitePress 首页源码！');
+          } catch (e) {
+            showToast('❌ 生成源码失败：' + e.message, true);
           }
-          if(hd.btn2Text?.trim()) {
-            acts.push(`    - theme: alt\n      text: "${hd.btn2Text.replace(/"/g,'\\"')}"\n      link: "${hd.btn2Link||'#'}"`);
-          }
-          const actionsYaml = acts.length ? `  actions:\n${acts.join('\n')}` : '';
-          const featYaml = hd.features.map(f=>`  - title: "${(f.title||'').replace(/"/g,'\\"')}"\n    details: "${(f.desc||'').replace(/"/g,'\\"')}"`).join('\n');
-
-          const fullMd = `---
-layout: home
-hero:
-  name: "${hd.name||''}"
-  text: "${hd.text||''}"
-  tagline: "${hd.tagline||''}"
-${actionsYaml}
-features:
-${featYaml}
----
-
-<div style="margin-top:72px; text-align:center;">
-  <a href="/world-navigation" style="
-    display: inline-block;
-    padding: 8px 20px;
-    border-radius: 999px;
-    background-color: var(--vp-c-brand);
-    color: var(--vp-c-text-inverse, #ffffff);
-    text-decoration: none;
-    font-weight: 500;
-    font-size: 14px;
-  ">
-    🧭 进入快捷导航中心
-  </a>
-</div>
-`;
-          navigator.clipboard.writeText(fullMd).then(() => showToast('✅ VitePress首页markdown源码已复制！'));
         };
 
         onMounted(() => {
           loadConfig();
         });
-        return { homeData, iconError, saveConfig, uploadIcon, addFeature, removeFeature, exportTemplate, copySource };
+
+        return {
+          homeData, iconError,
+          saveConfig, uploadIcon, exportTemplate, copySource,
+          addFeature, removeFeature,
+          addModule, removeModule,
+          addRoute, removeRoute
+        };
       }
     }).mount('#app');
   </script>
