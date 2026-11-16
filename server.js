@@ -6,6 +6,16 @@ const multer = require('multer');
 const { exec } = require('child_process');
 const marked = require('marked'); // 💡 移到顶层引入
 
+// ================= 💡 进程兜底 =================
+// 任何一次请求里漏出来的异常都不该让整个后台悄无声息地死掉，
+// 否则前端只会看到一句 "Failed to fetch"，完全不知道发生了什么。
+process.on('uncaughtException', (err) => {
+  console.error('[uncaughtException]', (err && err.stack) ? err.stack : err);
+});
+process.on('unhandledRejection', (reason) => {
+  console.error('[unhandledRejection]', (reason && reason.stack) ? reason.stack : reason);
+});
+
 const app = express();
 app.use(cors());
 app.use(express.static(__dirname)); 
