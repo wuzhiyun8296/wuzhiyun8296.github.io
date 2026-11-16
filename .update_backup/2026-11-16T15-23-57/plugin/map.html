@@ -1,0 +1,954 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>终极战略地图编辑器</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <link rel="stylesheet" href="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.css" />
+  <script src="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    
+    .header { display: flex; justify-content: space-between; align-items: center; padding: 10px 15px; background: #252526; border-bottom: 1px solid #333; flex-shrink: 0; height: 50px;}
+    .header h2 { color: #fff; margin: 0; font-size: 18px;}
+    
+    .main-body { flex: 1; display: flex; overflow: hidden; }
+    
+    .left-pane { flex: 1; display: flex; flex-direction: column; position: relative; overflow: hidden; }
+    
+    .toolbar { background: #1e1e1e; padding: 10px; border-bottom: 1px solid #333; display: flex; flex-direction: column; gap: 8px; max-height: 35vh; overflow-y: auto; }
+    .toolbar::-webkit-scrollbar { width: 8px; }
+    .toolbar::-webkit-scrollbar-track { background: #1e1e1e; }
+    .toolbar::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    .toolbar::-webkit-scrollbar-thumb:hover { background: #555; }
+
+    .row { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; padding: 6px; border-radius: 6px; background: #252526; }
+    .row label { font-size: 13px; color: #aaa; font-weight: bold;}
+    
+    button { background: #0e639c; color: white; border: none; padding: 6px 10px; cursor: pointer; border-radius: 4px; font-size: 12px; font-weight: bold; transition: background 0.2s; display: flex; align-items: center; gap: 4px; }
+    button:hover { background: #1177bb; }
+    button.success { background: #2ea043; }
+    button.secondary { background: #444; }
+    button.active { background: #d29922; color: #1e1e1e; border: 1px solid #fff; }
+    
+    .color-picker { display: flex; gap: 4px; align-items: center; flex-wrap: wrap;}
+    .color-swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
+    .color-swatch.active { border-color: #fff; box-shadow: 0 0 5px #fff; }
+    .eraser-swatch { background: repeating-linear-gradient(45deg, #333, #333 4px, #555 4px, #555 8px); display: flex; justify-content: center; align-items: center; font-size: 14px;}
+
+    #map-container { flex: 1; background: #111; position: relative; overflow: hidden; z-index: 1;}
+    .leaflet-container { background: #1e3a5f !important; cursor: crosshair; }
+    
+    .right-pane { width: 340px; background: #252526; border-left: 1px solid #333; display: flex; flex-direction: column; transition: width 0.3s; overflow: hidden; flex-shrink: 0; }
+    .right-pane.collapsed { width: 0; border: none; }
+    .panel-header { padding: 15px; background: #1e1e1e; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; }
+    .panel-content { padding: 15px; overflow-y: auto; flex: 1; display: flex; flex-direction: column; gap: 15px; }
+    
+    .form-group { display: flex; flex-direction: column; gap: 5px; }
+    .form-group label { font-size: 12px; color: #aaa; font-weight: bold; }
+    .form-group input, .form-group textarea, .form-group select { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; outline: none; width: 100%; font-family: inherit; }
+    .form-group input:focus, .form-group textarea:focus, .form-group select:focus { border-color: #0e639c; }
+    
+    .layer-control { position: absolute; top: 10px; right: 10px; background: rgba(30, 30, 30, 0.95); padding: 12px; border-radius: 8px; border: 1px solid #444; z-index: 1000; display: flex; flex-direction: column; gap: 8px; font-size: 13px; box-shadow: 0 4px 15px rgba(0,0,0,0.5); }
+    .layer-control label { display: flex; align-items: center; gap: 8px; cursor: pointer; color: #ccc;}
+    .layer-control input[type="checkbox"] { cursor: pointer; }
+    
+    /* 左下角图例展示 */
+    .legend { 
+      position: absolute; 
+      bottom: 20px; 
+      left: 10px; 
+      background: rgba(30, 30, 30, 0.9); 
+      padding: 12px; 
+      border-radius: 8px; 
+      border: 1px solid #444; 
+      z-index: 1000; 
+      font-size: 13px; 
+      color: #ddd; 
+      pointer-events: none; 
+      display: flex; 
+      flex-direction: column; 
+      gap: 8px; 
+      box-shadow: 0 4px 15px rgba(0,0,0,0.5); 
+      max-width: 250px;
+    }
+    .legend-item { display: flex; align-items: center; gap: 10px;}
+    .legend-color { width: 16px; height: 16px; border-radius: 4px; flex-shrink: 0;}
+
+    /* 右侧面板的图例管理 */
+    .legend-manager-list { display: flex; flex-direction: column; gap: 6px; }
+    .legend-manager-row { 
+      display: flex; 
+      align-items: center; 
+      justify-content: space-between; 
+      background: #1e1e1e; 
+      padding: 8px 12px; 
+      border-radius: 6px; 
+      border: 1px solid #333; 
+    }
+    .legend-manager-row .left { display: flex; align-items: center; gap: 10px; flex: 1;}
+    .legend-manager-row input[type="text"] { background: transparent; border: none; color: #fff; font-size: 13px; padding: 0; outline: none; flex: 1; width: 100%; border-bottom: 1px solid transparent;}
+    .legend-manager-row input[type="text"]:focus { border-bottom-color: #0e639c; }
+    .legend-manager-row button { padding: 2px 6px; font-size: 11px; background: #444; }
+
+    /* 💡 美化拾色器 */
+    .color-picker-wrapper { position: relative; width: 32px; height: 32px; border-radius: 50%; overflow: hidden; cursor: pointer; border: 2px solid #fff; box-shadow: 0 2px 5px rgba(0,0,0,0.5); }
+    .color-picker-wrapper input[type="color"] { position: absolute; top: -10px; left: -10px; width: 50px; height: 50px; cursor: pointer; opacity: 0; }
+
+    .bg-transparent { background: transparent !important; border: none !important; box-shadow: none !important; }
+    .text-shadow { text-shadow: 1px 1px 2px #000; font-weight: bold; font-size: 13px; }
+    .label-country { color: rgba(255,255,255,0.85); font-size: 22px; font-weight: bold; text-shadow: 2px 2px 4px #000; pointer-events: auto; cursor: pointer; white-space: nowrap; padding: 5px; }
+    .label-country:hover { color: #fff; text-shadow: 0 0 10px #fff; }
+    .label-admin { color: rgba(255,255,255,0.95); font-size: 14px; font-weight: bold; text-shadow: 1px 1px 2px #000; pointer-events: auto; cursor: pointer; white-space: nowrap; padding: 2px 5px; background: rgba(0,0,0,0.3); border-radius: 4px;}
+    .troop-badge { background: #a82626; color: #fff; font-size: 11px; padding: 1px 4px; border-radius: 8px; margin-left: 2px; border: 1px solid #fff; }
+    
+    @keyframes dashFlow { to { stroke-dashoffset: -20; } }
+    .animated-route { stroke-dasharray: 10, 10; animation: dashFlow 1s linear infinite; stroke-linecap: round; }
+    
+    .search-box { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; width: 100%; margin-bottom: 10px; outline: none; }
+    .result-item { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; display: flex; justify-content: space-between; transition: background 0.2s;}
+    .result-item:hover { background: #333; color: #fff;}
+  </style>
+</head>
+<body>
+  <div id="app" style="display: flex; flex-direction: column; height: 100%;">
+    <div class="header">
+      <h2>🗺️ 终极战略沙盘系统</h2>
+      <div style="display: flex; gap: 10px;">
+        <button class="secondary" @click="isPanelOpen = !isPanelOpen">⚙️ 属性面板</button>
+        <button class="success" @click="saveMap">💾 保存数据</button>
+        <button class="primary-btn" @click="exportMapImage">📸 导出高清大图</button>
+      </div>
+    </div>
+
+    <div class="main-body">
+      <div class="left-pane">
+        <div class="toolbar">
+          <div class="row">
+            <span style="color: #d29922;">🌍 创世：</span>
+            <input type="number" v-model.number="countryCount" min="2" max="30" style="width:50px; padding:4px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:4px;"/>
+            <button class="primary-btn" @click="generatePoliticalMap">🎲 重划版图</button>
+            <button class="secondary" @click="expandMap">🌐 扩大边界</button>
+            <button class="secondary" @click="undoBrush" :disabled="undoStack.length === 0">↩️ 撤销</button>
+            <div style="width: 1px; height: 15px; background: #555; margin: 0 5px;"></div>
+            <span style="color: #0e639c;">🖌️ 国家：</span>
+            <button :class="{ active: currentTool === 'brush' }" @click="setTool('brush')">画笔</button>
+            <button :class="{ active: currentTool === 'rect' }" @click="setTool('rect')">📦 框选</button>
+            <div v-if="currentTool === 'brush' || currentTool === 'rect'" class="color-picker">
+              <div v-for="(color, index) in colors" :key="index" class="color-swatch" :class="{ active: currentBrushColor === index }" :style="{ backgroundColor: color }" @click="currentBrushColor = index"></div>
+              <div class="color-swatch eraser-swatch" :class="{ active: currentBrushColor === -1 }" @click="currentBrushColor = -1">🧽</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <span style="color: #911eb4;">🏛️ 行政/特殊：</span>
+            <button :class="{ active: currentTool === 'admin_brush' }" @click="setTool('admin_brush')">行政区画笔</button>
+            <button :class="{ active: currentTool === 'admin_rect' }" @click="setTool('admin_rect')">行政区框选</button>
+            <button class="secondary" @click="deleteAllAdmins">🗑️ 清空行政区</button>
+            <div style="width: 1px; height: 15px; background: #555; margin: 0 5px;"></div>
+            <button :class="{ active: currentTool === 'special_brush' }" @click="setTool('special_brush')">☣️ 涂特殊区</button>
+            <div v-if="currentTool === 'special_brush'" class="color-picker">
+              <div v-for="(color, index) in effectColors" :key="'eff'+index" class="color-swatch" :class="{ active: currentEffectColor === index }" :style="{ backgroundColor: color }" @click="currentEffectColor = index" title="焦土/瘟疫/魔法污染"></div>
+              <div class="color-swatch eraser-swatch" :class="{ active: currentEffectColor === -1 }" @click="currentEffectColor = -1">🧽</div>
+            </div>
+          </div>
+
+          <div class="row">
+            <span style="color: #a82626;">📍 地标：</span>
+            <button :class="{ active: currentTool === 'capital' }" @click="setTool('capital')">⭐ 首都</button>
+            <button :class="{ active: currentTool === 'city' }" @click="setTool('city')">🏙️ 城市</button>
+            <button :class="{ active: currentTool === 'fortress' }" @click="setTool('fortress')">🏰 要塞</button>
+            <button :class="{ active: currentTool === 'magic_tower' }" @click="setTool('magic_tower')">🔮 魔法塔</button>
+            <button :class="{ active: currentTool === 'portal' }" @click="setTool('portal')">⛩️ 传送阵</button>
+            <button :class="{ active: currentTool === 'monster_lair' }" @click="setTool('monster_lair')">🐉 巢穴</button>
+            <button :class="{ active: currentTool === 'church' }" @click="setTool('church')">⛪ 教堂</button>
+            <button :class="{ active: currentTool === 'trade_post' }" @click="setTool('trade_post')">🏪 贸易站</button>
+            <button :class="{ active: currentTool === 'camp' }" @click="setTool('camp')">🏕️ 兵营</button>
+            <button :class="{ active: currentTool === 'battle' }" @click="setTool('battle')">💥 战场</button>
+          </div>
+
+          <div class="row">
+            <span style="color: #d29922;">🛣️ 连线：</span>
+            <button :class="{ active: currentTool === 'road' }" @click="setTool('road')">🛣️ 道路</button>
+            <button :class="{ active: currentTool === 'river' }" @click="setTool('river')">🌊 河流</button>
+            <button :class="{ active: currentTool === 'defense' }" @click="setTool('defense')">🧱 防线</button>
+            <button :class="{ active: currentTool === 'attack' }" @click="setTool('attack')">⚔️ 进攻路线</button>
+            <div style="width: 1px; height: 15px; background: #555; margin: 0 10px;"></div>
+            <button :class="{ active: currentTool === 'none' }" @click="setTool('none')" style="background: #333; border: 1px solid #0e639c;">🖐️ 浏览/拖拽模式</button>
+          </div>
+        </div>
+
+        <div id="map-container">
+          <div class="layer-control">
+            <div style="font-weight: bold; color: #fff; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:5px;">图层开关</div>
+            <label><input type="checkbox" v-model="layerVisibility.labels" @change="toggleLayers"> 显示文字标签</label>
+            <label><input type="checkbox" v-model="layerVisibility.markers" @change="toggleLayers"> 显示所有图标/连线</label>
+          </div>
+
+          <!-- 左下角纯展示图例 -->
+          <div class="legend" v-if="mapData.customLegends && mapData.customLegends.length > 0">
+            <div style="font-weight: bold; color:#fff; border-bottom:1px solid #444; padding-bottom:5px; margin-bottom:5px;">图例</div>
+            <div class="legend-item" v-for="(leg, i) in mapData.customLegends" :key="'leg-'+i">
+              <div class="legend-color" :style="{ backgroundColor: leg.color }"></div> {{ leg.text }}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div class="right-pane" :class="{ collapsed: !isPanelOpen }">
+        <div class="panel-header">
+          <h3 style="margin:0; font-size:15px; color:#fff;">面板</h3>
+          <button class="secondary" @click="isPanelOpen = false">✖</button>
+        </div>
+        <div class="panel-content">
+          <div class="form-group">
+            <label>🔍 搜索地标 / 区域</label>
+            <input type="text" v-model="searchQuery" placeholder="输入名称..." class="search-box" />
+            <div v-if="searchQuery" style="max-height: 150px; overflow-y: auto; background:#1e1e1e; border-radius:4px; border:1px solid #333;">
+              <div v-for="res in searchResults" :key="res.id" class="result-item" @click="focusOnTarget(res)">
+                <span>{{ res.title }}</span>
+                <span style="color:#666; font-size:11px;">{{ res.type }}</span>
+              </div>
+            </div>
+          </div>
+
+          <hr style="border-color:#444; width:100%;" />
+
+          <div v-if="activeTarget">
+            <h4 style="color:#d29922; margin-bottom: 15px;">当前选中: {{ activeTarget.type }}</h4>
+            <div class="form-group"><label>名称</label><input type="text" v-model="activeTarget.title" @change="onPropertyChange" /></div>
+            <div class="form-group" v-if="['camp', 'temp_camp'].includes(activeTarget.type)"><label>兵力 / 数量</label><input type="text" v-model="activeTarget.desc" @change="onPropertyChange" placeholder="如: 5000" /></div>
+            <div class="form-group" v-if="['city', 'capital', 'fortress', 'magic_tower', 'church'].includes(activeTarget.type)">
+              <label>关联文章 (点击跳转)</label>
+              <select v-model="activeTarget.link" @change="onPropertyChange" style="cursor: pointer;">
+                <option value="">无关联</option>
+                <option v-for="file in mdFiles" :key="file" :value="file">{{ file }}</option>
+              </select>
+            </div>
+            <div class="form-group"><label>描述</label><textarea v-model="activeTarget.desc" @change="onPropertyChange" rows="3"></textarea></div>
+            <button class="danger" style="width: 100%; margin-top: 10px; justify-content: center;" @click="deleteActiveTarget">🗑️ 删除当前选中项</button>
+          </div>
+          <div v-else>
+            <p style="text-align: center; color: #666; margin-top: 50px;">点击地图上的图标、文字或路线进行编辑</p>
+          </div>
+
+          <!-- 💡 自定义图例管理区 (接管所有基础图例) -->
+          <hr style="border-color:#444; width:100%; margin-top: 20px;" />
+          <h4 style="color:#0e639c; margin-bottom: 10px;">图例管理</h4>
+          
+          <!-- 添加新图例 -->
+          <div style="display: flex; gap: 10px; margin-bottom: 15px; align-items: center;">
+            <div class="color-picker-wrapper" :style="{ backgroundColor: newLegend.color }">
+              <input type="color" v-model="newLegend.color" />
+            </div>
+            <input type="text" v-model="newLegend.text" placeholder="输入新图例说明..." style="flex: 1; height: 32px; padding: 0 8px;" @keyup.enter="addLegend" />
+            <button class="primary-btn" @click="addLegend" style="height: 32px;">添加</button>
+          </div>
+
+          <!-- 图例列表 -->
+          <div class="legend-manager-list">
+            <div class="legend-manager-row" v-for="(leg, i) in mapData.customLegends" :key="i">
+              <div class="left">
+                <div class="color-picker-wrapper" :style="{ backgroundColor: leg.color, width: '20px', height: '20px', borderWidth: '1px' }">
+                  <!-- 💡 绑定修改颜色 -->
+                  <input type="color" v-model="leg.color" />
+                </div>
+                <!-- 💡 绑定修改文字 -->
+                <input type="text" v-model="leg.text" @change="showToast('已修改图例')" />
+              </div>
+              <button class="danger" @click="removeLegend(i)">删除</button>
+            </div>
+            <div v-if="!mapData.customLegends || mapData.customLegends.length === 0" style="font-size: 12px; color: #666; text-align: center;">暂无图例，请在上方添加</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, computed, watch } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    const COUNTRY_COLORS = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000'];
+    const ADMIN_COLORS = ['#ff9999', '#99ccff', '#99ff99', '#ffcc99', '#cc99ff', '#ffff99'];
+    const EFFECT_COLORS = ['#333333', '#4d9900', '#cc00cc'];
+
+    createApp({
+      setup() {
+        // 💡 默认图例数据
+        const defaultLegends = [
+          { text: '国家版图', color: '#e6194B' },
+          { text: '行政区划', color: '#ff9999' },
+          { text: '焦土/废墟', color: '#333333' },
+          { text: '瘟疫/腐化', color: '#4d9900' },
+          { text: '魔法污染', color: '#cc00cc' }
+        ];
+
+        const mapData = ref({ image: '', markers: [], adminRegions: {}, countryNames: {}, customLegends: JSON.parse(JSON.stringify(defaultLegends)) }); 
+        let map = null;
+        let markersLayer = null;
+        let labelsLayer = null; 
+        
+        const generating = ref(false);
+        const countryCount = ref(7);
+        const currentTool = ref('none');
+        const currentBrushColor = ref(0);
+        const currentEffectColor = ref(0);
+        const colors = COUNTRY_COLORS;
+        const effectColors = EFFECT_COLORS;
+        
+        const isPanelOpen = ref(true);
+        const layerVisibility = ref({ labels: true, markers: true });
+        const activeTarget = ref(null); 
+        const searchQuery = ref('');
+        const mdFiles = ref([]);
+        
+        const newLegend = ref({ color: '#0e639c', text: '' });
+
+        let mapWidth = 1600;
+        let mapHeight = 900;
+        const gridSize = 4; 
+        let cols = mapWidth / gridSize;
+        let rows = mapHeight / gridSize;
+        
+        let gridData = [];
+        let adminGrid = []; 
+        let effectGrid = []; 
+        let nextAdminId = 1;
+
+        const undoStack = []; 
+        let roadStartPoint = ref(null);
+        let rectStartPoint = ref(null);
+        let rectPreviewLayer = null;
+        let tempDrawingLayer = null;
+
+        watch(isPanelOpen, () => {
+           setTimeout(() => { if(map) map.invalidateSize(); }, 350);
+        });
+
+        const addLegend = () => {
+           if(!newLegend.value.text.trim()) return showToast('请输入图例文字', true);
+           mapData.value.customLegends.push({ ...newLegend.value });
+           newLegend.value = { color: '#0e639c', text: '' };
+           showToast('✅ 图例已添加');
+        };
+
+        const removeLegend = (index) => {
+           mapData.value.customLegends.splice(index, 1);
+        };
+
+        const fetchMdFiles = async () => {
+           try {
+             const res = await fetch(`${API_BASE}/files`);
+             const tree = await res.json();
+             
+             const extractFiles = (nodes, currentPath = '') => {
+               let files = [];
+               nodes.forEach(node => {
+                 if (node.type === 'file') {
+                   const cleanPath = '/' + (currentPath ? currentPath + '/' : '') + node.name.replace('.md', '');
+                   files.push(cleanPath);
+                 } else if (node.type === 'folder') {
+                   files = files.concat(extractFiles(node.children || [], currentPath ? currentPath + '/' + node.name : node.name));
+                 }
+               });
+               return files;
+             };
+             mdFiles.value = extractFiles(tree);
+           } catch (e) {
+             console.error("获取文章列表失败", e);
+           }
+        };
+
+        const getIcon = (type) => {
+          const iconMap = { 
+            capital: '⭐', city: '🏙️', mountain: '⛰️', village: '🏡', farm: '🌾', industry: '🏭', port: '⚓', mine: '⛏️', camp: '🏕️',
+            magic_tower: '🔮', portal: '⛩️', monster_lair: '🐉', alchemy: '🧪', church: '⛪', cult: '🌙', guild: '🏥', ruins: '⚰️',
+            fortress: '🏰', watchtower: '🗼', battle: '💥', temp_camp: '⛺', trade_post: '🏪', supply: '📦', treasury: '💰', checkpoint: '🚧'
+          };
+          const sizeMap = { capital: 24, city: 18, fortress: 22, battle: 24 };
+          const size = sizeMap[type] || 18;
+          return L.divIcon({
+            className: 'custom-icon',
+            html: `<div style="font-size: ${size}px; filter: drop-shadow(0 0 3px #000);">${iconMap[type] || '📍'}</div>`,
+            iconSize: [size, size], iconAnchor: [size/2, size/2]
+          });
+        };
+
+        const initMap = () => {
+          map = L.map('map-container', { crs: L.CRS.Simple, minZoom: -2, maxZoom: 6, zoomControl: true });
+          markersLayer = L.layerGroup().addTo(map);
+          labelsLayer = L.layerGroup().addTo(map);
+          
+          map.on('click', handleMapClick);
+          map.on('mousemove', (e) => {
+             if ((currentTool.value === 'rect' || currentTool.value === 'admin_rect') && rectStartPoint.value) {
+                const bounds = L.latLngBounds(rectStartPoint.value, e.latlng);
+                if (!rectPreviewLayer) {
+                    rectPreviewLayer = L.rectangle(bounds, {color: '#fff', weight: 2, fillOpacity: 0.3, dashArray: '5, 5', interactive: false}).addTo(map);
+                } else {
+                    rectPreviewLayer.setBounds(bounds);
+                }
+             }
+             if (['road', 'river', 'defense', 'attack'].includes(currentTool.value) && roadStartPoint.value) {
+                if (!tempDrawingLayer) {
+                   tempDrawingLayer = L.polyline([roadStartPoint.value, e.latlng], {color: '#fff', weight: 2, dashArray: '4, 4', interactive: false}).addTo(map);
+                } else {
+                   tempDrawingLayer.setLatLngs([roadStartPoint.value, e.latlng]);
+                }
+             }
+          });
+        };
+
+        const setTool = (tool) => {
+           currentTool.value = tool;
+           roadStartPoint.value = null;
+           rectStartPoint.value = null;
+           if(rectPreviewLayer) { map.removeLayer(rectPreviewLayer); rectPreviewLayer = null; }
+           if(tempDrawingLayer) { map.removeLayer(tempDrawingLayer); tempDrawingLayer = null; }
+        };
+
+        const toggleLayers = () => {
+           if (layerVisibility.value.labels) { 
+               if (!map.hasLayer(labelsLayer)) map.addLayer(labelsLayer); 
+           } else { 
+               if (map.hasLayer(labelsLayer)) map.removeLayer(labelsLayer); 
+           }
+
+           if (layerVisibility.value.markers) { 
+               if (!map.hasLayer(markersLayer)) map.addLayer(markersLayer); 
+           } else { 
+               if (map.hasLayer(markersLayer)) map.removeLayer(markersLayer); 
+           }
+        };
+
+        const handleMapClick = (e) => {
+          if (currentTool.value === 'none') {
+             activeTarget.value = null;
+             return;
+          }
+          
+          if (e.latlng.lng < 0 || e.latlng.lng > mapWidth || e.latlng.lat < 0 || e.latlng.lat > mapHeight) {
+             if(['brush', 'rect', 'admin_brush', 'admin_rect', 'special_brush'].includes(currentTool.value)) {
+                showToast('已到达世界边界，请先扩大边界', true);
+             }
+             return;
+          }
+
+          const x = Math.floor(e.latlng.lng / gridSize);
+          const y = Math.floor((mapHeight - e.latlng.lat) / gridSize); 
+          if(x<0 || x>=cols || y<0 || y>=rows) return;
+
+          if (currentTool.value === 'brush' || currentTool.value === 'rect') {
+            if (!mapData.value.image) return;
+            if (currentTool.value === 'brush') {
+              saveHistory();
+              let changed = false;
+              const targetColor = currentBrushColor.value === -1 ? -1 : currentBrushColor.value;
+              for(let dy=-2; dy<=2; dy++) {
+                for(let dx=-2; dx<=2; dx++) {
+                   const nx = x + dx, ny = y + dy;
+                   if(nx >= 0 && nx < cols && ny >= 0 && ny < rows) {
+                      if(gridData[ny][nx] !== targetColor) {
+                         gridData[ny][nx] = targetColor;
+                         if(targetColor === -1) adminGrid[ny][nx] = -1;
+                         changed = true;
+                      }
+                   }
+                }
+              }
+              if (changed) { renderMapToCanvas(false); updateLabels(); }
+            } else {
+              if (!rectStartPoint.value) {
+                rectStartPoint.value = e.latlng;
+                showToast('起点已记录');
+              } else {
+                saveHistory();
+                const minX = Math.min(rectStartPoint.value.lng, e.latlng.lng);
+                const maxX = Math.max(rectStartPoint.value.lng, e.latlng.lng);
+                const minY = Math.min(rectStartPoint.value.lat, e.latlng.lat);
+                const maxY = Math.max(rectStartPoint.value.lat, e.latlng.lat);
+                const startX = Math.floor(minX / gridSize);
+                const endX = Math.floor(maxX / gridSize);
+                const startY = Math.floor((mapHeight - maxY) / gridSize);
+                const endY = Math.floor((mapHeight - minY) / gridSize);
+                const targetColor = currentBrushColor.value === -1 ? -1 : currentBrushColor.value;
+                for(let y = startY; y <= endY; y++) {
+                  for(let x = startX; x <= endX; x++) {
+                    if(x >= 0 && x < cols && y >= 0 && y < rows) {
+                      gridData[y][x] = targetColor;
+                      if(targetColor === -1) adminGrid[y][x] = -1;
+                    }
+                  }
+                }
+                if (rectPreviewLayer) { map.removeLayer(rectPreviewLayer); rectPreviewLayer = null; }
+                rectStartPoint.value = null;
+                renderMapToCanvas(false); updateLabels();
+              }
+            }
+            return;
+          }
+
+          if (currentTool.value === 'special_brush') {
+             if (!mapData.value.image) return;
+             saveHistory();
+             let changed = false;
+             const targetEff = currentEffectColor.value === -1 ? -1 : currentEffectColor.value;
+             for(let dy=-1; dy<=1; dy++) {
+              for(let dx=-1; dx<=1; dx++) {
+                 const nx = x + dx, ny = y + dy;
+                 if(nx >= 0 && nx < cols && ny >= 0 && ny < rows && gridData[ny][nx] !== -1) {
+                    if(effectGrid[ny][nx] !== targetEff) { effectGrid[ny][nx] = targetEff; changed = true; }
+                 }
+              }
+            }
+            if(changed) renderMapToCanvas(false);
+            return;
+          }
+
+          if (['road', 'river', 'defense', 'attack'].includes(currentTool.value)) {
+            if (!roadStartPoint.value) {
+              roadStartPoint.value = e.latlng;
+              showToast(`已记录起点`);
+            } else {
+              const latlngs = [roadStartPoint.value, e.latlng];
+              const type = currentTool.value;
+              let defaultName = { road: '大道', river: '河流', defense: '防线', attack: '进军' }[type];
+              const newMarker = { id: Date.now().toString(), type: type, points: [roadStartPoint.value, e.latlng], title: defaultName, desc: '', link: '' };
+              mapData.value.markers.push(newMarker);
+              roadStartPoint.value = null;
+              if(tempDrawingLayer) { map.removeLayer(tempDrawingLayer); tempDrawingLayer = null; }
+              renderMarkers();
+            }
+            return;
+          }
+
+          if (currentTool.value !== 'none') {
+            const type = currentTool.value;
+            const newMarker = {
+              id: Date.now().toString(), type: type, lat: e.latlng.lat, lng: e.latlng.lng, title: '新标识', desc: '', link: ''
+            };
+            mapData.value.markers.push(newMarker);
+            renderMarkers();
+            activeTarget.value = newMarker;
+            isPanelOpen.value = true;
+          }
+        };
+
+        const renderMarkers = () => {
+          if (!markersLayer) return;
+          markersLayer.clearLayers();
+          
+          mapData.value.markers.forEach(m => {
+            let layer = null;
+            if (['road', 'river', 'defense', 'attack'].includes(m.type)) {
+              let lineStyle = { color: '#fff', weight: 3, dashArray: '' };
+              if (m.type === 'road') lineStyle = { color: '#d29922', weight: 3, dashArray: '5, 5' };
+              if (m.type === 'river') lineStyle = { color: '#4363d8', weight: 4, dashArray: '' };
+              if (m.type === 'defense') lineStyle = { color: '#888888', weight: 6, dashArray: '2, 6' };
+              if (m.type === 'attack') lineStyle = { color: '#e6194B', weight: 5 };
+              
+              layer = L.polyline(m.points, lineStyle).addTo(markersLayer);
+              if (m.type === 'attack') layer.getElement()?.classList.add('animated-route');
+              layer.bindTooltip(m.title, { permanent: true, direction: 'center', className: 'bg-transparent border-0 text-white text-shadow' });
+            } else {
+              let tooltipText = m.title;
+              if (['camp', 'temp_camp'].includes(m.type) && m.desc) {
+                 tooltipText += ` <span class="troop-badge">${m.desc}</span>`;
+              }
+              
+              layer = L.marker([m.lat, m.lng], { icon: getIcon(m.type), draggable: true }).addTo(markersLayer);
+              layer.bindTooltip(tooltipText, { direction: 'top', offset: [0, -10], className: 'bg-dark text-white border-0' });
+              
+              layer.on('dragend', (e) => {
+                 const pos = e.target.getLatLng();
+                 m.lat = pos.lat;
+                 m.lng = pos.lng;
+              });
+            }
+            
+            layer.on('click', (e) => {
+              L.DomEvent.stopPropagation(e);
+              if(currentTool.value === 'none' || currentTool.value === 'brush') {
+                 activeTarget.value = m; 
+                 isPanelOpen.value = true;
+              }
+            });
+          });
+        };
+
+        const updateLabels = () => {
+          if (!labelsLayer) return;
+          labelsLayer.clearLayers();
+
+          let countryCentroids = {};
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              const id = gridData[y]?.[x];
+              if (id !== undefined && id >= 0) {
+                if (!countryCentroids[id]) countryCentroids[id] = { x: 0, y: 0, count: 0 };
+                countryCentroids[id].x += x; countryCentroids[id].y += y; countryCentroids[id].count++;
+              }
+            }
+          }
+          for (let id in countryCentroids) {
+             const c = countryCentroids[id];
+             if(c.count < 20) continue;
+             const lat = mapHeight - (c.y / c.count) * gridSize;
+             const lng = (c.x / c.count) * gridSize;
+             const cName = mapData.value.countryNames[id] || `国家 #${parseInt(id) + 1}`;
+             const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="label-country">${cName}</div>`, iconSize: [0,0] });
+             const marker = L.marker([lat, lng], { icon }).addTo(labelsLayer);
+             marker.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                const newName = prompt('修改国家名称:', cName);
+                if (newName && newName.trim()) { mapData.value.countryNames[id] = newName; updateLabels(); }
+             });
+          }
+
+          let adminCentroids = {};
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              const aId = adminGrid[y]?.[x];
+              if (aId !== undefined && aId !== -1) {
+                if (!adminCentroids[aId]) adminCentroids[aId] = { x: 0, y: 0, count: 0 };
+                adminCentroids[aId].x += x; adminCentroids[aId].y += y; adminCentroids[aId].count++;
+              }
+            }
+          }
+          for (let id in adminCentroids) {
+             const c = adminCentroids[id];
+             if(c.count < 10) continue;
+             const lat = mapHeight - (c.y / c.count) * gridSize;
+             const lng = (c.x / c.count) * gridSize;
+             const adminName = mapData.value.adminRegions[id]?.name || '行政区';
+             const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="label-admin">${adminName}</div>`, iconSize: [0,0] });
+             const marker = L.marker([lat, lng], { icon }).addTo(labelsLayer);
+             marker.on('click', (e) => {
+                L.DomEvent.stopPropagation(e);
+                const action = prompt('修改行政区名称 (输入 "del" 删除):', adminName);
+                if (!action) return;
+                if (action.toLowerCase() === 'del') {
+                   if(confirm('确定删除该行政区吗？')){
+                      saveHistory();
+                      for(let y=0; y<rows; y++) for(let x=0; x<cols; x++) if(adminGrid[y][x] === parseInt(id)) adminGrid[y][x] = -1;
+                      delete mapData.value.adminRegions[id];
+                      renderMapToCanvas(false); updateLabels();
+                   }
+                } else if (action.trim() && action !== adminName) {
+                   mapData.value.adminRegions[id].name = action; updateLabels();
+                }
+             });
+          }
+        };
+
+        const renderMapToCanvas = (resetView = false) => {
+          const canvas = document.createElement('canvas');
+          canvas.width = mapWidth; canvas.height = mapHeight;
+          const ctx = canvas.getContext('2d');
+          
+          ctx.fillStyle = '#1e3a5f';
+          ctx.fillRect(0, 0, mapWidth, mapHeight);
+          
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              if(gridData[y] && gridData[y][x] !== -1) {
+                ctx.fillStyle = COUNTRY_COLORS[gridData[y][x] % COUNTRY_COLORS.length];
+                ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+              }
+            }
+          }
+          ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5;
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              const id = gridData[y][x];
+              if (id === -1) continue;
+              if (x < cols - 1 && gridData[y][x+1] !== id) { ctx.beginPath(); ctx.moveTo((x+1) * gridSize, y * gridSize); ctx.lineTo((x+1) * gridSize, (y+1) * gridSize); ctx.stroke(); }
+              if (y < rows - 1 && gridData[y+1][x] !== id) { ctx.beginPath(); ctx.moveTo(x * gridSize, (y+1) * gridSize); ctx.lineTo((x+1) * gridSize, (y+1) * gridSize); ctx.stroke(); }
+            }
+          }
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              const aId = adminGrid[y]?.[x];
+              if(aId !== undefined && aId !== -1) {
+                const color = mapData.value.adminRegions[aId]?.color || '#ff9999';
+                ctx.fillStyle = color + '80'; ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+              }
+            }
+          }
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              const eId = effectGrid[y]?.[x];
+              if(eId !== undefined && eId !== -1) {
+                ctx.fillStyle = EFFECT_COLORS[eId] + 'a0'; ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+              }
+            }
+          }
+
+          updateMapImage(canvas.toDataURL('image/png'), resetView);
+        };
+
+        const updateMapImage = (base64Img, resetView = false) => {
+          if (!base64Img || !map) return;
+          let currentCenter = null; let currentZoom = null;
+          try { if (map._loaded) { currentCenter = map.getCenter(); currentZoom = map.getZoom(); } } catch (e) {}
+
+          mapData.value.image = base64Img;
+          map.eachLayer((layer) => { if (layer instanceof L.ImageOverlay) map.removeLayer(layer); });
+          
+          const img = new Image();
+          img.src = base64Img;
+          img.onload = () => {
+            const bounds = [[0, 0], [mapHeight, mapWidth]];
+            L.imageOverlay(base64Img, bounds).addTo(map);
+            if (resetView || !currentCenter) { map.fitBounds(bounds); map.setMaxBounds(bounds); } 
+            else { map.setView(currentCenter, currentZoom, { animate: false }); }
+            renderMarkers();
+          };
+        };
+
+        const generatePoliticalMap = () => {
+          generating.value = true;
+          setTimeout(() => {
+            try {
+              undoStack.length = 0; 
+              mapData.value.adminRegions = {}; mapData.value.countryNames = {}; nextAdminId = 1;
+              gridData = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+              adminGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+              effectGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+              
+              const numCenters = Math.floor(Math.random() * 3) + 2;
+              const centers = [];
+              for(let i=0; i<numCenters; i++) { centers.push({ x: cols * (0.2 + Math.random() * 0.6), y: rows * (0.2 + Math.random() * 0.6), r: cols * (0.2 + Math.random() * 0.3) }); }
+
+              let totalLandPixels = 0;
+              for(let y=0; y<rows; y++) {
+                for(let x=0; x<cols; x++) {
+                  let dist = Infinity;
+                  for(let c of centers) {
+                    const warpX = Math.sin(y * 0.05 + c.x) * 10;
+                    const warpY = Math.cos(x * 0.05 + c.y) * 10;
+                    let d = Math.sqrt((x - c.x + warpX)**2 + (y - c.y + warpY)**2) / c.r;
+                    if (d < dist) dist = d;
+                  }
+                  const n1 = Math.sin(x * 0.08) * Math.cos(y * 0.12) * 0.25;
+                  const n2 = Math.sin(x * 0.25 + y * 0.18) * 0.15;
+                  const n3 = Math.cos(x * 0.04 - y * 0.22) * 0.2;
+                  dist = dist + n1 + n2 + n3;
+                  if (dist < 1.0) { gridData[y][x] = -2; totalLandPixels++; }
+                }
+              }
+
+              if (totalLandPixels < countryCount.value * 100) {
+                 for(let y=0; y<rows; y++) for(let x=0; x<cols; x++) gridData[y][x] = -2;
+              }
+
+              const visited = new Array(rows).fill(null).map(() => new Array(cols).fill(false));
+              const queue = []; let head = 0;
+              for(let x=0; x<cols; x++) { queue.push([x, 0]); queue.push([x, rows-1]); }
+              for(let y=0; y<rows; y++) { queue.push([0, y]); queue.push([cols-1, y]); }
+              while(head < queue.length) {
+                const [cx, cy] = queue[head++];
+                if(cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
+                if(visited[cy][cx] || gridData[cy][cx] !== -1) continue;
+                visited[cy][cx] = true;
+                queue.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
+              }
+              for(let y=0; y<rows; y++) {
+                for(let x=0; x<cols; x++) { if(gridData[y][x] === -1 && !visited[y][x]) gridData[y][x] = -2; }
+              }
+
+              let seeds = []; let attempts = 0;
+              while(seeds.length < countryCount.value && attempts < 10000) {
+                const rx = Math.floor(Math.random() * cols);
+                const ry = Math.floor(Math.random() * rows);
+                if (gridData[ry][rx] === -2) { gridData[ry][rx] = seeds.length; seeds.push({ x: rx, y: ry, id: seeds.length }); }
+                attempts++;
+              }
+
+              let bfsQueue = [...seeds]; let bfsHead = 0;
+              while(bfsHead < bfsQueue.length) {
+                const curr = bfsQueue[bfsHead++];
+                const dirs = [[0,1], [1,0], [0,-1], [-1,0]].sort(() => Math.random() - 0.5);
+                for(let d of dirs) {
+                  const nx = curr.x + d[0], ny = curr.y + d[1];
+                  if(nx>=0 && nx<cols && ny>=0 && ny<rows && gridData[ny][nx] === -2) {
+                    gridData[ny][nx] = curr.id; bfsQueue.push({ x: nx, y: ny, id: curr.id });
+                  }
+                }
+              }
+
+              renderMapToCanvas(true);
+              if (mapData.value.markers.length > 0) mapData.value.markers = [];
+              renderMarkers(); updateLabels(); 
+              showToast('🪄 版图已生成！');
+            } catch (e) { console.error(e); } finally { generating.value = false; }
+          }, 50);
+        };
+
+        const onPropertyChange = () => {
+           renderMarkers();
+        };
+
+        const deleteActiveTarget = () => {
+           if(!activeTarget.value) return;
+           if(confirm('确定要删除该目标吗？')) {
+              mapData.value.markers = mapData.value.markers.filter(m => m.id !== activeTarget.value.id);
+              activeTarget.value = null;
+              renderMarkers();
+           }
+        };
+
+        const searchResults = computed(() => {
+           if(!searchQuery.value) return [];
+           const q = searchQuery.value.toLowerCase();
+           return mapData.value.markers.filter(m => m.title.toLowerCase().includes(q));
+        });
+
+        const focusOnTarget = (marker) => {
+           activeTarget.value = marker;
+           if(marker.points) { map.fitBounds(L.latLngBounds(marker.points), { maxZoom: 3 }); } 
+           else { map.setView([marker.lat, marker.lng], 3, { animate: true }); }
+        };
+
+        const saveHistory = () => {
+          if (undoStack.length > 30) undoStack.shift();
+          undoStack.push({
+            grid: JSON.parse(JSON.stringify(gridData)),
+            adminGrid: JSON.parse(JSON.stringify(adminGrid)),
+            effectGrid: JSON.parse(JSON.stringify(effectGrid)),
+            markers: JSON.parse(JSON.stringify(mapData.value.markers)),
+            adminRegions: JSON.parse(JSON.stringify(mapData.value.adminRegions)),
+            countryNames: JSON.parse(JSON.stringify(mapData.value.countryNames)),
+            customLegends: JSON.parse(JSON.stringify(mapData.value.customLegends)),
+            nextAdminId: nextAdminId, width: mapWidth, height: mapHeight
+          });
+        };
+
+        const undoBrush = () => {
+          if (undoStack.length > 0) {
+            const state = undoStack.pop();
+            gridData = state.grid; adminGrid = state.adminGrid; effectGrid = state.effectGrid;
+            mapData.value.markers = state.markers; mapData.value.adminRegions = state.adminRegions; mapData.value.countryNames = state.countryNames;
+            mapData.value.customLegends = state.customLegends;
+            nextAdminId = state.nextAdminId; mapWidth = state.width; mapHeight = state.height;
+            cols = mapWidth / gridSize; rows = mapHeight / gridSize;
+            
+            if (markersLayer) markersLayer.clearLayers();
+            renderMapToCanvas(true); updateLabels(); 
+            activeTarget.value = null;
+          }
+        };
+
+        const expandMap = () => {
+          if (!mapData.value.image) return;
+          saveHistory();
+          const padding = 100;
+          const pxPadding = padding * gridSize;
+          const newCols = cols + padding * 2;
+          const newRows = rows + padding * 2;
+          const newGrid = [], newAdminGrid = [], newEffectGrid = [];
+          for(let y=0; y<newRows; y++) {
+            newGrid[y] = new Array(newCols).fill(-1);
+            newAdminGrid[y] = new Array(newCols).fill(-1);
+            newEffectGrid[y] = new Array(newCols).fill(-1);
+          }
+          for(let y=0; y<rows; y++) {
+            for(let x=0; x<cols; x++) {
+              newGrid[y + padding][x + padding] = gridData[y][x];
+              newAdminGrid[y + padding][x + padding] = adminGrid[y][x];
+              newEffectGrid[y + padding][x + padding] = effectGrid[y][x];
+            }
+          }
+          mapWidth += pxPadding * 2; mapHeight += pxPadding * 2; cols = newCols; rows = newRows;
+          mapData.value.markers.forEach(m => {
+            if (['road', 'river', 'defense', 'attack'].includes(m.type)) { m.points.forEach(pt => { pt.lat += pxPadding; pt.lng += pxPadding; }); } 
+            else { m.lat += pxPadding; m.lng += pxPadding; }
+          });
+          gridData = newGrid; adminGrid = newAdminGrid; effectGrid = newEffectGrid;
+          renderMapToCanvas(true); updateLabels();
+          showToast('🌐 边界已扩大！');
+        };
+
+        const deleteAllAdmins = () => {
+          if (!confirm('确定清空所有行政区划吗？')) return;
+          saveHistory();
+          adminGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+          mapData.value.adminRegions = {};
+          renderMapToCanvas(false); updateLabels();
+        };
+
+        const exportMapImage = () => {
+           if (!mapData.value.image) return;
+           const a = document.createElement('a');
+           a.href = mapData.value.image;
+           a.download = 'world_map_export.png';
+           document.body.appendChild(a);
+           a.click();
+           document.body.removeChild(a);
+           showToast('✅ 已导出高清大图（不含图标）');
+        };
+
+        const saveMap = async () => {
+          await fetch(`${API_BASE}/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapData.value) });
+          showToast('✅ 数据已保存');
+        };
+
+        const showToast = (msg, isError = false) => {
+          const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
+          const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2500);
+        };
+
+        onMounted(async () => {
+          setTimeout(async () => {
+            initMap();
+            fetchMdFiles();
+            
+            try {
+              const res = await fetch(`${API_BASE}/map`);
+              mapData.value = await res.json();
+              
+              if (!mapData.value.adminRegions) mapData.value.adminRegions = {};
+              if (!mapData.value.countryNames) mapData.value.countryNames = {};
+              if (!mapData.value.customLegends) mapData.value.customLegends = [];
+              
+              // 兼容旧存档，自动加入默认图例
+              if (mapData.value.customLegends.length === 0) {
+                  mapData.value.customLegends = JSON.parse(JSON.stringify(defaultLegends));
+              }
+              
+              if (mapData.value.image) {
+                map.eachLayer((layer) => { if (layer instanceof L.ImageOverlay) map.removeLayer(layer); });
+                const img = new Image();
+                img.src = mapData.value.image;
+                img.onload = () => {
+                  mapWidth = img.width; mapHeight = img.height;
+                  cols = mapWidth / gridSize; rows = mapHeight / gridSize;
+                  adminGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+                  effectGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
+                  const bounds = [[0, 0], [mapHeight, mapWidth]];
+                  L.imageOverlay(mapData.value.image, bounds).addTo(map);
+                  map.fitBounds(bounds); map.setMaxBounds(bounds);
+                  renderMarkers();
+                };
+              }
+            } catch (e) {}
+          }, 200);
+        });
+
+        return { 
+          generating, countryCount, currentTool, currentBrushColor, currentEffectColor, colors, effectColors, undoStack,
+          mapData, generatePoliticalMap, expandMap, undoBrush, saveMap, setTool, deleteAllAdmins,
+          isPanelOpen, layerVisibility, toggleLayers, activeTarget, onPropertyChange, deleteActiveTarget,
+          searchQuery, searchResults, focusOnTarget, exportMapImage, mdFiles,
+          newLegend, addLegend, removeLegend
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

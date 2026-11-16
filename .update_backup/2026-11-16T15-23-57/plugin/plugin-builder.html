@@ -1,0 +1,413 @@
+<!-- 文件路径: plugin/plugin-builder.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>插件工厂 & 管理器</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    html, body { margin: 0; height: 100%; overflow: hidden; }
+    body { background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; padding: 20px; }
+    ::-webkit-scrollbar { width: 8px; height: 8px; }
+    ::-webkit-scrollbar-track { background: #1e1e1e; }
+    ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
+    ::-webkit-scrollbar-thumb:hover { background: #666; }
+    .header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; flex-shrink: 0; }
+    h2 { color: #fff; margin: 0; font-size: 20px; }
+    .layout { display: flex; gap: 20px; height: calc(100vh - 90px); min-height: 0; }
+    .left-panel { flex: 1; display: flex; flex-direction: column; gap: 15px; overflow-y: auto; padding-right: 5px; }
+    .card { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; flex-shrink: 0; }
+    .form-group { margin-bottom: 15px; display: flex; flex-direction: column; gap: 5px; }
+    label { font-size: 13px; color: #aaa; font-weight: bold; }
+    input, textarea { background: #121212; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; width: 100%; transition: border 0.2s; }
+    input:focus, textarea:focus { border-color: #0e639c; }
+    .hint { font-size: 12px; color: #888; margin-top: 4px; }
+    
+    /* 复选框样式 */
+    .checkbox-group { display: flex; align-items: center; gap: 8px; cursor: pointer; font-size: 13px; color: #ddd; margin-top: 10px; user-select: none; }
+    .checkbox-group input { width: 16px; height: 16px; cursor: pointer; accent-color: #0e639c; }
+
+    .prompt-box { background: #1e1e1e; border: 1px dashed #0e639c; padding: 15px; border-radius: 8px; font-size: 13px; color: #a8c7fa; line-height: 1.6; margin-top: 10px; position: relative; }
+    .btn-copy { position: absolute; top: 10px; right: 10px; background: #0e639c; border: none; color: #fff; padding: 4px 8px; border-radius: 4px; cursor: pointer; font-size: 12px; }
+    .code-area { flex: 1; font-family: Consolas, monospace; font-size: 13px; resize: none; line-height: 1.5; background: #0d0d0d; color: #d4d4d4; min-height: 300px; }
+    .right-panel { flex: 1.2; background: #252526; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column; min-height: 0; }
+    .panel-header { padding: 15px 20px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 8px 8px 0 0; }
+    .panel-header h3 { margin: 0; color: #fff; font-size: 15px; }
+    .list-header { display: grid; grid-template-columns: 30px 2fr 1fr 1fr 100px; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; font-weight: bold; }
+    .list-header div:nth-child(3), .list-header div:nth-child(4) { text-align: center; }
+    .list-header div:last-child { text-align: center; }
+    .plugin-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
+    .plugin-item { display: grid; grid-template-columns: 30px 2fr 1fr 1fr 100px; align-items: center; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px 20px; transition: border-color 0.2s, background-color 0.2s; cursor: grab; }
+    .plugin-item:active { cursor: grabbing; }
+    .plugin-item:hover { border-color: #555; background: #2a2a2a; }
+    .plugin-item.dragging { opacity: 0.3; }
+    .plugin-item.drag-over { border-top: 2px solid #2ea043; }
+    .drag-handle { color: #666; font-size: 18px; user-select: none; text-align: center; }
+    .plugin-item:hover .drag-handle { color: #aaa; }
+    .plugin-info { display: flex; flex-direction: column; gap: 4px; overflow: hidden; }
+    .plugin-name { font-weight: bold; color: #eee; font-size: 14px; display: flex; align-items: center; gap: 8px; white-space: nowrap; text-overflow: ellipsis; overflow: hidden; }
+    
+    /* 标签样式 */
+    .sys-tag { background: #333; color: #aaa; font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: normal; flex-shrink: 0; }
+    .backend-tag { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: normal; flex-shrink: 0; }
+    
+    .plugin-id { font-size: 12px; color: #666; font-family: monospace; }
+    .status-btn { display: flex; align-items: center; justify-content: center; gap: 4px; background: transparent; border: 1px solid #444; color: #888; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.2s; margin: 0 auto; width: 80px; }
+    .status-btn:hover { background: #333; color: #fff; }
+    .status-btn.active { color: #2ea043; border-color: #2ea043; background: rgba(46, 160, 67, 0.1); }
+    .action-group { display: flex; gap: 4px; justify-content: center; align-items: center; }
+    .btn-icon { background: transparent; border: 1px solid transparent; cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: 0.2s; display: flex; align-items: center; justify-content: center; color: #888; }
+    .btn-icon:hover { background: #333; color: #fff; }
+    .btn-icon.danger:hover { background: rgba(168, 38, 38, 0.2); color: #ff6b6b; }
+    .btn-icon.disabled { opacity: 0.3; cursor: not-allowed; }
+    .empty-tip { text-align: center; color: #666; padding: 40px 0; font-size: 13px; }
+    .btn { background: #0e639c; color: white; border: none; padding: 10px 20px; cursor: pointer; border-radius: 4px; font-weight: bold; font-size: 14px; transition: 0.2s; }
+    .btn:hover { background: #1177bb; }
+    .btn-success { background: #2ea043; }
+    .btn-success:hover { background: #3fb950; }
+    .custom-modal-overlay { position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0, 0, 0, 0.6); backdrop-filter: blur(2px); display: flex; justify-content: center; align-items: center; z-index: 99999; }
+    .custom-modal { background: #252526; border: 1px solid #444; border-radius: 8px; width: 400px; padding: 25px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); animation: scaleIn 0.2s ease-out; }
+    @keyframes scaleIn { from { transform: scale(0.95); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    .custom-modal h3 { margin: 0 0 10px 0; color: #fff; font-size: 16px; }
+    .custom-modal p { color: #aaa; font-size: 13px; line-height: 1.5; margin-bottom: 20px; }
+    .custom-modal .modal-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .custom-modal button { padding: 8px 16px; border-radius: 4px; cursor: pointer; font-size: 13px; font-weight: bold; border: none; transition: 0.2s; }
+    .custom-modal button.cancel { background: #333; color: #ccc; }
+    .custom-modal button.cancel:hover { background: #444; }
+    .custom-modal button.confirm { background: #0e639c; color: #fff; }
+    .custom-modal button.confirm:hover { background: #1177bb; }
+    .custom-modal button.confirm.danger { background: #a82626; }
+    .custom-modal button.confirm.danger:hover { background: #c92a2a; }
+    .list-move { transition: transform 0.4s cubic-bezier(0.55, 0, 0.1, 1); }
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="header">
+      <h2>🏭 插件工厂 & 导航管理</h2>
+      <button class="btn btn-success" @click="savePlugin">💾 保存并注册到导航</button>
+    </div>
+
+    <div class="layout">
+      <div class="left-panel">
+        <div class="card">
+          <h3 style="color:#fff; margin-top:0; font-size:15px;">1. 插件基本信息</h3>
+          <div class="form-group">
+            <label>插件 ID（英文，如 my-tool）</label>
+            <input v-model="pluginForm.id" placeholder="my-tool" />
+            <div class="hint">仅允许字母、数字、下划线、短横线</div>
+          </div>
+          <div class="form-group"><label>插件标题（如 🎲 随机器）</label><input v-model="pluginForm.title" placeholder="🎲 随机器" /></div>
+          <div class="form-group"><label>功能描述</label><input v-model="pluginForm.desc" placeholder="用于生成各种随机事件..." /></div>
+          
+          <div class="form-group">
+            <label>前台跳转链接 (选填)</label>
+            <input v-model="pluginForm.link" placeholder="/my-tool" :disabled="pluginForm.isBackendOnly" :style="{ opacity: pluginForm.isBackendOnly ? 0.5 : 1 }" />
+            <div class="hint">
+              如果希望在前台快捷导航生成页面，请填写以 <code>/</code> 开头的路径。<br>
+              留空或填 <code>#</code> 则前台不开放。
+            </div>
+            
+            <label class="checkbox-group">
+              <input type="checkbox" v-model="pluginForm.isBackendOnly" @change="onBackendOnlyChange">
+              🛠️ 仅在后台使用（不生成前台 .md 页面）
+            </label>
+          </div>
+        </div>
+
+        <div class="card" style="flex:1; display:flex; flex-direction:column;">
+          <h3 style="color:#fff; margin-top:0; font-size:15px;">2. 插件源码 (HTML)</h3>
+          <textarea v-model="pluginForm.code" class="code-area" placeholder="将 AI 生成的代码粘贴到这里..."></textarea>
+        </div>
+
+        <div class="card">
+          <h3 style="color:#fff; margin-top:0; font-size:15px;">3. AI 提示词助手</h3>
+          <div class="prompt-box">
+            <button class="btn-copy" @click="copyPrompt">📋 复制</button>
+            我需要你帮我写一个 Vue 3 CDN 单文件 HTML，作为一个独立的工具插件。<br><br>
+            <b>功能需求：</b> [填需求]<br>
+            <b>UI 要求：</b> 暗黑背景（#1e1e1e），主色调（#0e639c），内容宽度 800px 居中。<br>
+            <b>接口要求：</b> 如需保存数据，请用 POST 请求 <code>http://localhost:3001/api/file</code>，发送 <code>{ path: 'public/my-plugin.json', content: JSON.stringify(data) }</code>。<br>
+            代码以 <code>&lt;!DOCTYPE html&gt;</code> 开头。直接输出代码。
+          </div>
+        </div>
+      </div>
+
+      <div class="right-panel">
+        <div class="panel-header">
+          <h3>📦 插件库 (共 {{ plugins.length }} 个)</h3>
+          <button class="btn" style="padding: 6px 12px; font-size: 12px;" @click="fetchPlugins">🔄 刷新列表</button>
+        </div>
+
+        <div class="list-header">
+          <div></div>
+          <div>插件名称</div>
+          <div>前端显示</div>
+          <div>后端显示</div>
+          <div>操作</div>
+        </div>
+        
+        <div class="plugin-list">
+          <div v-if="loading" class="empty-tip">正在读取插件列表...</div>
+          <div v-else-if="plugins.length === 0" class="empty-tip">暂无插件，请在左侧创建吧！</div>
+          
+          <TransitionGroup v-else name="list" tag="div" style="display: flex; flex-direction: column; gap: 8px;">
+            <div 
+              v-for="(p, index) in plugins" 
+              :key="p.id" 
+              class="plugin-item"
+              :class="{ dragging: dragIndex === index, 'drag-over': dragOverIndex === index }"
+              draggable="true"
+              @dragstart="onDragStart(index, $event)"
+              @dragover.prevent="onDragOver(index, $event)"
+              @dragleave="onDragLeave(index, $event)"
+              @drop="onDrop(index, $event)"
+              @dragend="onDragEnd"
+            >
+              <div class="drag-handle">⋮⋮</div>
+
+              <div class="plugin-info">
+                <span class="plugin-name" :title="p.name">
+                  {{ p.icon || '🧩' }} {{ p.name }}
+                  <span v-if="p.isSystem" class="sys-tag">内置</span>
+                  <span v-if="p.isBackendOnly" class="backend-tag">仅后台</span>
+                </span>
+                <span class="plugin-id">ID: {{ p.id }}</span>
+              </div>
+              
+              <button class="status-btn" :class="{ active: !p.hideFrontend }" :title="p.hideFrontend ? '点击让前台导航显示' : '点击让前台导航隐藏'" @click="toggleStatus(p, 'hideFrontend')">
+                {{ p.hideFrontend ? '🙈 隐藏' : '👁️ 显示' }}
+              </button>
+
+              <button class="status-btn" :class="{ active: !p.hideBackend }" :title="p.hideBackend ? '点击让后台菜单显示' : '点击让后台菜单隐藏'" @click="toggleStatus(p, 'hideBackend')">
+                {{ p.hideBackend ? '🙈 隐藏' : '👁️ 显示' }}
+              </button>
+
+              <div class="action-group">
+                <button class="btn-icon danger" :class="{ 'disabled': p.isSystem }" :title="p.isSystem ? '系统内置核心功能不可删除' : '彻底删除该插件'" @click="deletePlugin(p)">🗑️</button>
+              </div>
+            </div>
+          </TransitionGroup>
+        </div>
+      </div>
+    </div>
+
+    <div class="custom-modal-overlay" v-if="modal.show" @click.self="closeModal">
+      <div class="custom-modal">
+        <h3>{{ modal.title }}</h3>
+        <p v-html="modal.message"></p>
+        <div class="modal-actions">
+          <button class="cancel" @click="closeModal" v-if="modal.type === 'confirm'">取消</button>
+          <button class="confirm" :class="{ danger: modal.isDanger }" @click="handleConfirm">{{ modal.type === 'alert' ? '确定' : '确认' }}</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+    const SAFE_ID = /^[a-zA-Z0-9_-]+$/;
+
+    createApp({
+      setup() {
+        const pluginForm = ref({ id: '', title: '', desc: '', link: '', code: '', isBackendOnly: false });
+        const plugins = ref([]);
+        const loading = ref(false);
+
+        const dragIndex = ref(-1);
+        const dragOverIndex = ref(-1);
+
+        const notifyParent = () => {
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'REFRESH_PLUGINS' }, '*');
+          }
+        };
+
+        const modal = ref({ show: false, type: 'alert', title: '', message: '', isDanger: false, onConfirm: null });
+        const openAlert = (title, message, isDanger = false) => {
+          modal.value = { show: true, type: 'alert', title, message, isDanger, onConfirm: null };
+        };
+        const openConfirm = (title, message, onConfirm, isDanger = false) => {
+          modal.value = { show: true, type: 'confirm', title, message, isDanger, onConfirm };
+        };
+        const closeModal = () => { modal.value.show = false; };
+        const handleConfirm = () => {
+          if (modal.value.type === 'confirm' && modal.value.onConfirm) {
+            modal.value.onConfirm();
+          }
+          closeModal();
+        };
+
+        const onBackendOnlyChange = () => {
+          if (pluginForm.value.isBackendOnly) {
+            pluginForm.value.link = '#'; 
+          }
+        };
+
+        const copyPrompt = () => {
+          const text = `我需要你帮我写一个 Vue 3 CDN 单文件 HTML，作为一个独立的工具插件。\n功能需求：[填需求]\nUI 要求：暗黑背景（#1e1e1e），主色调（#0e639c），内容宽度 800px 居中。\n接口要求：如果是保存数据，请使用 fetch 请求 http://localhost:3001/api/file，用 POST 发送 { path: 'public/my-plugin.json', content: JSON.stringify(data) }。\n代码以 <!DOCTYPE html> 开头。不用解释，直接输出代码。`;
+          navigator.clipboard.writeText(text).then(() => openAlert('✅ 提示词已复制', '可以在左侧或右侧的提示词框中粘贴进行辅助编写。'));
+        };
+
+        const fetchPlugins = async () => {
+          loading.value = true;
+          try {
+            const listRes = await fetch(`${API_BASE}/plugins/list?t=${Date.now()}`);
+            if (!listRes.ok) throw new Error('读取物理文件失败');
+            plugins.value = await listRes.json();
+          } catch (e) {
+            console.error(e);
+            openAlert('❌ 读取失败', `无法获取插件数据。<br><br><span style="color:#666;font-size:12px">${e.message}</span>`, true);
+          } finally {
+            loading.value = false;
+          }
+        };
+
+        const savePlugin = async () => {
+          const f = pluginForm.value;
+          if (!f.id || !f.code) return openAlert('⚠️ 信息不全', '插件 ID 和 源码 不能为空！', true);
+          if (!SAFE_ID.test(f.id)) return openAlert('⚠️ 格式错误', '插件 ID 只能包含字母、数字、下划线、短横线！', true);
+
+          try {
+            // 1. 保存 HTML 文件
+            const saveRes = await fetch(`${API_BASE}/plugins/file`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ id: f.id, content: f.code })
+            });
+            if (!saveRes.ok) throw new Error('保存插件文件失败');
+
+            // 💡 2. 核心判断：如果勾选了“仅后台”，则跳过生成 md
+            if (!f.isBackendOnly && f.link && f.link !== '#' && f.link.startsWith('/')) {
+              let docPath = f.link.replace(/^\//, '');
+              if (!docPath.endsWith('.md')) docPath += '.md';
+
+              // 💡 修复：去掉了容易引起 VSCode 语法解析冲突的 <script setup> 标签
+              const mdContent = `---
+title: ${f.title || f.id}
+aside: false
+prev: false
+next: false
+---
+
+<ClientOnly>
+  <iframe src="http://localhost:3001/plugin/${f.id}.html" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
+</ClientOnly>
+`;
+
+              await fetch(`${API_BASE}/file`, {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ 
+                  path: docPath, 
+                  content: mdContent 
+                })
+              });
+            }
+
+            // 3. 更新 navigation.json
+            const navRes = await fetch(`${API_BASE}/navigation?t=${Date.now()}`);
+            const navList = await navRes.json();
+            const idx = navList.findIndex(n => n.id === f.id);
+            
+            const navItem = {
+              id: f.id, title: f.title || f.id, desc: f.desc || '自定义插件', icon: '🧩', link: f.link || '#', 
+              isSystem: false,
+              isBackendOnly: f.isBackendOnly, 
+              hideFrontend: f.isBackendOnly ? true : false, 
+              hideBackend: false
+            };
+
+            if (idx >= 0) navList[idx] = { ...navList[idx], ...navItem };
+            else navList.push(navItem);
+
+            await fetch(`${API_BASE}/navigation`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(navList)
+            });
+
+            openAlert('✅ 保存成功', f.isBackendOnly ? '纯后台插件已保存。' : '插件已保存，且前台 MD 页面已自动生成。');
+            pluginForm.value = { id: '', title: '', desc: '', link: '', code: '', isBackendOnly: false };
+            fetchPlugins(); 
+            notifyParent(); 
+          } catch (e) {
+            openAlert('❌ 保存失败', e.message, true);
+          }
+        };
+
+        // 拖拽逻辑
+        const onDragStart = (index, e) => { dragIndex.value = index; e.dataTransfer.effectAllowed = 'move'; };
+        const onDragOver = (index, e) => { if (dragIndex.value === -1) return; dragOverIndex.value = index; };
+        const onDragLeave = (index, e) => { if (dragOverIndex.value === index) dragOverIndex.value = -1; };
+        const onDrop = async (targetIndex, e) => {
+          if (dragIndex.value === -1 || dragIndex.value === targetIndex) { onDragEnd(); return; }
+          const sourceP = plugins.value[dragIndex.value];
+          plugins.value.splice(dragIndex.value, 1);
+          plugins.value.splice(targetIndex, 0, sourceP);
+          dragOverIndex.value = -1;
+          await syncOrderToBackend();
+          notifyParent();
+          onDragEnd();
+        };
+        const onDragEnd = () => { dragIndex.value = -1; dragOverIndex.value = -1; };
+
+        const syncOrderToBackend = async () => {
+          try {
+            const navRes = await fetch(`${API_BASE}/navigation?t=${Date.now()}`);
+            let navList = await navRes.json();
+            const newNavList = [];
+            plugins.value.forEach(p => {
+              let navItem = navList.find(n => n.id === p.id);
+              if (!navItem) navItem = { id: p.id, title: p.name, icon: p.icon, desc: '自定义', link: '#', isSystem: p.isSystem, isBackendOnly: p.isBackendOnly, hideFrontend: true, hideBackend: true };
+              newNavList.push(navItem);
+            });
+            navList.forEach(n => { if (!newNavList.find(item => item.id === n.id)) newNavList.push(n); });
+            await fetch(`${API_BASE}/navigation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(newNavList) });
+          } catch (e) { fetchPlugins(); }
+        };
+
+        const toggleStatus = async (p, field) => {
+          try {
+            const navRes = await fetch(`${API_BASE}/navigation?t=${Date.now()}`);
+            let navList = await navRes.json();
+            let navItem = navList.find(n => n.id === p.id);
+            if (!navItem) {
+              navItem = { id: p.id, title: p.name, icon: p.icon, desc: p.isSystem ? '系统内置' : '自定义', link: '#', isSystem: p.isSystem, isBackendOnly: p.isBackendOnly, hideFrontend: field === 'hideFrontend' ? true : false, hideBackend: field === 'hideBackend' ? true : false };
+              navList.push(navItem);
+            } else { navItem[field] = !navItem[field]; }
+            await fetch(`${API_BASE}/navigation`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(navList) });
+            fetchPlugins(); notifyParent(); 
+          } catch (e) { openAlert('❌ 操作失败', e.message, true); }
+        };
+
+        const deletePlugin = (p) => {
+          if (p.isSystem) return openAlert('⚠️ 拒绝操作', '系统内置核心功能不可删除！', true);
+          openConfirm('⚠️ 确认删除', `确定要彻底删除插件 <b>[${p.id}]</b> 吗？<br><br>此操作不可逆。`, async () => {
+            try {
+              const res = await fetch(`${API_BASE}/plugins/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ id: p.id }) });
+              const data = await res.json();
+              if (data.success) {
+                if (pluginForm.value.id === p.id) pluginForm.value = { id: '', title: '', desc: '', link: '', code: '', isBackendOnly: false };
+                if (!p.isBackendOnly && p.link && p.link !== '#') {
+                   let docPath = p.link.replace(/^\//, '');
+                   if (!docPath.endsWith('.md')) docPath += '.md';
+                   await fetch(`${API_BASE}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: docPath }) });
+                }
+                fetchPlugins(); notifyParent(); 
+              } else { openAlert('❌ 删除失败', (data.error || data.message), true); }
+            } catch (e) { openAlert('❌ 请求失败', e.message, true); }
+          }, true);
+        };
+
+        onMounted(fetchPlugins);
+
+        return { pluginForm, plugins, loading, copyPrompt, savePlugin, fetchPlugins, toggleStatus, deletePlugin, modal, closeModal, handleConfirm, dragIndex, dragOverIndex, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, onBackendOnlyChange };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

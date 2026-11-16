@@ -145,7 +145,8 @@
     <div class="custom-modal-overlay" v-if="modal.show" @click.self="closeModal">
       <div class="custom-modal-box">
         <h3>{{ modal.title }}</h3>
-        <p v-if="modal.message">{{ modal.message }}</p>
+        <p v-if="modal.message" v-html="modal.message"></p>
+        <div v-if="modal.loading" class="modal-spinner"><span></span><span></span><span></span></div>
         
         <div class="modal-input-group" v-if="modal.type === 'prompt'">
           <input v-model="modal.input1" :placeholder="modal.placeholder1" @keyup.enter="confirmModal" autofocus />
@@ -163,7 +164,7 @@
         <!-- 💡 更新日志展示区 -->
         <div v-if="modal.updateLogs" class="update-log-box" v-html="modal.updateLogs"></div>
 
-        <div class="modal-actions">
+        <div class="modal-actions" v-if="!modal.hideActions">
           <button class="secondary" @click="closeModal">取消</button>
           <button :class="{ danger: modal.isDanger }" @click="confirmModal">确认</button>
         </div>

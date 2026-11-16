@@ -1,0 +1,37 @@
+{
+  "epochs": [
+    {
+      "id": "1",
+      "name": "新纪元",
+      "desc": "描述..."
+    },
+    {
+      "id": "2",
+      "name": "新纪元2",
+      "desc": "描述..."
+    }
+  ],
+  "countries": [
+    {
+      "name": "新势力1",
+      "color": "#ff0000",
+      "visibleIn": [
+        "1"
+      ],
+      "path": "M 100 100 L 300 80 L 200 250 Z",
+      "labelX": 200,
+      "labelY": 143
+    },
+    {
+      "name": "新势力",
+      "color": "#0e639c",
+      "visibleIn": [
+        "1",
+        "2"
+      ],
+      "path": "M 200 17 L 342 97 L 221 168 Z",
+      "labelX": 254,
+      "labelY": 94
+    }
+  ]
+}

@@ -1,0 +1,19 @@
+{
+  "nodes": [
+    {
+      "name": "陈默",
+      "category": "幻想域"
+    },
+    {
+      "name": "幻想域",
+      "category": "势力"
+    }
+  ],
+  "links": [
+    {
+      "source": "陈默",
+      "target": "幻想域",
+      "label": "成员"
+    }
+  ]
+}

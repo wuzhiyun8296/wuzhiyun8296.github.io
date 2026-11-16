@@ -1,0 +1,575 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>世界观 - 本地编辑后台</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <script src="https://cdn.bootcdn.net/ajax/libs/marked/12.0.1/marked.min.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; height: 100vh; background: #1e1e1e; color: #ccc; display: flex; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; overflow: hidden; }
+    #app { display: flex; flex-direction: column; width: 100%; height: 100%; position: relative; }
+    
+    /* ================= 登录遮罩层 ================= */
+    .login-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 99999; background: rgba(15, 15, 15, 0.8); backdrop-filter: blur(10px); display: flex; justify-content: center; align-items: center; }
+    .login-card { background: #1e1e1e; border: 1px solid #333; border-radius: 12px; padding: 40px; width: 400px; box-shadow: 0 20px 50px rgba(0,0,0,0.5), 0 0 20px rgba(14, 99, 156, 0.2); text-align: center; animation: slideUp 0.4s ease-out; }
+    @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+    .login-card h2 { color: #fff; margin: 0 0 10px 0; font-size: 24px; letter-spacing: 2px;}
+    .login-card .subtitle { color: #888; font-size: 13px; margin-bottom: 5px; }
+    .login-card .hint-text { color: #d29922; font-size: 12px; margin-bottom: 25px; font-weight: bold; }
+    .login-input-group { position: relative; margin-bottom: 20px; }
+    .login-input-group input { width: 100%; background: #121212; border: 1px solid #444; color: #fff; padding: 15px; border-radius: 8px; font-size: 16px; outline: none; transition: all 0.3s; text-align: center; letter-spacing: 5px; }
+    .login-input-group input:focus { border-color: #0e639c; box-shadow: 0 0 10px rgba(14, 99, 156, 0.5); }
+    .login-btn { width: 100%; background: #0e639c; color: white; border: none; padding: 15px; border-radius: 8px; font-size: 16px; font-weight: bold; cursor: pointer; transition: background 0.3s; }
+    .login-btn:hover { background: #1177bb; }
+    .login-error { color: #a82626; font-size: 13px; margin-top: 15px; height: 20px; opacity: 0; transition: opacity 0.3s;}
+    .login-error.show { opacity: 1; }
+
+    /* ================= 通用高级模态框 ================= */
+    .custom-modal-overlay { position: absolute; top: 0; left: 0; width: 100%; height: 100%; z-index: 99998; background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; }
+    .custom-modal-box { background: #252526; border: 1px solid #444; border-radius: 10px; padding: 25px; width: 480px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    .custom-modal-box h3 { margin: 0 0 10px 0; color: #fff; font-size: 18px; }
+    .custom-modal-box p { color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    
+    /* 更新日志展示区 */
+    .update-log-box { background: #111; border: 1px solid #333; border-radius: 6px; padding: 10px; font-family: Consolas, monospace; font-size: 12px; color: #aaa; max-height: 150px; overflow-y: auto; text-align: left; margin-bottom: 15px; line-height: 1.6; }
+
+    .modal-input-group { margin-bottom: 15px; }
+    .modal-input-group input { width: 100%; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; }
+    .modal-input-group input:focus { border-color: #0e639c; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+    
+    /* ================= 主界面 ================= */
+    .main-ui { display: flex; flex-direction: column; width: 100%; height: 100%; transition: opacity 0.5s; }
+    .main-ui.hidden { opacity: 0; pointer-events: none; }
+
+    /* 💡 顶部导航核心优化 */
+    .top-nav { background: #252526; display: flex; border-bottom: 1px solid #333; flex-shrink: 0; align-items: center; height: 50px; }
+    .nav-group { display: flex; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; height: 100%; padding: 0 5px; scroll-behavior: smooth;}
+    .nav-group::-webkit-scrollbar { display: none; }
+    .nav-btn { padding: 0 15px; height: 100%; background: none; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; flex-shrink: 0; }
+    .nav-btn:hover { color: #fff; background: #2d2d2d; }
+    .nav-btn.active { color: #fff; border-bottom-color: #0e639c; background: #1e1e1e; }
+    .nav-actions { display: flex; gap: 10px; padding: 0 15px; flex-shrink: 0; background: #252526; border-left: 1px solid #333; height: 100%; align-items: center; z-index: 10; box-shadow: -10px 0 15px -5px rgba(0,0,0,0.5);}
+    .action-btn { background: transparent; border: 1px solid #444; color: #888; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 13px; white-space: nowrap;}
+    .action-btn:hover { background: #444; color: #fff; }
+    .action-btn.danger { background: #a82626; border-color: #a82626; color: #fff; }
+    .action-btn.danger:hover { background: #c92a2a; border-color: #c92a2a; }
+
+    .main-container { flex: 1; display: flex; overflow: hidden; }
+
+    /* ========== 文章编辑区 ========== */
+    #sidebar { width: 260px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
+    .sidebar-header { padding: 15px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; gap: 10px; }
+    
+    .root-btn { padding: 6px 10px; background: #1e1e1e; color: #888; font-size: 13px; cursor: pointer; border-bottom: 1px solid #333; transition: background 0.2s; }
+    .root-btn:hover { background: #333; color: #fff;}
+    .root-btn.active { background: #0e639c; color: #fff; }
+
+    .tree-container { flex: 1; overflow-y: auto; padding: 10px; }
+    .node-item { padding: 6px 8px; cursor: pointer; border-radius: 4px; font-size: 14px; display: flex; align-items: center; user-select: none; justify-content: space-between;}
+    .folder-item { color: #e0e0e0; font-weight: bold; margin-top: 4px; }
+    .folder-item:hover { background: #333; }
+    
+    .folder-item.active-folder { background: rgba(14, 99, 156, 0.4); border: 1px dashed #0e639c;}
+    
+    .file-item { color: #aaa; padding-left: 20px; }
+    .file-item:hover { background: #333; color: #fff; }
+    .file-item.active { background: #0e639c; color: #fff; }
+    .arrow { display: inline-block; width: 16px; transition: transform 0.2s; font-size: 12px; color: #888; }
+    .arrow.open { transform: rotate(90deg); }
+    .delete-btn { display: none; font-size: 12px; color: #a82626; padding: 0 4px; border-radius: 2px; }
+    .delete-btn:hover { background: #a82626; color: #fff; }
+    .node-item:hover .delete-btn { display: block; }
+    
+    #main-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    .toolbar { padding: 10px 15px; background: #2d2d2d; display: flex; align-items: center; border-bottom: 1px solid #333; }
+    .status-text { flex: 1; font-size: 14px; color: #888; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .editor-split { flex: 1; display: flex; height: 100%; overflow: hidden; }
+    .md-textarea { width: 50%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; border-right: 1px solid #333; padding: 20px; font-size: 15px; line-height: 1.6; font-family: Consolas, monospace; resize: none; outline: none; }
+    .preview-pane { width: 50%; height: 100%; padding: 20px; overflow-y: auto; line-height: 1.6; font-size: 15px; }
+    .preview-pane h1, .preview-pane h2, .preview-pane h3 { color: #fff; border-bottom: 1px solid #444; padding-bottom: 8px; }
+    
+    /* 💡 预览区表格样式 */
+    .preview-pane table { border-collapse: collapse; width: 100%; margin-bottom: 20px; margin-top: 10px; }
+    .preview-pane th, .preview-pane td { border: 1px solid #444; padding: 8px 12px; text-align: left; }
+    .preview-pane th { background: #2d2d2d; color: #fff; font-weight: bold; }
+    
+    /* 💡 预览区双向链接样式 */
+    .preview-pane a { color: #0e639c; text-decoration: none; border-bottom: 1px dashed #0e639c; font-weight: bold; }
+    .preview-pane a:hover { color: #1177bb; border-bottom-style: solid; }
+
+    /* 按钮 */
+    button { background: #0e639c; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; transition: background 0.2s; }
+    button:hover { background: #1177bb; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    button.outline { background: transparent; border: 1px solid #0e639c; color: #0e639c; }
+    button.outline:hover { background: rgba(14, 99, 156, 0.1); }
+    button.danger { background: #a82626; }
+    button.danger:hover { background: #c92a2a; }
+
+    /* 插件容器 */
+    .plugin-container { flex: 1; display: flex; height: 100%; width: 100%; }
+    iframe { width: 100%; height: 100%; border: none; background: #1e1e1e; }
+
+    /* 表格生成器模态框 */
+    .modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.6); display: flex; align-items: center; justify-content: center; z-index: 10000; }
+    .modal-box { background: #252526; border: 1px solid #444; border-radius: 8px; padding: 25px; width: 350px; box-shadow: 0 10px 30px rgba(0,0,0,0.5); }
+    .modal-box h3 { margin: 0 0 15px 0; color: #fff; }
+    .modal-row { display: flex; gap: 15px; margin-bottom: 20px; }
+    .modal-row .form-group { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+    .modal-row label { margin-bottom: 5px; font-size: 13px; color: #aaa; }
+    .modal-row input { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; width: 100%; }
+  </style>
+</head>
+<body>
+  <div id="app">
+    
+    <!-- ================= 登录遮罩 ================= -->
+    <div class="login-overlay" v-if="!isAuthenticated">
+      <div class="login-card">
+        <h2>准入验证</h2>
+        <div class="subtitle">请输入密码以进入幻想域主控台</div>
+        <div class="hint-text">💡 {{ loginHint }}</div>
+        <div class="login-input-group">
+          <input type="password" v-model="password" @keyup.enter="handleLogin" placeholder="••••••" autofocus />
+        </div>
+        <button class="login-btn" @click="handleLogin">进 入 系 统</button>
+        <div class="login-error" :class="{ show: showError }">密码错误，请重试</div>
+      </div>
+    </div>
+
+    <!-- ================= 通用高级模态框 ================= -->
+    <div class="custom-modal-overlay" v-if="modal.show" @click.self="closeModal">
+      <div class="custom-modal-box">
+        <h3>{{ modal.title }}</h3>
+        <p v-if="modal.message">{{ modal.message }}</p>
+        
+        <div class="modal-input-group" v-if="modal.type === 'prompt'">
+          <input v-model="modal.input1" :placeholder="modal.placeholder1" @keyup.enter="confirmModal" autofocus />
+        </div>
+        
+        <div v-if="modal.type === 'prompt-double'">
+          <div class="modal-input-group">
+            <input type="password" v-model="modal.input1" :placeholder="modal.placeholder1" @keyup.enter="confirmModal" autofocus />
+          </div>
+          <div class="modal-input-group">
+            <input type="text" v-model="modal.input2" :placeholder="modal.placeholder2" @keyup.enter="confirmModal" />
+          </div>
+        </div>
+
+        <!-- 💡 更新日志展示区 -->
+        <div v-if="modal.updateLogs" class="update-log-box" v-html="modal.updateLogs"></div>
+
+        <div class="modal-actions">
+          <button class="secondary" @click="closeModal">取消</button>
+          <button :class="{ danger: modal.isDanger }" @click="confirmModal">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- ================= 主界面 ================= -->
+    <div class="main-ui" :class="{ hidden: !isAuthenticated }">
+      <div class="top-nav">
+        <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
+        <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
+          <!-- 仪表盘永远固定在第一位 -->
+          <button class="nav-btn" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
+          
+          <!-- 其他所有插件全部由 navigation.json 的顺序动态渲染 -->
+          <template v-for="p in dynamicPlugins" :key="p.id">
+            <button 
+              v-if="p.id !== 'dashboard'"
+              class="nav-btn" 
+              :class="{ active: currentTab === p.id }" 
+              @click="currentTab = p.id"
+            >
+              {{ p.icon || '🧩' }} {{ p.name }}
+            </button>
+          </template>
+        </div>
+        
+        <div class="nav-actions">
+          <button class="action-btn" @click="checkUpdate">🔄 检测更新</button>
+          <button class="action-btn" @click="changePassword">🔐 改密</button>
+          <button class="action-btn danger" @click="logout">退出登录</button>
+        </div>
+      </div>
+
+      <div class="main-container">
+        <template v-if="currentTab === 'article'">
+          <div id="sidebar">
+            <div class="sidebar-header">
+              <button @click="newFile" style="flex:1;">新建文件</button>
+              <button class="secondary" @click="newFolder" style="flex:1;">新建文件夹</button>
+            </div>
+            
+            <div class="root-btn" :class="{ active: selectedFolder === '' }" @click="selectedFolder = ''; currentPath = ''">
+              🏠 根目录 (点击建在根目录)
+            </div>
+
+            <div class="tree-container">
+              <tree-node 
+                v-for="(item, index) in tree" 
+                :key="index" 
+                :item="item" 
+                :current-path="currentPath" 
+                :selected-folder="selectedFolder"
+                :parent-path="''"
+                @select="loadFile" 
+                @select-folder="selectedFolder = $event"
+                @delete="deleteNode" 
+              />
+            </div>
+          </div>
+          <div id="main-editor">
+            <div class="toolbar">
+              <span class="status-text">{{ currentPath || '请选择或新建文件' }}</span>
+              <button v-if="currentPath" class="outline" @click="showTableModal = true" style="margin-right: 10px;">📊 插入表格</button>
+              <button @click="saveFile" v-if="currentPath">保存内容 (Ctrl+S)</button>
+            </div>
+            <div class="editor-split" v-if="currentPath">
+              <textarea id="md-editor" class="md-textarea" v-model="content" placeholder="书写 Markdown..."></textarea>
+              <div class="preview-pane" v-html="renderedHtml"></div>
+            </div>
+            <div v-else style="flex:1; display:flex; align-items:center; justify-content:center; color:#555; font-size:20px;">请选择或新建文件</div>
+          </div>
+        </template>
+
+        <div class="plugin-container" v-else>
+          <iframe :src="`plugin/${currentTab}.html`"></iframe>
+        </div>
+      </div>
+    </div>
+
+    <!-- 表格生成器模态框 -->
+    <div class="modal-overlay" v-if="showTableModal" @click.self="showTableModal = false">
+      <div class="modal-box">
+        <h3>插入表格</h3>
+        <div class="modal-row">
+          <div class="form-group">
+            <label>行数</label>
+            <input type="number" v-model.number="tableRows" min="1" />
+          </div>
+          <div class="form-group">
+            <label>列数</label>
+            <input type="number" v-model.number="tableCols" min="1" />
+          </div>
+        </div>
+        <div class="modal-actions" style="display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px;">
+          <button class="secondary" @click="showTableModal = false">取消</button>
+          <button @click="insertTable">确认插入</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    const TreeNode = {
+      name: 'TreeNode', 
+      props: ['item', 'currentPath', 'selectedFolder', 'parentPath'], 
+      emits: ['select', 'select-folder', 'delete'],
+      setup(props, { emit }) {
+        const isOpen = ref(true);
+        const fullPath = computed(() => props.parentPath ? `${props.parentPath}/${props.item.name}` : props.item.name);
+        const handleClick = () => {
+          if (props.item.type === 'folder') {
+            isOpen.value = !isOpen.value;
+            emit('select-folder', fullPath.value);
+          } else {
+            emit('select', fullPath.value);
+            emit('select-folder', props.parentPath);
+          }
+        };
+        return { isOpen, handleClick, fullPath };
+      },
+      template: `
+        <div>
+          <div class="node-item" :class="item.type === 'folder' ? 'folder-item' : 'file-item'" :class="{ active: currentPath === fullPath, 'active-folder': item.type === 'folder' && selectedFolder === fullPath }" @click="handleClick">
+            <div style="display: flex; align-items: center; flex: 1; overflow: hidden;">
+              <span v-if="item.type === 'folder'" class="arrow" :class="{ open: isOpen }">▶</span><span v-else style="width:16px; flex-shrink:0;"></span>
+              <span v-if="item.type === 'folder'">📁 {{ item.name }}</span>
+              <span v-else style="white-space: nowrap; overflow: hidden; text-overflow: ellipsis;">📄 {{ item.name }}</span>
+            </div>
+            <span class="delete-btn" title="删除" @click.stop="$emit('delete', item)">✖</span>
+          </div>
+          
+          <div v-if="item.type === 'folder' && isOpen && item.children && item.children.length > 0" style="padding-left: 15px;">
+            <tree-node v-for="(child, index) in item.children" :key="index" :item="child" :current-path="currentPath" :selected-folder="selectedFolder" :parent-path="fullPath" @select="$emit('select', $event)" @select-folder="$emit('select-folder', $event)" @delete="$emit('delete', $event)" />
+          </div>
+        </div>
+      `
+    };
+
+    const app = createApp({
+      setup() {
+        const dynamicPlugins = ref([]);
+        const isAuthenticated = ref(false);
+        const password = ref('');
+        const showError = ref(false);
+        const loginHint = ref(localStorage.getItem('admin_hint') || '默认密码：123456');
+
+        const handleLogin = () => {
+          const currentPwd = localStorage.getItem('admin_pwd') || '123456';
+          if (password.value === currentPwd) {
+            isAuthenticated.value = true;
+            sessionStorage.setItem('admin_auth', 'true');
+          } else {
+            showError.value = true;
+            password.value = '';
+            setTimeout(() => { showError.value = false; }, 2000);
+          }
+        };
+
+        // 💡 扩展了 modal，增加了 updateLogs 用于显示更新列表
+        const modal = ref({ show: false, type: '', title: '', message: '', input1: '', input2: '', placeholder1: '', placeholder2: '', callback: null, isDanger: false, updateLogs: '' });
+        const openModal = (options) => { modal.value = { ...modal.value, updateLogs: '', ...options, show: true, input1: '', input2: '' }; };
+        const closeModal = () => { modal.value.show = false; };
+        const confirmModal = () => {
+          if (modal.value.callback) {
+            if (modal.value.type === 'prompt-double') { modal.value.callback(modal.value.input1, modal.value.input2); } 
+            else { modal.value.callback(modal.value.input1); }
+          }
+          closeModal();
+        };
+
+        // 💡 检测更新逻辑
+        const isCheckingUpdate = ref(false);
+        const checkUpdate = async () => {
+          if (isCheckingUpdate.value) return;
+          isCheckingUpdate.value = true;
+          
+          openModal({ type: 'confirm', title: '🔄 正在检测更新', message: '正在连接 GitHub 服务器获取最新版本信息，请稍候...' });
+          
+          try {
+            const res = await fetch(`${API_BASE}/git/check-update`);
+            const data = await res.json();
+            
+            if (!data.success) {
+              openModal({ type: 'confirm', title: '⚠️ 检测失败', message: data.error || '未知错误，请检查【一键推送】里配置的仓库信息。', isDanger: true });
+            } else {
+              if (data.hasUpdate) {
+                const logsHtml = data.logs.map(l => `<div>${l}</div>`).join('');
+                openModal({ 
+                  type: 'confirm', 
+                  title: '🎉 发现新版本', 
+                  message: `发现 <b>${data.count}</b> 个新提交：`,
+                  updateLogs: logsHtml,
+                  callback: () => updateGit()
+                });
+              } else {
+                openModal({ type: 'confirm', title: '✅ 已是最新', message: '当前代码已经是最新版本，无需更新。' });
+              }
+            }
+          } catch (e) {
+            openModal({ type: 'confirm', title: '❌ 网络错误', message: e.message, isDanger: true });
+          } finally {
+            isCheckingUpdate.value = false;
+          }
+        };
+
+                const updateGit = async () => {
+          openModal({ type: 'confirm', title: '⏳ 正在更新', message: '正在从 GitHub 下载最新版本并覆盖代码，请稍候...（请勿关闭页面）' });
+          try {
+            // 💡 调用新的无 Git 下载接口
+            const res = await fetch(`${API_BASE}/update/zip`);
+            const data = await res.json();
+            
+            if (data.success) {
+              openModal({ 
+                type: 'confirm', 
+                title: '✅ 更新成功', 
+                message: '系统核心代码已更新！<br><b>为了防止数据缓存，请手动关闭并重新双击 start.bat 启动服务。</b>', 
+                callback: () => { window.location.reload(); } 
+              });
+            } else {
+              openModal({ type: 'confirm', title: '❌ 更新失败', message: data.error || '未知错误', isDanger: true });
+            }
+          } catch (e) {
+            openModal({ type: 'confirm', title: '❌ 请求失败', message: e.message, isDanger: true });
+          }
+        };
+        const changePassword = () => {
+          openModal({
+            type: 'prompt-double', title: '🔐 修改安全密码', message: '第一个输入框填写新密码，第二个填写提示语。若新密码留空，则恢复默认 123456。', placeholder1: '请输入新密码', placeholder2: '请输入密码提示语 (下次登录显示)',
+            callback: (newPwd, newHint) => {
+              if (newPwd.trim() === '') {
+                localStorage.removeItem('admin_pwd'); localStorage.removeItem('admin_hint'); loginHint.value = '默认密码：123456'; showToast('已恢复默认密码'); return;
+              }
+              localStorage.setItem('admin_pwd', newPwd);
+              if (newHint && newHint.trim() !== '') { localStorage.setItem('admin_hint', newHint); loginHint.value = newHint; } 
+              else { localStorage.removeItem('admin_hint'); loginHint.value = '密码已自定义，请凭记忆输入'; }
+              showToast('✅ 密码与提示修改成功');
+            }
+          });
+        };
+
+        const logout = () => {
+          openModal({
+            type: 'confirm', title: '🚪 退出登录', message: '确定要退出主控台吗？', isDanger: true,
+            callback: () => { sessionStorage.removeItem('admin_auth'); isAuthenticated.value = false; password.value = ''; }
+          });
+        };
+
+        const navGroupRef = ref(null);
+        const handleNavWheel = (e) => {
+          if (navGroupRef.value) {
+            navGroupRef.value.scrollLeft += e.deltaY;
+          }
+        };
+
+        const currentTab = ref('dashboard');
+        const tree = ref([]); const content = ref(''); const currentPath = ref(''); const selectedFolder = ref('');
+
+        const renderedHtml = computed(() => {
+          if (!content.value || typeof content.value !== 'string') return '';
+          if (typeof marked === 'undefined') return '<div style="color:#a82626;">Marked 库未加载。</div>';
+          try {
+            let mdText = content.value.replace(/\[\[(.*?)\]\]/g, (match, p1) => {
+              const cleanP1 = p1.replace(/\\/g, '/');
+              return `<a href="/${cleanP1}">🔗 ${cleanP1}</a>`;
+            });
+            marked.setOptions({ gfm: true, breaks: true });
+            return marked.parse(mdText);
+          } catch (e) { return '<div style="color:#a82626;">语法解析出错</div>'; }
+        });
+        
+        const fetchTree = async () => { try { const res = await fetch(`${API_BASE}/files`); tree.value = await res.json(); } catch (e) {} };
+
+        const loadFile = async (path) => { 
+          try {
+            const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(path)}`); 
+            const data = await res.json(); content.value = data.content || ''; currentPath.value = path; 
+          } catch (e) { showToast('读取文件失败', true); }
+        };
+
+        const saveFile = async () => {
+          if (!currentPath.value) return;
+          await fetch(`${API_BASE}/file`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: currentPath.value, content: content.value }) });
+          showToast('✅ 文章保存成功');
+        };
+
+        const newFile = () => {
+          const prefix = selectedFolder.value ? `${selectedFolder.value}/` : '';
+          openModal({
+            type: 'prompt', title: '📝 新建文件', message: `将在 [${selectedFolder.value || '根目录'}] 下创建。无需输入路径和后缀。`, placeholder1: '请输入文件名',
+            callback: (filename) => {
+              if (!filename) return;
+              let cleanName = filename.trim();
+              if (!cleanName.endsWith('.md')) cleanName += '.md';
+              const fullPath = `${prefix}${cleanName}`;
+              currentPath.value = fullPath; content.value = `# ${cleanName.replace('.md', '')}\n　　`;
+              saveFile(); fetchTree();
+            }
+          });
+        };
+
+        const newFolder = () => {
+          const prefix = selectedFolder.value ? `${selectedFolder.value}/` : '';
+          openModal({
+            type: 'prompt', title: '📁 新建文件夹', message: `将在 [${selectedFolder.value || '根目录'}] 下创建。`, placeholder1: '请输入文件夹名',
+            callback: (folderName) => {
+              if (!folderName) return;
+              const fullPath = `${prefix}${folderName.trim()}/.gitkeep`;
+              fetch(`${API_BASE}/file`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: fullPath, content: '' }) }).then(() => fetchTree());
+            }
+          });
+        };
+
+        const deleteNode = (item) => {
+          openModal({
+            type: 'confirm', title: '⚠️ 确认删除', message: `确定要删除 [${item.name}] 吗？此操作不可逆！`, isDanger: true,
+            callback: async () => {
+              try {
+                const res = await fetch(`${API_BASE}/delete`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ path: item.path }) });
+                const data = await res.json();
+                if (data.success) {
+                  showToast('✅ 已成功删除'); fetchTree(); 
+                  if (currentPath.value === item.path || currentPath.value.startsWith(item.path + '/')) { content.value = ''; currentPath.value = ''; }
+                } else { showToast('删除失败: ' + data.error, true); }
+              } catch (e) { showToast('删除请求失败', true); }
+            }
+          });
+        };
+
+        const showTableModal = ref(false); const tableRows = ref(3); const tableCols = ref(3);
+        const insertTable = async () => {
+          let mdTable = '\n\n';
+          mdTable += '| ' + Array.from({length: tableCols.value}).map((_, i) => `表头 ${i+1}`).join(' | ') + ' |\n';
+          mdTable += '| ' + Array.from({length: tableCols.value}).map(() => `---`).join(' | ') + ' |\n';
+          for (let r = 0; r < tableRows.value; r++) { 
+            mdTable += '| ' + Array.from({length: tableCols.value}).map(() => `内容`).join(' | ') + ' |\n'; 
+          }
+          mdTable += '\n';
+          
+          const textarea = document.getElementById('md-editor');
+          if (textarea) {
+            const startPos = textarea.selectionStart; const endPos = textarea.selectionEnd;
+            content.value = content.value.substring(0, startPos) + mdTable + content.value.substring(endPos);
+            await nextTick(); textarea.focus(); textarea.setSelectionRange(startPos + mdTable.length, startPos + mdTable.length);
+          } else { content.value += mdTable; }
+          showTableModal.value = false; showToast('✅ 表格已插入');
+        };
+
+        const showToast = (msg, isError = false) => {
+          const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
+          const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
+          document.body.appendChild(toast); setTimeout(() => toast.remove(), 2500);
+        };
+
+        const handleKeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') { e.preventDefault(); saveFile(); } };
+        
+        const loadDynamicPlugins = () => {
+          fetch(`${API_BASE}/plugins/list?t=${Date.now()}`)
+            .then(res => res.json())
+            .then(data => { 
+              dynamicPlugins.value = Array.isArray(data) 
+                ? data.filter(p => !p.hideBackend) 
+                : []; 
+            })
+            .catch(() => {});
+        };
+
+        const handleIframeMessage = (e) => {
+          if (e.data && e.data.type === 'REFRESH_PLUGINS') {
+            loadDynamicPlugins();
+          }
+        };
+
+        onMounted(() => {
+          if (sessionStorage.getItem('admin_auth') === 'true') { isAuthenticated.value = true; }
+          fetchTree(); 
+          window.addEventListener('keydown', handleKeydown);
+          
+          loadDynamicPlugins();
+          window.addEventListener('message', handleIframeMessage);
+        });
+        
+        onUnmounted(() => {
+          window.removeEventListener('keydown', handleKeydown);
+          window.removeEventListener('message', handleIframeMessage);
+        });
+
+        return { 
+          isAuthenticated, password, showError, handleLogin, loginHint, changePassword, logout,
+          currentTab, tree, content, currentPath, selectedFolder, renderedHtml, 
+          loadFile, saveFile, newFile, newFolder, deleteNode,
+          showTableModal, tableRows, tableCols, insertTable,
+          modal, closeModal, confirmModal,
+          navGroupRef, handleNavWheel,
+          dynamicPlugins, checkUpdate
+        };
+      }
+    });
+    app.component('tree-node', TreeNode);
+    app.mount('#app');
+  </script>
+</body>
+</html>

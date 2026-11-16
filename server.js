@@ -1306,7 +1306,9 @@ app.get('/api/git/check-update', async (req, res) => {
 });
 
 app.get('/api/git/pull', async (req, res) => {
-  if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ success: false, error: '请先配置 GitHub Token' });
+  // 💡 没有 git-config.json（朋友那边没 Token）时，别报错卡死：
+  //    老版本后台的「更新」按钮调的就是这个接口，直接转交给匿名 zip 更新
+  if (!fs.existsSync(GIT_CONFIG_FILE)) return res.redirect(302, '/api/update/zip');
 
   const runCmd = (cmd) => new Promise((resolve) => {
     exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {

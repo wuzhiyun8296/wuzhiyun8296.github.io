@@ -1,0 +1,290 @@
+<!-- 文件路径: plugin/finance.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>金融中心插件</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 20px 40px; }
+    .panel-inner { max-width: 1000px; margin: 0 auto; width: 100%; }
+    .section-title { color: #fff; border-bottom: 1px solid #444; padding-bottom: 10px; margin-top: 30px; }
+    .data-form { background: #252526; padding: 20px; border-radius: 8px; border: 1px solid #333; margin-bottom: 20px; display: flex; flex-wrap: wrap; gap: 15px; box-shadow: 0 4px 12px rgba(0,0,0,0.2); }
+    .form-group { display: flex; flex-direction: column; flex: 1; min-width: 150px; }
+    .form-group label { margin-bottom: 5px; font-size: 13px; color: #aaa; font-weight: bold; }
+    .form-group input, .form-group select { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 10px; border-radius: 4px; outline: none; font-family: inherit; width: 100%; }
+    .form-group input:focus, .form-group select:focus { border-color: #0e639c; }
+    
+    .data-list { display: flex; flex-direction: column; gap: 10px; }
+    .item-row { display: flex; justify-content: space-between; align-items: center; background: #252526; padding: 10px 15px; border-radius: 6px; border-left: 4px solid #0e639c; }
+    .item-row span { font-size: 14px; }
+    .stock-info { font-size: 13px; color: #888; margin-top: 5px; }
+    .price-up { color: #ef232a; }
+    .price-down { color: #14b143; }
+
+    button { background: #0e639c; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; transition: background 0.2s; }
+    button:hover { background: #1177bb; }
+    button.secondary { background: #444; }
+    button.secondary:hover { background: #555; }
+    button.danger { background: #a82626; }
+    button.danger:hover { background: #c92a2a; }
+    button.success { background: #2ea043; }
+    button.success:hover { background: #3fb950; }
+    
+    .order-btn { padding: 4px 8px; font-size: 14px; background: #333; color: #aaa; border: 1px solid #555; margin: 0 2px; }
+    .order-btn:hover { background: #444; color: #fff; }
+    .order-btn:disabled { opacity: 0.3; cursor: not-allowed; }
+
+    .base-edit { background: #1e1e1e; border: 1px solid #444; color: #0e639c; font-weight: bold; padding: 2px 6px; border-radius: 4px; width: 80px; outline: none; text-align: center; }
+    .name-edit { background: transparent; border: 1px dashed #444; color: #fff; font-weight: bold; font-size: 16px; padding: 4px 8px; border-radius: 4px; outline: none; transition: all 0.2s; width: 180px; cursor: text;}
+    .name-edit:hover { border-color: #0e639c; background: #1a1a1a; }
+    .name-edit:focus { border-color: #0e639c; border-style: solid; background: #121212; box-shadow: 0 0 8px rgba(14, 99, 156, 0.3);}
+    .symbol-edit { background: transparent; border: 1px dashed #444; color: #0e639c; font-weight: bold; font-size: 16px; padding: 4px 8px; border-radius: 4px; outline: none; width: 80px; transition: all 0.2s; text-align: center;}
+    .symbol-edit:hover { border-color: #0e639c; background: #1a1a1a; }
+    .symbol-edit:focus { border-color: #0e639c; border-style: solid; background: #121212; box-shadow: 0 0 8px rgba(14, 99, 156, 0.3);}
+
+    .edit-tip { color: #d29922; font-size: 13px; margin-bottom: 15px; background: rgba(210, 153, 34, 0.1); padding: 10px 15px; border-radius: 6px; border: 1px solid rgba(210, 153, 34, 0.3); display: flex; align-items: center; gap: 8px;}
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="panel-inner">
+      <h2 style="color: #fff; margin-top: 0;">💰 金融中心编辑</h2>
+      <p style="color: #888;">管理世界物价、设置股市与金本位汇率。</p>
+
+      <!-- 汇率市场 -->
+      <h3 class="section-title">💱 汇率市场</h3>
+      
+      <div class="edit-tip">
+        <span>💡 提示：汇率列表的第一行永远是绝对基准。使用 ⬆️ ⬇️ 调整展示顺序，点击【代码】或【名称】可直接修改。</span>
+      </div>
+
+      <div class="data-form" style="align-items: flex-end;">
+        <div class="form-group"><label>货币代码</label><input type="text" v-model="newCurrency.symbol" placeholder="例如：GC" /></div>
+        <div class="form-group" style="flex: 2;"><label>货币名称</label><input type="text" v-model="newCurrency.name" placeholder="例如：金币" /></div>
+        <div class="form-group"><label>含金量</label><input type="number" step="0.01" v-model.number="newCurrency.basePrice" placeholder="例如：0.1" /></div>
+        <div style="display: flex; gap: 10px;"><button @click="addCurrency">添加货币</button></div>
+      </div>
+
+      <div class="data-list">
+        <div class="item-row" v-for="(curr, i) in financeData.currencies" :key="i" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              
+              <div style="display: flex; flex-direction: column;">
+                <button class="order-btn" @click="moveUp(financeData.currencies, i)" :disabled="i === 0">⬆️</button>
+                <button class="order-btn" @click="moveDown(financeData.currencies, i)" :disabled="i === financeData.currencies.length - 1">⬇️</button>
+              </div>
+
+              <input type="text" class="symbol-edit" v-model="curr.symbol" title="点击修改货币代码" />
+              <input type="text" class="name-edit" v-model="curr.name" title="点击修改货币名称" />
+              <div class="stock-info" style="margin-left: 10px;">
+                当前价值: <span :class="getCurrencyClass(curr)">{{ (curr.currentPrice || 0).toFixed(2) }}</span> 
+                | 基准: <input type="number" step="0.01" class="base-edit" v-model.number="curr.basePrice" @change="syncPriceToBase(curr)" title="修改基准价" :disabled="i === 0" />
+              </div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <!-- 💡 汇率列表只有第一个不能动 -->
+              <template v-if="i !== 0">
+                <button class="success" @click="triggerEvent(curr, 'good')">📈 利好</button>
+                <button class="danger" @click="triggerEvent(curr, 'bad')">📉 利空</button>
+                <button class="secondary" @click="resetCurrency(curr)">🔄 归零</button>
+                <button class="danger" @click="financeData.currencies.splice(i, 1)">删除</button>
+              </template>
+              <span v-else style="color: #d29922; font-weight: bold; padding: 8px;">👑 绝对基准 (不可波动)</span>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <h3 class="section-title">📈 股票市场</h3>
+      <div class="data-form" style="align-items: flex-end;">
+        <div class="form-group"><label>股票代码</label><input type="text" v-model="newStock.symbol" placeholder="例如：TMC" /></div>
+        <div class="form-group" style="flex: 2;"><label>股票名称</label><input type="text" v-model="newStock.name" placeholder="例如：秋月商会" /></div>
+        <div class="form-group"><label>初始基准价</label><input type="number" v-model.number="newStock.basePrice" placeholder="例如：100" /></div>
+        <div style="display: flex; gap: 10px;"><button @click="addStock">添加股票</button></div>
+      </div>
+
+      <div class="data-list">
+        <div class="item-row" v-for="(stock, i) in financeData.stocks" :key="i" style="flex-direction: column; align-items: flex-start; gap: 10px;">
+          <div style="display: flex; justify-content: space-between; width: 100%; align-items: center;">
+            <div style="display: flex; align-items: center; gap: 10px;">
+              
+              <div style="display: flex; flex-direction: column;">
+                <button class="order-btn" @click="moveUp(financeData.stocks, i)" :disabled="i === 0">⬆️</button>
+                <button class="order-btn" @click="moveDown(financeData.stocks, i)" :disabled="i === financeData.stocks.length - 1">⬇️</button>
+              </div>
+
+              <input type="text" class="symbol-edit" v-model="stock.symbol" title="点击修改股票代码" />
+              <input type="text" class="name-edit" v-model="stock.name" title="点击修改股票名称" />
+              <div class="stock-info" style="margin-left: 10px;">当前价格: <span :class="getPriceClass(stock)">{{ (stock.currentPrice || 0).toFixed(2) }}</span> (基准: {{ stock.basePrice || 0 }})</div>
+            </div>
+            <div style="display: flex; gap: 10px;">
+              <!-- 💡 股票无论排第几，都有这些按钮 -->
+              <button class="success" @click="triggerEvent(stock, 'good')">📈 利好</button>
+              <button class="danger" @click="triggerEvent(stock, 'bad')">📉 利空</button>
+              <button class="secondary" @click="resetStock(stock)">🔄 归零</button>
+              <button class="danger" @click="financeData.stocks.splice(i, 1)">删除</button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div style="margin-top: 30px; display: flex; justify-content: flex-end;">
+          <button class="success" @click="saveFinance" style="padding: 12px 30px; font-size: 15px;">💾 保存当前数据</button>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, onUnmounted } = Vue;
+    const API_BASE = 'http://localhost:3001/api';
+
+    createApp({
+      setup() {
+        const financeData = ref({ items: [], stocks: [], currencies: [] });
+        const newItem = ref({ name: '', price: 1 });
+        const newStock = ref({ symbol: '', name: '', basePrice: 100 });
+        const newCurrency = ref({ symbol: '', name: '', basePrice: 0.1 });
+
+        let timer = null;
+
+        const moveUp = (arr, index) => {
+          if (index > 0) {
+            const temp = arr[index];
+            arr[index] = arr[index - 1];
+            arr[index - 1] = temp;
+          }
+        };
+
+        const moveDown = (arr, index) => {
+          if (index < arr.length - 1) {
+            const temp = arr[index];
+            arr[index] = arr[index + 1];
+            arr[index + 1] = temp;
+          }
+        };
+
+        const fetchFinance = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/finance`);
+            const data = await res.json();
+            financeData.value = {
+              items: Array.isArray(data.items) ? data.items : [],
+              stocks: Array.isArray(data.stocks) ? data.stocks : [],
+              currencies: Array.isArray(data.currencies) ? data.currencies : []
+            };
+            if (financeData.value.currencies.length === 0) {
+              financeData.value.currencies.push({ symbol: 'Gold', name: '金币', basePrice: 1, currentPrice: 1 });
+            }
+          } catch (e) { showToast('读取失败，请重启 Node 服务', true); }
+        };
+
+        const syncPriceToBase = (asset) => {
+          if (confirm(`基准价已修改，是否将当前价格也重置？`)) {
+            asset.currentPrice = Number(asset.basePrice);
+          }
+        };
+
+        const triggerEvent = (asset, type) => {
+          const current = Number(asset.currentPrice) || 1;
+          let multiplier = 1;
+          let eventName = '';
+
+          if (type === 'good') {
+            multiplier = 1 + (Math.random() * 0.15 + 0.15);
+            const events = ['大财团收购', '发现新矿脉', '商会联盟建立', '战争大捷'];
+            eventName = events[Math.floor(Math.random() * events.length)];
+          } else {
+            multiplier = 1 - (Math.random() * 0.15 + 0.15);
+            const events = ['战争爆发', '商船遇袭', '高管丑闻', '恶性通胀'];
+            eventName = events[Math.floor(Math.random() * events.length)];
+          }
+
+          asset.currentPrice = Number((current * multiplier).toFixed(2));
+          showToast(`💥 ${eventName}！${asset.name} 剧变至 ${asset.currentPrice}`);
+        };
+
+        // 💡 核心修复：后台预览的逻辑拆分
+        const startLivePreview = () => {
+          timer = setInterval(() => {
+            // 1. 股票全量跳动（无论排第几）
+            financeData.value.stocks.forEach((stock) => {
+              const revertForce = (stock.basePrice - stock.currentPrice) * 0.005;
+              const noise = stock.currentPrice * (Math.random() * 0.002 * 2 - 0.002);
+              stock.currentPrice = Number((stock.currentPrice + revertForce + noise).toFixed(2));
+              if (stock.currentPrice < 0.01) stock.currentPrice = 0.01;
+            });
+
+            // 2. 汇率只有非首位才跳动
+            financeData.value.currencies.forEach((curr, index) => {
+              if (index === 0) return; // 第一位是绝对基准，静止
+              const revertForce = (curr.basePrice - curr.currentPrice) * 0.005;
+              const noise = curr.currentPrice * (Math.random() * 0.002 * 2 - 0.002);
+              curr.currentPrice = Number((curr.currentPrice + revertForce + noise).toFixed(2));
+              if (curr.currentPrice < 0.01) curr.currentPrice = 0.01;
+            });
+          }, 1000);
+        };
+
+        const addItem = () => {
+          if (!newItem.value.name) return showToast('物品名不能为空', true);
+          financeData.value.items.push({ ...newItem.value });
+          newItem.value = { name: '', price: 1 };
+        };
+
+        const addStock = () => {
+          if (!newStock.value.symbol || !newStock.value.name) return showToast('代码和名称不能为空', true);
+          financeData.value.stocks.push({ ...newStock.value, currentPrice: newStock.value.basePrice });
+          newStock.value = { symbol: '', name: '', basePrice: 100 };
+        };
+
+        const addCurrency = () => {
+          if (!newCurrency.value.symbol || !newCurrency.value.name) return showToast('代码和名称不能为空', true);
+          const baseP = Number(newCurrency.value.basePrice) || 0.1;
+          financeData.value.currencies.push({ 
+            symbol: newCurrency.value.symbol,
+            name: newCurrency.value.name,
+            basePrice: baseP,
+            currentPrice: baseP 
+          });
+          newCurrency.value = { symbol: '', name: '', basePrice: 0.1 };
+          showToast('✅ 货币已添加');
+        };
+
+        const resetStock = (stock) => { if (confirm(`确定要重置 ${stock.symbol}？`)) stock.currentPrice = stock.basePrice; };
+        const resetCurrency = (curr) => { if (confirm(`确定要重置 ${curr.symbol}？`)) curr.currentPrice = curr.basePrice; };
+        const getPriceClass = (item) => item.currentPrice >= item.basePrice ? 'price-up' : 'price-down';
+        const getCurrencyClass = (item) => item.currentPrice >= item.basePrice ? 'price-up' : 'price-down';
+
+        const saveFinance = async () => {
+          await fetch(`${API_BASE}/finance`, {
+            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(financeData.value)
+          });
+          showToast('✅ 金融数据已保存');
+        };
+
+        const showToast = (msg, isError = false) => {
+          const toast = document.createElement('div');
+          toast.innerText = msg;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:9999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold; opacity: 0; transform: translateY(20px);`;
+          document.body.appendChild(toast);
+          requestAnimationFrame(() => { toast.style.opacity = '1'; toast.style.transform = 'translateY(0)'; });
+          setTimeout(() => { toast.style.opacity = '0'; toast.style.transform = 'translateY(20px)'; setTimeout(() => toast.remove(), 300); }, 2500);
+        };
+
+        onMounted(() => { fetchFinance(); startLivePreview(); });
+        onUnmounted(() => { if (timer) clearInterval(timer); });
+
+        return { 
+          financeData, newItem, newStock, newCurrency, addItem, addStock, addCurrency,
+          triggerEvent, resetStock, resetCurrency, syncPriceToBase, getPriceClass, getCurrencyClass, saveFinance,
+          moveUp, moveDown 
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>
