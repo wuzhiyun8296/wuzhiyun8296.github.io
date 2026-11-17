@@ -2215,13 +2215,24 @@ app.post('/api/navigation', async (req, res) => {
   const missingPlugins = [];
   for (const item of navList) {
     if (!item || item.hideFrontend) continue;
-    const link = String(item.link || '').trim();
+    let link = String(item.link || '').trim();
     if (!link.startsWith('/') || link === '/' || link === '#') continue;
+
+    // 💡 链接规范化：/map.html、/plugin/map.html 指的是插件文件本身，
+    //    前台并没有这个路由，统一纠正成 /<id>
+    if (/\.html?$/i.test(link) || /^\/plugin\//i.test(link)) {
+      if (!item.id) continue;
+      link = '/' + String(item.id).trim();
+      item.link = link;
+    }
+
     const rawPath = link.split('?')[0];
     const isDirLink = rawPath.endsWith('/');          // /novel/ 这种目录式链接对应 index.md
-    const rel = rawPath.replace(/^\//, '').replace(/\/$/, '');
+    const rel = rawPath.replace(/^\//, '').replace(/\/+$/, '');
     if (!rel) continue;
-    const docRel = isDirLink ? `${rel}/index.md` : (rel.endsWith('.md') ? rel : `${rel}.md`);
+    // 去掉误写的扩展名，避免生成 map.html.md 这种文件名
+    const baseRel = rel.replace(/\.(html?|md|markdown)$/i, '');
+    const docRel = isDirLink ? `${baseRel}/index.md` : `${baseRel}.md`;
     const docAbs = path.join(DOCS_DIR, docRel);
     if (fs.existsSync(docAbs)) continue;
 

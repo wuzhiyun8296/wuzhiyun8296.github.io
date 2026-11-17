@@ -403,7 +403,13 @@ next: false
           try {
             const list = plugins.value.map(x => ({
               id: x.id, title: x.name, icon: x.icon, desc: x.desc || '自定义',
-              link: x.link || ('/plugin/' + x.id + '.html'),
+              // 💡 前台链接必须是路由（/xxx），不能是插件文件（.html），
+              //    否则前台点进去 404，还会生成 map.html.md 这种页面
+              link: (function () {
+                let l = String(x.link || '').trim();
+                if (!l || l === '#' || l === '' || /\.html?$/i.test(l) || /^\/plugin\//i.test(l)) l = '/' + x.id;
+                return l;
+              })(),
               isSystem: !!x.isSystem, isBackendOnly: !!x.isBackendOnly,
               scope: scopeOf(x),
               hideBackend: !!x.hideBackend, hideFrontend: !!x.hideFrontend
