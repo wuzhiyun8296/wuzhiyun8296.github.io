@@ -134,11 +134,29 @@
           <h3 style="color:#fff; margin-top:0; font-size:15px;">3. AI 提示词助手</h3>
           <div class="prompt-box">
             <button class="btn-copy" @click="copyPrompt">📋 复制</button>
-            我需要你帮我写一个 Vue 3 CDN 单文件 HTML，作为一个独立的工具插件。<br><br>
-            <b>功能需求：</b> [填需求]<br>
-            <b>UI 要求：</b> 暗黑背景（#1e1e1e），主色调（#0e639c），内容宽度 800px 居中。<br>
-            <b>接口要求：</b> 如需保存数据，请用 POST 请求 <code>http://localhost:3001/api/file</code>，发送 <code>{ path: 'public/my-plugin.json', content: JSON.stringify(data) }</code>。<br>
-            代码以 <code>&lt;!DOCTYPE html&gt;</code> 开头。直接输出代码。
+            你是「幻想域设定集」本地写作系统的插件助手。请输出一个 <b>Vue 3 CDN 单文件 HTML</b> 插件。<br><br>
+
+            <b>【输出】</b> 直接给完整代码，以 <code>&lt;!DOCTYPE html&gt;</code> 开头，不要解释、不要 Markdown 代码围栏。<br><br>
+
+            <b>【环境】</b>
+            Vue 3 用 <code>/libs/vue/vue.global.prod.js</code>；后端固定 <code>http://localhost:3001</code>。<br><br>
+
+            <b>【核心：一个文件要同时服务前台和后台】</b>
+            用 <code>const isFront = new URLSearchParams(location.search).get('view') === 'front'</code> 判断：<br>
+            • 后台视图（默认）：暗色 #1e1e1e、主色 #0e639c、宽 800px 居中，可以增删改。<br>
+            • 前台视图（<code>?view=front</code>）：只读展示，<b>不要任何增删改按钮</b>。
+            背景必须透明，文字与边框用 CSS 变量
+            <code>var(--vp-c-text-1)</code> / <code>var(--vp-c-bg-soft)</code> / <code>var(--vp-c-divider)</code>，
+            这样能自动跟随站点深浅色；<b>不要写死黑底</b>，否则在亮色站点里会很难看。<br>
+            模板里用 <code>v-if="!isFront"</code> 包管理控件，<code>v-if="isFront"</code> 包展示内容。<br><br>
+
+            <b>【数据】</b>
+            读取 <code>GET http://localhost:3001/api/file?path=public/my-plugin.json</code>；
+            保存 <code>POST http://localhost:3001/api/file</code>，body
+            <code>{ path: 'public/my-plugin.json', content: JSON.stringify(data) }</code>。
+            前台拿不到数据时不要白屏，显示「暂无数据」即可。<br><br>
+
+            <b>【功能需求】</b> [在这里填你的需求]
           </div>
         </div>
       </div>
@@ -309,7 +327,7 @@ next: false
 ---
 
 <ClientOnly>
-  <iframe src="http://localhost:3001/plugin/${f.id}.html" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
+  <iframe src="http://localhost:3001/plugin/${f.id}.html?view=front" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
 </ClientOnly>
 `;
 

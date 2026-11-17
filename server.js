@@ -2247,7 +2247,7 @@ next: false
 ---
 
 <ClientOnly>
-  <iframe src="http://localhost:3001/plugin/${item.id}.html" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
+  <iframe src="http://localhost:3001/plugin/${item.id}.html?view=front" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
 </ClientOnly>
 `;
     try {
@@ -2526,30 +2526,50 @@ async function applyRawUpdate(sources) {
 
   if (!chosen) throw new Error('所有通道都取不到文件清单：' + tried.join('  |  '));
 
+  // 所有可用基底：主通道失败时轮换，单个文件也能换源重试
+  const bases = [];
+  for (const s of sources) {
+    for (const b of rawBaseUrls(s.repo, s.branch)) {
+      if (!bases.includes(b)) bases.push(b);
+    }
+  }
+  if (!bases.includes(chosen.base)) bases.unshift(chosen.base);
+
   const total = chosen.list.length;
-  let done = 0;
-  const failed = [];
+  let pending = chosen.list.filter((r) => r && r.indexOf('..') === -1);
+  const MAX_ROUNDS = 4;   // 首次 + 3 次重试
   updateJobLog(`✅ 通道可用（${chosen.source.repo.host}），共 ${total} 个文件，开始下载…`);
 
-  for (const rel of chosen.list) {
-    if (!rel || rel.indexOf('..') > -1) continue;
-    const url = `${chosen.base}/${rel.split('\\').join('/')}`;
-    try {
-      const buf = await httpsGetBuffer(url, 30000);
-      await fs.outputFile(path.join(__dirname, rel), buf);
-    } catch (e) {
-      failed.push(`${rel}: ${e.message}`);
-      updateJobLog(`⚠ 文件失败：${rel}`);
+  for (let round = 1; round <= MAX_ROUNDS && pending.length; round++) {
+    if (round > 1) {
+      updateJobLog(`第 ${round - 1} 次重试：还有 ${pending.length} 个文件没下到…`);
+      await new Promise((r) => setTimeout(r, 800));   // 稍等再重试，避开瞬时抖动
     }
-    done++;
-    updateJobSet({ percent: Math.round((done / total) * 100) });
-    if (done % 10 === 0 && done < total) updateJobLog(`已下载 ${done}/${total}`);
+    const still = [];
+    for (let k = 0; k < pending.length; k++) {
+      const rel = pending[k];
+      const relUrl = rel.split('\\').join('/');
+      let ok = false;
+      for (const base of bases) {
+        try {
+          const buf = await httpsGetBuffer(`${base}/${relUrl}`, 30000);
+          if (!buf || !buf.length) throw new Error('空文件');
+          await fs.outputFile(path.join(__dirname, rel), buf);
+          ok = true;
+          break;
+        } catch (e) { /* 换下一个源 */ }
+      }
+      if (!ok) still.push(rel);
+      updateJobSet({ percent: Math.round(((total - pending.length + k + 1) / total) * 100) });
+    }
+    pending = still;
   }
 
-  if (done - failed.length === 0) {
-    throw new Error('清单里的文件一个都没下下来：' + failed.slice(0, 3).join(' / '));
+  if (pending.length) {
+    // 💡 有文件始终下不下来：整次更新算失败（不记录版本号，让用户重试）
+    throw new Error(`${pending.length} 个文件多次重试仍下载失败：${pending.slice(0, 5).join(' / ')}`);
   }
-  return { base: chosen.base, source: chosen.source, total: total, failed: failed };
+  return { base: chosen.base, source: chosen.source, total: total, failed: [] };
 }
 
 // 客户端要更新的文件白名单：显式枚举目录，避免把备份、日志、私人 md 带出去
@@ -2719,6 +2739,12 @@ async function runUpdateFlow() {
   }
 
   // 3. 记录各源的最新 commit，作为 commit 比对模式的基准
+  //    💡 只有真正成功才记录：失败时保持旧版本号不变，避免"看起来已更新"
+  if (!applied || (applied.failed && applied.failed.length)) {
+    updateJobSet({ stage: 'error', running: false, ok: false, error: '更新失败，请重试', finishedAt: Date.now() });
+    updateJobLog('❌ 更新失败，请重试（版本号保持不变）');
+    throw new Error('更新失败，请重试');
+  }
   updateJobSet({ stage: 'record' });
   updateJobLog('正在记录版本信息…');
   const updated = [];

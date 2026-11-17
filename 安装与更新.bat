@@ -410,9 +410,14 @@ echo.
 echo        [OK] 下载完成
 if !BAD! GTR 0 echo        [注意] 有 !BAD! 个文件没下载成功（可重跑一次）
 
-rem 第二遍：把没下到 / 下成空文件的，再补一次
+rem 校验 + 多轮补下：先按清单逐个检查，缺的补；最多 3 轮，仍缺就判定失败
 pushd "!TGL!"
-set /a MISS=0
+set /a ROUND=0
+set /a NEED=0
+:CLEAN_ROUND
+set /a ROUND+=1
+set /a NEED=0
+set /a FIXED=0
 for /f "usebackq delims=" %%F in ("!LIST!") do (
   if not "%%F"=="" (
     set "REL=%%F"
@@ -421,18 +426,32 @@ for /f "usebackq delims=" %%F in ("!LIST!") do (
     if not exist "!REL!" set "CHK=0"
     if exist "!REL!" for %%A in ("!REL!") do if %%~zA LSS 1 set "CHK=0"
     if "!CHK!"=="0" (
+      set /a NEED+=1
       for %%D in ("!REL!") do set "DIR=%%~dpD"
       if not "!DIR!"=="" if not exist "!DIR!" mkdir "!DIR!" >nul 2>nul
       set "GOT=0"
       if defined BASE1 call :GET1 "%%F" "!REL!" && set "GOT=1"
       if "!GOT!"=="0" if defined BASE2 call :GET2 "%%F" "!REL!" && set "GOT=1"
       if "!GOT!"=="0" if defined BASE3 call :GET3 "%%F" "!REL!" && set "GOT=1"
-      if "!GOT!"=="1" set /a MISS+=1
+      if "!GOT!"=="1" set /a FIXED+=1
     )
   )
 )
+if !FIXED! GTR 0 echo        第 !ROUND! 轮补下 !FIXED! 个文件
+if !NEED! GTR 0 if !ROUND! LSS 3 (
+  timeout /t 2 /nobreak >nul
+  goto :CLEAN_ROUND
+)
 popd
-if !MISS! GTR 0 echo        已补下 !MISS! 个之前没成功的文件
+if !NEED! GTR 0 (
+  echo.
+  echo        [x] 有 !NEED! 个文件重试 3 轮仍然下载失败
+  echo            更新失败，请重试（版本号保持不变）
+  if "%AUTO%"=="2" exit /b 1
+  pause
+  exit /b 1
+)
+echo        [OK] 全部 !TOTAL! 个文件校验通过
 if not exist "!TGL!\plugin\dashboard.html" echo        [注意] 仪表盘页面缺失，请再跑一次更新
 
 rem 启动必需的 4 个文件（ASCII 名）：清单里可能还没收录，这里直接按名取
