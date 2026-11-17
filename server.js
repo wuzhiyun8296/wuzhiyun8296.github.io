@@ -2477,11 +2477,15 @@ async function collectUpdateFiles() {
     // 💡 页面 md 分两类：
     //    根级（index.md 除外）= 站点页面薄壳，新插件依赖它们，必须同步
     //    子目录（法律/国家/武器/novel）= 真正的设定文章，不外发
+    if (/^website\/docs\/components\/.+\.vue$/i.test(p)) return false;  // 站点组件：随更新下发
     if (/^website\/docs\/[^\/]+\.md$/i.test(p)) {
       return /^website\/docs\/index\.md$/i.test(p);   // 只有 index.md 跳过（各人首页不同）
     }
     if (/^website\/docs\/.+\.md$/i.test(p)) return true;
     if (/^website\/docs\/.*\.json$/i.test(p)) return true; // 站点数据（纪元地图等）也不外发
+    // 💡 其余 website/docs 下的东西（.gitkeep、图片、用户其它文件）一律不外发：
+    //    一是属于各人内容，二是中文路径塞进清单会让 .bat 按 GBK 读成乱码
+    if (p.indexOf('website/docs/') === 0) return true;
     if (/\.log$/i.test(p)) return true;
     if (/\.zip$/i.test(p)) return true;
     return false;
