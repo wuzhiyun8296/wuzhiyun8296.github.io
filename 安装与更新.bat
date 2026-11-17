@@ -7,6 +7,8 @@ color 0B
 set "APPDIR=%~dp0"
 if "%APPDIR:~-1%"=="\" set "APPDIR=%APPDIR:~0,-1%"
 set "APPNAME=幻想域设定集"
+rem 取一个回车符，用于让进度条在同一行刷新
+for /f %%a in ('copy /Z "%~dpf0" nul') do set "CR=%%a"
 set "AUTO=0"
 set "FORCE_MODE="
 if /i "%~1"=="/check" set "AUTO=1"
@@ -27,9 +29,9 @@ echo                幻想域设定集 - 安装 / 更新
 echo  ==============================================================
 echo    当前所在： %APPDIR%
 echo.
-echo    [1] 全新安装     复制到指定目录，装依赖，建桌面快捷方式
-echo    [2] 更新已有版本 从 GitHub / Gitee 下载最新代码覆盖
-echo    [3] 只检测环境   检查 Node.js / npm / 网络，不做修改
+echo    [1] 全新安装     从网上拉取整套程序，装依赖，建桌面快捷方式
+echo    [2] 更新已有版本 只覆盖代码文件，不动你的设定数据
+echo    [3] 只检测环境   检查 Node.js / npm / 网络
 echo    [0] 退出
 echo.
 
@@ -69,9 +71,7 @@ for /f "delims=" %%v in ('npm -v 2^>nul') do set "NPMV=%%v"
 
 echo        [OK] Node.js : v!NV!
 echo        [OK] npm     : v!NPMV!
-if !NMAJOR! LSS 18 (
-  echo        [!] 版本偏低，建议 18 以上，否则可能装不上依赖。
-)
+if !NMAJOR! LSS 18 echo        [注意] 版本偏低，建议 18 以上。
 
 if "%MODE%"=="3" goto :CHECK_DONE
 if "%MODE%"=="1" goto :INSTALL
@@ -79,14 +79,17 @@ if "%MODE%"=="2" goto :UPDATE
 goto :MAIN
 
 rem ============================================================
-rem  模式 1：全新安装
+rem  模式 1：全新安装（这台电脑上什么都没有）
 rem ============================================================
 :INSTALL
 echo.
-echo  [1/4] 选择安装位置
+echo  [1/5] 选择安装位置
 echo.
-echo        默认： !LOCALAPPDATA!\!APPNAME!
-echo        直接回车用默认，或粘贴别的路径（如 D:\FantasyWorld）
+echo        默认位置： !LOCALAPPDATA!\!APPNAME!
+echo.
+echo        [1] 用默认位置（推荐，装到当前用户目录，不需要管理员）
+echo        [2] 浏览选择（弹出文件夹窗口）
+echo        [3] 手动输入路径
 echo.
 
 set "TARGET="
@@ -94,61 +97,82 @@ if "%AUTO%"=="2" (
   if defined INSTALL_DIR set "TARGET=%INSTALL_DIR%"
   goto :DIR_READY
 )
-set /p "TARGET=        安装到: "
+
+set "DIRMODE="
+choice /c 123 /n /m "        请选择 [1/2/3]: "
+if errorlevel 3 set "DIRMODE=3"
+if errorlevel 2 if not defined DIRMODE set "DIRMODE=2"
+if errorlevel 1 if not defined DIRMODE set "DIRMODE=1"
+
+if "!DIRMODE!"=="3" set /p "TARGET=        请输入完整路径（例如 D:\FantasyWorld）: "
+if "!DIRMODE!"=="2" (
+  echo        正在打开文件夹选择窗口...
+  call :PS_PICK
+  if defined PICKED set "TARGET=!PICKED!"
+  if not defined TARGET echo        [i] 没有选择文件夹，改用默认位置。
+)
+if "!DIRMODE!"=="1" set "TARGET=!LOCALAPPDATA!\!APPNAME!"
+
 :DIR_READY
 if not defined TARGET set "TARGET=!LOCALAPPDATA!\!APPNAME!"
 set "TARGET=!TARGET:"=!"
 if "!TARGET:~-1!"=="\" set "TARGET=!TARGET:~0,-1!"
-
-for %%a in ("!APPDIR!") do set "SRCL=%%~fa"
 for %%a in ("!TARGET!") do set "TGL=%%~fa"
+for %%a in ("!APPDIR!") do set "SRCL=%%~fa"
 if /i "!SRCL!"=="!TGL!" (
-  echo        [x] 不能装到安装包所在目录本身。
-  goto :FAIL
-)
-set "SLEN=0"
-for /l %%i in (1,1,120) do if not "!SRCL:~%%i,1!"=="" set "SLEN=%%i"
-if /i "!TGL:~0,%SLEN%!"=="!SRCL!" (
-  echo        [x] 不能装到安装包目录里面。
+  echo        [x] 不能装到本程序所在的目录。
   goto :FAIL
 )
 echo        安装到： !TGL!
 
 echo.
-echo  [2/4] 复制程序文件 ...
-if not exist "!TGL!" mkdir "!TGL!" >nul 2>nul
-if not exist "!TGL!" (
-  echo        [x] 目录创建失败，可能需要管理员权限。
+echo  [2/5] 检测下载通道 ...
+call :PICK_CHANNEL
+if not defined BASE1 (
+  echo        [x] Gitee / GitHub / jsDelivr 都连不上。
+  echo            安装需要联网下载程序文件，请检查网络后重试。
   goto :FAIL
 )
-robocopy "!SRCL!" "!TGL!" /E /IS /IT /XD ".git" ".vitepress\cache" ".update_backup" /NFL /NDL /NJH /NJS /NP >nul
-if not exist "!TGL!\一键启动.vbs" (
-  echo        [x] 复制失败，目标目录里没有「一键启动.vbs」。
-  goto :FAIL
-)
-echo        [OK] 文件已就位
+echo        [OK] 主通道： !CH1!
+if defined CH2 echo        备用： !CH2!
+if defined CH3 echo        备用： !CH3!
 
 echo.
-echo  [3/4] 处理依赖 ...
-if exist "!TGL!\node_modules\express" (
-  echo        [OK] 依赖已随文件复制完成
-  goto :INSTALL_LNK
+echo  [3/5] 下载程序文件 ...
+if not exist "!TGL!" mkdir "!TGL!" >nul 2>nul
+if not exist "!TGL!" (
+  echo        [x] 目录创建失败： !TGL!
+  echo            换一个位置（比如 D:\ 下）再试。
+  goto :FAIL
 )
-echo        正在联网安装依赖（首次 1-3 分钟）...
+call :DOWNLOAD_ALL
+if not exist "!TGL!\server.js" (
+  echo        [x] 下载失败：目标目录里没有 server.js
+  goto :FAIL
+)
+if not exist "!TGL!\一键启动.vbs" (
+  echo        [x] 下载失败：缺少启动脚本「一键启动.vbs」
+  goto :FAIL
+)
+echo        [OK] 程序文件已下载
+
+echo.
+echo  [4/5] 安装依赖（首次约 1-3 分钟，请勿关闭窗口）...
 call :PICK_REG
+echo        使用源： !REG!
 pushd "!TGL!"
 call npm install --registry="!REG!" --no-audit --no-fund
 popd
+title 幻想域设定集 - 安装与更新
 if exist "!TGL!\node_modules\express" (
   echo        [OK] 依赖安装完成
 ) else (
-  echo        [!] 依赖可能没装全，稍后可手动执行：
+  echo        [注意] 依赖可能没装全，可手动执行：
   echo            cd /d "!TGL!" ^&^& npm install --registry=!REG!
 )
 
-:INSTALL_LNK
 echo.
-echo  [4/4] 创建桌面快捷方式 ...
+echo  [5/5] 创建桌面快捷方式 ...
 call :MAKE_LNK "!TGL!"
 echo.
 echo  ==============================================================
@@ -190,7 +214,7 @@ if not exist "!TGL!\server.js" (
 )
 if exist "!TGL!\.git" (
   echo.
-  echo        [!] 这个目录带 .git，是开发者本地仓库。
+  echo        [注意] 这个目录带 .git，是开发者本地仓库。
   echo            更新会用仓库版本覆盖本地改动，建议先提交代码。
   if "%AUTO%"=="2" goto :UP_GO
   choice /c YN /n /m "        仍要继续? [Y/N] "
@@ -201,25 +225,9 @@ echo        更新目录： !TGL!
 
 echo.
 echo  [2/4] 检测下载通道 ...
-set "BASE1="
-set "BASE2="
-set "BASE3="
-call :PROBE "!B_GITEE!/version.json"
-if not errorlevel 1 set "BASE1=!B_GITEE!" & set "CH1=Gitee"
-call :PROBE "!B_GITHUB!/version.json"
-if not errorlevel 1 (
-  if not defined BASE1 ( set "BASE1=!B_GITHUB!" & set "CH1=GitHub" ) else ( set "BASE2=!B_GITHUB!" & set "CH2=GitHub" )
-)
-call :PROBE "!B_JSD!/version.json"
-if not errorlevel 1 (
-  if not defined BASE1 ( set "BASE1=!B_JSD!" & set "CH1=jsDelivr" ) else (
-    if not defined BASE2 ( set "BASE2=!B_JSD!" & set "CH2=jsDelivr" ) else ( set "BASE3=!B_JSD!" & set "CH3=jsDelivr" )
-  )
-)
-
+call :PICK_CHANNEL
 if not defined BASE1 (
-  echo        [x] Gitee / GitHub / jsDelivr 都连不上。
-  echo            请检查网络后再试。
+  echo        [x] Gitee / GitHub / jsDelivr 都连不上，请检查网络。
   goto :FAIL
 )
 echo        [OK] 主通道： !CH1!
@@ -292,18 +300,11 @@ echo    成功： !OKN! 个文件
 echo    失败： !FAILN! 个文件
 echo    备份： !BK!
 echo.
-if exist "!TGL!\version.json" (
-  echo    当前版本：
-  type "!TGL!\version.json"
-  echo.
-)
-echo    数据没有被改动：
+echo    你的数据没有被改动：
 echo      library\                  小说章节
 echo      website\docs\public\      设定、人物、时间线
-echo      update-config.json        更新源配置
 echo.
 echo    接下来：关掉正在运行的黑窗口，重新双击「一键启动.vbs」
-echo    出问题就把备份文件夹里的东西复制回去回滚。
 echo.
 goto :THEEND
 
@@ -340,6 +341,122 @@ if not errorlevel 1 exit /b 0
 set "REG=https://registry.npmjs.org"
 exit /b 0
 
+:PICK_CHANNEL
+set "BASE1="
+set "BASE2="
+set "BASE3="
+set "CH1="
+set "CH2="
+set "CH3="
+call :PROBE "!B_GITEE!/version.json"
+if not errorlevel 1 set "BASE1=!B_GITEE!" & set "CH1=Gitee"
+call :PROBE "!B_GITHUB!/version.json"
+if not errorlevel 1 (
+  if not defined BASE1 ( set "BASE1=!B_GITHUB!" & set "CH1=GitHub" ) else ( set "BASE2=!B_GITHUB!" & set "CH2=GitHub" )
+)
+call :PROBE "!B_JSD!/version.json"
+if not errorlevel 1 (
+  if not defined BASE1 ( set "BASE1=!B_JSD!" & set "CH1=jsDelivr" ) else (
+    if not defined BASE2 ( set "BASE2=!B_JSD!" & set "CH2=jsDelivr" ) else ( set "BASE3=!B_JSD!" & set "CH3=jsDelivr" )
+  )
+)
+exit /b 0
+
+:DOWNLOAD_ALL
+set "LIST=%TEMP%\fw_install_files.txt"
+if exist "!LIST!" del /f /q "!LIST!" >nul 2>nul
+call :FETCH "update-files.txt" "!LIST!"
+if not exist "!LIST!" goto :DL_PROBLEM
+for %%A in ("!LIST!") do if %%~zA LSS 50 goto :DL_PROBLEM
+rem 清单只保留代码文件：website/docs 下只放行 .md 和 .vue
+rem （用 ASCII 前缀过滤，不去碰多字节字符，避免中文路径乱码导致的 404）
+if exist "!LIST!.clean" del /f /q "!LIST!.clean" >nul 2>nul
+findstr /V /R /C:"^website/docs/" "!LIST!" > "!LIST!.clean" 2>nul
+findstr /R /C:"^website/docs/.*\.md" "!LIST!" >> "!LIST!.clean" 2>nul
+findstr /R /C:"^website/docs/.*\.vue" "!LIST!" >> "!LIST!.clean" 2>nul
+if exist "!LIST!.clean" for %%A in ("!LIST!.clean") do if %%~zA GTR 10 move /y "!LIST!.clean" "!LIST!" >nul 2>nul
+
+set /a TOTAL=0
+for /f "usebackq delims=" %%C in ("!LIST!") do set /a TOTAL+=1
+echo        清单共 !TOTAL! 个文件
+
+pushd "!TGL!"
+set /a IDX=0
+set /a BAD=0
+for /f "usebackq delims=" %%F in ("!LIST!") do (
+  if not "%%F"=="" (
+    set /a IDX+=1
+    set "REL=%%F"
+    set "REL=!REL:/=\!"
+    for %%D in ("!REL!") do set "DIR=%%~dpD"
+    if not "!DIR!"=="" if not exist "!DIR!" mkdir "!DIR!" >nul 2>nul
+    set "GOT=0"
+    if defined BASE1 call :GET1 "%%F" "!REL!" && set "GOT=1"
+    if "!GOT!"=="0" if defined BASE2 call :GET2 "%%F" "!REL!" && set "GOT=1"
+    if "!GOT!"=="0" if defined BASE3 call :GET3 "%%F" "!REL!" && set "GOT=1"
+    if "!GOT!"=="0" set /a BAD+=1
+    set /a FILLED=IDX*24/TOTAL
+    set "BAR="
+    for /l %%b in (1,1,!FILLED!) do set "BAR=!BAR!#"
+    set /a LEFT=24-FILLED
+    set "PAD="
+    for /l %%b in (1,1,!LEFT!) do set "PAD=!PAD!-"
+    if not defined BAR set "BAR= "
+    <nul set /p "=        下载 [!BAR!!PAD!] !IDX!/!TOTAL!!CR!"
+  )
+)
+popd
+echo.
+echo        [OK] 下载完成
+if !BAD! GTR 0 echo        [注意] 有 !BAD! 个文件没下载成功（可重跑一次）
+
+rem 启动必需的 4 个文件（ASCII 名）：清单里可能还没收录，这里直接按名取
+for %%N in (start.vbs start.bat loading.html icon3.ico) do (
+  if not exist "!TGL!\%%N" call :FETCH "%%N" "!TGL!\%%N"
+)
+
+rem 启动脚本：只下载 ASCII 名的 start.vbs，再复制成「一键启动.vbs」
+if exist "!TGL!\start.vbs" (
+  copy /y "!TGL!\start.vbs" "!TGL!\一键启动.vbs" >nul 2>nul
+  echo        [OK] 启动脚本
+) else (
+  echo        [注意] 没下到 start.vbs，改为在本机生成启动脚本
+  call :MAKE_LAUNCHER
+)
+exit /b 0
+
+:MAKE_LAUNCHER
+set "LV=!TGL!\一键启动.vbs"
+if exist "!LV!" del /f /q "!LV!" >nul 2>nul
+>"!LV!" echo Set ws = CreateObject("WScript.Shell")
+>>"!LV!" echo Set fso = CreateObject("Scripting.FileSystemObject")
+>>"!LV!" echo d = fso.GetParentFolderName(WScript.ScriptFullName)
+>>"!LV!" echo ws.CurrentDirectory = d
+>>"!LV!" echo ws.Run "cmd /c node server.js", 1, False
+>>"!LV!" echo ws.Run "cmd /c npm run dev", 1, False
+>>"!LV!" echo ws.Run "loading.html", 1, False
+echo        [OK] 已生成启动脚本
+exit /b 0
+
+:DL_PROBLEM
+echo        [x] 文件清单 update-files.txt 下载失败。
+echo            请稍后重试，或让对方把整个程序目录打包发给你。
+exit /b 1
+
+:PS_PICK
+set "PICKED="
+set "PS1=%TEMP%\__fw_folder_pick.ps1"
+if exist "!PS1!" del /f /q "!PS1!" >nul 2>nul
+>"!PS1!" echo Add-Type -AssemblyName System.Windows.Forms ^| Out-Null
+>>"!PS1!" echo $d = New-Object System.Windows.Forms.FolderBrowserDialog
+>>"!PS1!" echo $d.Description = '选择幻想域设定集的安装位置'
+>>"!PS1!" echo $d.ShowNewFolderButton = $true
+>>"!PS1!" echo $r = $d.ShowDialog()
+>>"!PS1!" echo if ($r -eq [System.Windows.Forms.DialogResult]::OK) { Write-Output $d.SelectedPath }
+for /f "usebackq delims=" %%q in (`powershell -NoProfile -STA -ExecutionPolicy Bypass -File "!PS1!" 2^>nul`) do set "PICKED=%%q"
+del /f /q "!PS1!" >nul 2>nul
+exit /b 0
+
 :MAKE_LNK
 set "LNKVBS=%TEMP%\__fw_mklink.vbs"
 if exist "!LNKVBS!" del /f /q "!LNKVBS!" >nul 2>nul
@@ -356,7 +473,6 @@ del /f /q "!LNKVBS!" >nul 2>nul
 echo        [OK] 桌面快捷方式已创建
 exit /b 0
 
-rem 从任意可用通道取一个文件
 :FETCH
 set "GOT="
 if defined BASE1 call :GET1 "%~1" "%~2" && set "GOT=1"
@@ -379,7 +495,7 @@ rem  Node.js 缺失：自动下载安装包并打开
 rem ============================================================
 :NODE_MISSING
 echo.
-echo        [x] 没有检测到 Node.js，需要先装上它（本程序靠它跑起来）。
+echo        [x] 没有检测到 Node.js，需要先装上它（本程序靠它运行）。
 echo.
 echo            [1] 自动下载并打开安装包（推荐，约 30MB）
 echo            [2] 只打开官网下载页，我自己装
@@ -406,7 +522,7 @@ call :GET_NODE
 if errorlevel 1 goto :FAIL
 echo.
 echo        Node.js 安装程序已打开，请一路「下一步」装完。
-echo        装好后重新双击本程序继续（安装 / 更新）。
+echo        装好后重新双击本程序继续。
 echo.
 pause
 exit /b 1
@@ -417,7 +533,7 @@ if /i "%PROCESSOR_ARCHITECTURE%"=="ARM64" set "ARCH=arm64"
 if /i "%PROCESSOR_ARCHITECTURE%"=="x86" set "ARCH=x86"
 echo.
 echo        [检测] 系统架构： !ARCH!
-echo        [检测] 正在查找可用的 Node.js LTS 安装包 ...
+echo        [检测] 正在查找可用的 Node.js 安装包 ...
 
 set "NODEVER="
 set "SRCNAME="

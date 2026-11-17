@@ -1,8 +1,10 @@
 {
-  "version": "20261117-192730",
-  "count": 45,
+  "version": "20261117-201101",
+  "count": 43,
   "files": [
     "admin.html",
+    "icon3.ico",
+    "loading.html",
     "package.json",
     "plugin/audit.html",
     "plugin/characters.html",
@@ -23,6 +25,9 @@
     "plugin/world-tree.html",
     "plugin/writer.html",
     "server.js",
+    "start.bat",
+    "start.vbs",
+    "update-config.json",
     "version.json",
     "website/.vitepress/config.mjs",
     "website/.vitepress/theme/Layout.vue",
@@ -32,20 +37,13 @@
     "website/.vitepress/theme/custom.css",
     "website/.vitepress/theme/index.js",
     "website/docs/characters.md",
-    "website/docs/components/NavCards.vue",
-    "website/docs/components/TreeNode.vue",
-    "website/docs/components/WorldNavTree.vue",
-    "website/docs/components/WorldTree.vue",
-    "website/docs/components/WorldTreeRender.vue",
     "website/docs/epoch-map.md",
     "website/docs/finance.md",
     "website/docs/graph.md",
     "website/docs/history.md",
     "website/docs/map.md",
     "website/docs/navigation.md",
-    "website/docs/novel/NovelPage.vue",
     "website/docs/timeline.md",
-    "website/docs/world-navigation.md",
-    "website/docs/武器/.gitkeep"
+    "website/docs/world-navigation.md"
   ]
 }

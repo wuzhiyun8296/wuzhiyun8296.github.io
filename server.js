@@ -883,6 +883,13 @@ const UPDATE_CONFIG_FILE = path.join(__dirname, 'update-config.json');
 // 读取更新源配置：支持「多源」——先从 GitHub 下，失败自动切 Gitee
 // 新格式: { "sources": [ { repoUrl, branch, lastCommit }, ... ] }
 // 旧格式: { "repoUrl": "...", "branch": "main", "lastCommit": "..." } 仍然兼容
+// 内置的默认更新源：全新安装时 update-config.json 可能不存在，
+// 没有它后台点「检测更新」会直接报「未配置更新源」
+const DEFAULT_UPDATE_SOURCES = [
+  { repoUrl: 'https://gitee.com/amspace/wuzhiyun8296.github.io', branch: 'main', lastCommit: '' },
+  { repoUrl: 'https://github.com/wuzhiyun8296/wuzhiyun8296.github.io', branch: 'main', lastCommit: '' }
+];
+
 async function readUpdateConfig() {
   let cfg = {};
   if (fs.existsSync(UPDATE_CONFIG_FILE)) {
@@ -893,6 +900,8 @@ async function readUpdateConfig() {
   if (!raw.length && cfg.repoUrl) {
     raw = [{ repoUrl: cfg.repoUrl, branch: cfg.branch, lastCommit: cfg.lastCommit }];
   }
+  // 💡 兜底：文件缺失或没写 sources 时，用内置的公开仓库地址
+  if (!raw.length) raw = DEFAULT_UPDATE_SOURCES.slice();
 
   const sources = [];
   for (const s of raw) {
@@ -2463,7 +2472,13 @@ async function applyRawUpdate(sources) {
 
 // 客户端要更新的文件白名单：显式枚举目录，避免把备份、日志、私人 md 带出去
 async function collectUpdateFiles() {
-  const roots = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
+  // 💡 全新电脑安装时，启动所需的一切都要能下载到：
+  //    server/插件/站点 + 启动脚本（start.bat / loading.html / icon3.ico）。
+  //    注意：清单里只放纯 ASCII 文件名——批处理按 GBK 读清单，
+  //    中文名会变乱码（「一键启动.vbs」由安装脚本用百分号编码单独下载）。
+  const roots = ['server.js', 'admin.html', 'package.json', 'version.json',
+                 'update-config.json', 'start.vbs', 'start.bat', 'loading.html', 'icon3.ico',
+                 'plugin', 'website'];
   const out = [];
 
   const skipPath = (rel) => {
