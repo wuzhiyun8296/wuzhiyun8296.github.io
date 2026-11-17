@@ -1,0 +1,1028 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>历史模拟插件</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #1a1a1c; color: #ccc; font-family: 'Segoe UI', 'Microsoft YaHei', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+
+    .header { display: flex; align-items: center; gap: 12px; padding: 10px 16px; background: #232326; border-bottom: 1px solid #333; flex-shrink: 0; }
+    .header h2 { margin: 0; font-size: 16px; color: #fff; }
+    .header .spacer { flex: 1; }
+
+    .btn { background: #2f2f32; color: #ddd; border: 1px solid #414146; padding: 6px 12px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .btn:hover { background: #3a3a3e; color: #fff; }
+    .btn.primary { background: #0e639c; border-color: #4aa3df; color: #fff; }
+    .btn.primary:hover { background: #1177bb; }
+    .btn.danger { background: #3a2224; border-color: #5a2a2e; color: #e88; }
+    .btn.small { padding: 3px 8px; font-size: 11px; }
+
+    .layout { flex: 1; display: flex; overflow: hidden; }
+    .pane { background: #1f1f22; border-right: 1px solid #333; display: flex; flex-direction: column; overflow: hidden; }
+    .pane.left { width: 260px; flex-shrink: 0; }
+    .pane.right { width: 330px; flex-shrink: 0; border-right: none; border-left: 1px solid #333; }
+    .pane-title { padding: 10px 12px; font-size: 12px; font-weight: bold; color: #8ab4d8; border-bottom: 1px solid #333; background: #232326; display: flex; align-items: center; justify-content: space-between; }
+    .pane-body { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; }
+
+    .center { flex: 1; min-width: 0; min-height: 0; position: relative; background: #111; display: flex; align-items: center; justify-content: center; overflow: hidden; }
+    #map-canvas { max-width: 100%; max-height: 100%; width: auto; height: auto; display: block; background: #0d1b26; cursor: crosshair; }
+    .canvas-tip { position: absolute; left: 12px; top: 12px; background: rgba(0,0,0,.6); border: 1px solid #333; border-radius: 6px; padding: 6px 10px; font-size: 12px; color: #aaa; z-index: 2; }
+
+    /* ============ 教程弹窗 ============ */
+    .tut-overlay { position: fixed; inset: 0; background: rgba(0,0,0,.68); backdrop-filter: blur(3px); z-index: 9000; display: flex; align-items: center; justify-content: center; }
+    .tut-box { width: min(760px, 92vw); max-height: 86vh; background: #222226; border: 1px solid #414148; border-radius: 14px; overflow: hidden; display: flex; flex-direction: column; box-shadow: 0 30px 80px rgba(0,0,0,.7); }
+    .tut-head { padding: 16px 22px; border-bottom: 1px solid #34343a; display: flex; align-items: center; gap: 10px; }
+    .tut-head h3 { margin: 0; font-size: 15px; color: #fff; flex: 1; }
+    .tut-dots { display: flex; gap: 6px; }
+    .tut-dot { width: 22px; height: 5px; border-radius: 3px; background: #3d3d44; transition: .2s; }
+    .tut-dot.on { background: #0e639c; }
+    .tut-dot.done { background: #2ea043; }
+    .tut-body { padding: 22px 24px; overflow-y: auto; }
+    .tut-body h4 { margin: 0 0 6px; font-size: 17px; color: #fff; }
+    .tut-sub { color: #7f8c99; font-size: 12px; margin-bottom: 16px; }
+    .tut-p { margin: 0 0 12px; font-size: 13.5px; line-height: 1.9; color: #c3ced9; }
+    .tut-p code { background: #33333a; border: 1px solid #45454d; border-radius: 4px; padding: 1px 6px; color: #8fd3ff; font-size: 12.5px; }
+    .tut-p b { color: #ffd479; }
+    .tut-note { margin-top: 14px; padding: 10px 14px; border-left: 3px solid #d29922; background: rgba(210,153,34,.08); border-radius: 0 6px 6px 0; font-size: 12.5px; line-height: 1.8; color: #c9b78e; }
+    .tut-warn { border-left-color: #d1242f; background: rgba(209,36,47,.08); color: #e2a9ad; }
+    .tut-ok { border-left-color: #2ea043; background: rgba(46,160,67,.08); color: #a5d6b0; }
+    .tut-foot { padding: 14px 22px; border-top: 1px solid #34343a; display: flex; align-items: center; gap: 10px; }
+    .tut-foot .spacer { flex: 1; }
+    .tut-btn { background: #2f2f34; border: 1px solid #45454d; color: #ddd; padding: 7px 16px; border-radius: 6px; font-size: 13px; cursor: pointer; }
+    .tut-btn:hover { background: #3a3a40; color: #fff; }
+    .tut-btn.primary { background: #0e639c; border-color: #4aa3df; color: #fff; }
+    .tut-btn.primary:hover { background: #1177bb; }
+    .tut-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .tut-check { font-size: 12px; color: #2ea043; }
+
+    .row-item { background: #26262a; border: 1px solid #35353a; border-radius: 6px; padding: 8px; display: flex; flex-direction: column; gap: 6px; }
+    .row-item.active { border-color: #0e639c; box-shadow: 0 0 0 1px #0e639c55; }
+    .row-head { display: flex; align-items: center; gap: 6px; }
+    .dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+    input, select { background: #1a1a1c; border: 1px solid #3d3d42; color: #eee; padding: 4px 6px; border-radius: 4px; font-size: 12px; outline: none; width: 100%; }
+    input:focus, select:focus { border-color: #0e639c; }
+
+    /* ============ 下拉框美化 ============ */
+    select {
+      appearance: none; -webkit-appearance: none; -moz-appearance: none;
+      padding: 7px 28px 7px 10px;
+      border-radius: 7px;
+      border: 1px solid #3f3f46;
+      background-color: #202024;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%238a8a92' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 9px center;
+      color: #e2e2e6;
+      font-size: 12.5px;
+      cursor: pointer;
+      transition: border-color .15s, background-color .15s, box-shadow .15s;
+      box-shadow: 0 1px 0 rgba(255,255,255,.03) inset;
+    }
+    select:hover { background-color: #26262b; border-color: #4d4d56; color: #fff; }
+    select:hover { background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%236fc0f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E"); }
+    select:focus {
+      outline: none; border-color: #0e639c;
+      box-shadow: 0 0 0 3px rgba(14,99,156,.22);
+      background-color: #202024;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath d='M2.5 4.5L6 8l3.5-3.5' fill='none' stroke='%236fc0f0' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+    }
+    select option { background: #24242a; color: #e8e8ec; padding: 6px; }
+    select option:checked { background: #0e639c; color: #fff; }
+
+    /* ============ 自绘下拉框（原生 select 的弹层由系统绘制，没法美化，这里整只换掉） ============ */
+    .pick { position: relative; flex: 1 1 0; min-width: 0; }
+    .pick-btn {
+      width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      background: #202024; border: 1px solid #3f3f46; color: #e2e2e6;
+      padding: 7px 10px; border-radius: 7px; font-size: 12.5px; cursor: pointer;
+      transition: border-color .15s, background .15s, box-shadow .15s;
+      box-shadow: 0 1px 0 rgba(255,255,255,.03) inset; text-align: left;
+    }
+    .pick-btn:hover { background: #26262b; border-color: #4d4d56; color: #fff; }
+    .pick-btn:focus-visible { outline: none; border-color: #0e639c; box-shadow: 0 0 0 3px rgba(14,99,156,.22); }
+    .pick-ph { color: #6f6f78; }
+    .pick-txt { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .pick-arrow { width: 8px; height: 8px; border-right: 1.6px solid #8a8a92; border-bottom: 1.6px solid #8a8a92; transform: rotate(45deg) translate(-2px, -2px); transition: transform .18s, border-color .15s; flex-shrink: 0; }
+    .pick.open .pick-arrow { transform: rotate(-135deg) translate(-2px, -2px); border-color: #6fc0f0; }
+    .pick.open .pick-btn { border-color: #0e639c; background: #1e2a33; }
+    .pick-list {
+      position: fixed; z-index: 99999; max-height: 260px; overflow-y: auto;
+      background: #24242a; border: 1px solid #45454d; border-radius: 8px;
+      box-shadow: 0 16px 40px rgba(0,0,0,.55); padding: 4px;
+      animation: pickIn .12s ease;
+    }
+    @keyframes pickIn { from { opacity: 0; transform: translateY(-4px); } to { opacity: 1; transform: none; } }
+    .pick-item { padding: 7px 10px; border-radius: 6px; font-size: 12.5px; color: #d6d6dc; cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .pick-item:hover { background: #31313a; color: #fff; }
+    .pick-item.on { background: #0e639c; color: #fff; }
+    .muted { color: #777; font-size: 11px; }
+    .log { background: #141416; border-top: 1px solid #333; max-height: 130px; overflow-y: auto; padding: 8px 12px; font-size: 12px; line-height: 1.7; color: #9fb8c9; }
+    .log div { border-left: 2px solid #0e639c; padding-left: 8px; margin-bottom: 4px; }
+    .chip { display: inline-block; padding: 1px 7px; border-radius: 999px; font-size: 11px; background: #2c2c31; border: 1px solid #3a3a40; }
+    .site-list { display: flex; flex-wrap: wrap; gap: 4px; max-height: 150px; overflow-y: auto; }
+    .site-chip { font-size: 11px; padding: 3px 8px; border-radius: 999px; border: 1px solid #3a3a40; background: #232327; cursor: pointer; }
+    .site-chip.on { background: #0e639c; border-color: #4aa3df; color: #fff; }
+    .power { display: flex; gap: 6px; font-size: 11px; color: #888; }
+    .power b { color: #c9d7e3; font-weight: normal; }
+  </style>
+</head>
+<body>
+<div id="app" style="display:flex;flex-direction:column;height:100%;">
+  <div class="header">
+    <h2>📜 历史模拟</h2>
+    <span class="muted">事件是唯一真相，版图按据点重新划分</span>
+    <div class="spacer"></div>
+    <button class="btn" @click="openTut">❓ 教程</button>
+    <button class="btn" @click="importFromMap" title="把世界地图里的国家和地标导入成势力与据点">🗺️ 从地图导入</button>
+    <button class="btn" @click="syncToMap" title="把当前纪元的版图写回世界地图">⬆️ 同步到地图</button>
+    <button class="btn" @click="addEpoch">＋ 纪元</button>
+    <button class="btn" @click="addState">＋ 势力</button>
+    <button class="btn" :class="{ primary: addSiteMode }" @click="addSiteMode = !addSiteMode">{{ addSiteMode ? '✅ 点地图放置' : '＋ 据点' }}</button>
+    <button class="btn primary" @click="save">💾 保存</button>
+  </div>
+
+  <div class="layout">
+    <!-- 左：纪元 / 势力 / 据点 -->
+    <div class="pane left">
+      <div class="pane-title">⏳ 纪元</div>
+      <div class="pane-body" style="flex:0 0 auto; max-height:30%;">
+        <div v-for="ep in epochsSorted" :key="ep.id" class="row-item" :class="{ active: ep.id === currentEpochId }" @click="currentEpochId = ep.id">
+          <div class="row-head">
+            <span class="chip">#{{ ep.ordinal }}</span>
+            <input v-model="ep.name" @click.stop />
+          </div>
+          <div class="row-head">
+            <input v-model="ep.start" placeholder="起始" @click.stop />
+            <input v-model="ep.end" placeholder="结束" @click.stop />
+            <button class="btn small danger" @click.stop="removeEpoch(ep.id)">✕</button>
+          </div>
+        </div>
+        <div v-if="!epochsSorted.length" class="muted">还没有纪元，点右上角「＋ 纪元」。</div>
+      </div>
+
+      <div class="pane-title">🏛️ 势力 <span class="muted">{{ states.length }}</span></div>
+      <div class="pane-body" style="flex:1;">
+        <div v-for="st in states" :key="st.id" class="row-item">
+          <div class="row-head">
+            <span class="dot" :style="{ background: st.color }"></span>
+            <input v-model="st.name" />
+            <input type="color" v-model="st.color" style="width:28px; padding:0; height:24px;" />
+            <button class="btn small danger" @click="removeState(st.id)">✕</button>
+          </div>
+          <div class="power">
+            <span>人口 <b><input type="number" v-model.number="st.power.pop" style="width:46px;padding:1px 4px;" /></b></span>
+            <span>军力 <b><input type="number" v-model.number="st.power.army" style="width:46px;padding:1px 4px;" /></b></span>
+            <span>财力 <b><input type="number" v-model.number="st.power.gold" style="width:46px;padding:1px 4px;" /></b></span>
+          </div>
+        </div>
+        <div v-if="!states.length" class="muted">还没有势力。</div>
+      </div>
+
+      <div class="pane-title">📍 据点 <span class="muted">{{ sites.length }}</span></div>
+      <div class="pane-body" style="flex:1;">
+        <div v-for="site in sites" :key="site.id" class="row-item" :class="{ active: site.id === selectedSiteId }" @click="selectedSiteId = site.id">
+          <div class="row-head">
+            <span class="dot" :style="{ background: stateColor(ownerOf(site.id)) }"></span>
+            <input v-model="site.name" @click.stop />
+            <button class="btn small danger" @click.stop="removeSite(site.id)">✕</button>
+          </div>
+          <div class="row-head">
+            <pick-box v-model="site.type" :options="siteTypeOptions"></pick-box>
+            <pick-box v-model="site.owner" :options="ownerOptions" placeholder="无主"></pick-box>
+          </div>
+        </div>
+        <div v-if="!sites.length" class="muted">点右上角「＋ 据点」，然后在地图上点一下。</div>
+      </div>
+    </div>
+
+    <!-- 中：地图 -->
+    <div class="center">
+      <canvas id="map-canvas" ref="canvasEl" width="1600" height="900" @click="onCanvasClick"></canvas>
+      <div class="canvas-tip">
+        {{ addSiteMode ? '点击地图放置据点' : (selectedSiteId ? '已选中：' + siteName(selectedSiteId) : '点击据点查看，右键可取消选择') }}
+      </div>
+    </div>
+
+    <!-- 右：事件 -->
+    <div class="pane right">
+      <div class="pane-title">⚔️ 推演：新增事件</div>
+      <div class="pane-body" style="flex:0 0 auto;">
+        <div class="row-head">
+          <pick-box v-model="form.epochId" :options="epochOptions" placeholder="选择纪元"></pick-box>
+          <input v-model="form.date" placeholder="时间，如 开元 210" style="width:130px;" />
+        </div>
+        <div class="row-head">
+          <pick-box v-model="form.type" :options="eventTypeOptions"></pick-box>
+          <pick-box v-model="form.attacker" :options="attackerOptions" placeholder="攻方"></pick-box>
+          <pick-box v-model="form.defender" :options="defenderOptions" placeholder="守方"></pick-box>
+        </div>
+        <div class="muted">勾选易主的据点（不勾则只记事件不改版图）：</div>
+        <div class="site-list">
+          <span v-for="site in sites" :key="site.id" class="site-chip" :class="{ on: form.siteIds.includes(site.id) }" @click="toggleSite(site.id)">
+            {{ site.name }}
+          </span>
+        </div>
+        <div class="row-head">
+          <input v-model="form.title" placeholder="事件标题（可留空自动生成）" />
+        </div>
+        <div class="row-head">
+          <input type="number" v-model.number="form.armyLoss" placeholder="攻方兵力损失" style="width:120px;" />
+          <button class="btn primary" style="flex:1;" @click="applyEvent">▶ 推演并记录</button>
+        </div>
+      </div>
+
+      <div class="pane-title">🗂️ 事件 <span class="muted">{{ visibleEvents.length }}</span></div>
+      <div class="pane-body" style="flex:1;">
+        <div v-for="ev in visibleEvents" :key="ev.id" class="row-item">
+          <div class="row-head">
+            <span class="chip">{{ ev.date || '—' }}</span>
+            <b style="font-size:12px;color:#e6e6e6;">{{ ev.title }}</b>
+            <button class="btn small danger" style="margin-left:auto;" @click="removeEvent(ev.id)">✕</button>
+          </div>
+          <div class="muted">{{ eventSummary(ev) }}</div>
+        </div>
+        <div v-if="!visibleEvents.length" class="muted">这个纪元还没有事件。</div>
+      </div>
+
+      <div class="log">
+        <div v-for="(line, i) in logs" :key="i">{{ line }}</div>
+        <div v-if="!logs.length" style="border:none;color:#666;">推演日志会显示在这里。</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ============ 教程 ============ -->
+  <div class="tut-overlay" v-if="tutOpen" @click.self="closeTut">
+    <div class="tut-box">
+      <div class="tut-head">
+        <h3>📜 历史模拟 · 上手教程</h3>
+        <div class="tut-dots">
+          <span v-for="(s, i) in tutSteps" :key="i" class="tut-dot" :class="{ on: i === tutStep, done: i < tutStep }"></span>
+        </div>
+      </div>
+
+      <div class="tut-body">
+        <h4>{{ tutSteps[tutStep].title }}</h4>
+        <div class="tut-sub">{{ tutSteps[tutStep].sub }}</div>
+        <p class="tut-p" v-for="(p, i) in tutSteps[tutStep].paras" :key="i" v-html="p"></p>
+        <div v-if="tutSteps[tutStep].note" class="tut-note" :class="tutSteps[tutStep].noteType || ''">{{ tutSteps[tutStep].note }}</div>
+      </div>
+
+      <div class="tut-foot">
+        <span class="tut-check" v-if="tutSteps[tutStep].done">✓ 已完成</span>
+        <span class="spacer"></span>
+        <button class="tut-btn" @click="tutStep--" :disabled="tutStep === 0">上一步</button>
+        <button class="tut-btn" v-if="tutStep < tutSteps.length - 1" @click="closeTut">跳过</button>
+        <button class="tut-btn primary" v-if="tutStep < tutSteps.length - 1" @click="tutStep++">下一步</button>
+        <button class="tut-btn primary" v-else @click="closeTut">开始使用</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+const API = '/api';
+
+const UID = (p) => p + '_' + Math.random().toString(36).slice(2, 9);
+
+// 自绘下拉框：原生 <select> 展开后的列表由系统绘制，CSS 管不到，所以整只替换
+const PickBox = {
+  props: {
+    modelValue: { default: '' },
+    options: { type: Array, default: () => [] },
+    placeholder: { default: '请选择' }
+  },
+  emits: ['update:modelValue'],
+  data() { return { open: false, pos: { top: 0, left: 0, width: 0 } }; },
+  computed: {
+    current() { return this.options.find(o => String(o.value) === String(this.modelValue)); }
+  },
+  methods: {
+    toggle(ev) {
+      if (this.open) { this.open = false; return; }
+      const r = ev.currentTarget.getBoundingClientRect();
+      const h = Math.min(260, this.options.length * 34 + 10);
+      const below = window.innerHeight - r.bottom;
+      this.pos = {
+        top: (below < h ? Math.max(8, r.top - h - 4) : r.bottom + 4),
+        left: Math.min(r.left, window.innerWidth - r.width - 8),
+        width: r.width
+      };
+      this.open = true;
+      setTimeout(() => document.addEventListener('click', this.onDocClick, { once: true }), 0);
+    },
+    onDocClick() { this.open = false; },
+    choose(o) { this.$emit('update:modelValue', o.value); this.open = false; }
+  },
+  template: `
+    <div class="pick" :class="{ open: open }">
+      <button type="button" class="pick-btn" @click.stop="toggle">
+        <span class="pick-txt" :class="{ 'pick-ph': !current }">{{ current ? current.label : placeholder }}</span>
+        <i class="pick-arrow"></i>
+      </button>
+      <Teleport to="body">
+        <div v-if="open" class="pick-list" :style="{ top: pos.top + 'px', left: pos.left + 'px', width: pos.width + 'px' }">
+          <div v-for="o in options" :key="o.value" class="pick-item" :class="{ on: String(o.value) === String(modelValue) }" @click.stop="choose(o)">{{ o.label }}</div>
+          <div v-if="!options.length" class="pick-item" style="color:#777;cursor:default;">（没有可选项）</div>
+        </div>
+      </Teleport>
+    </div>
+  `
+};
+
+const app = createApp({
+  setup() {
+    const db = ref({ version: 1, grid: { cols: 400, rows: 225 }, epochs: [], states: [], sites: [], events: [] });
+    const currentEpochId = ref('');
+    const selectedSiteId = ref('');
+    const addSiteMode = ref(false);
+    const canvasEl = ref(null);
+    const logs = ref([]);
+
+    // ---------- 教程 ----------
+    const tutOpen = ref(false);
+    const tutStep = ref(0);
+    const openTut = () => { tutStep.value = 0; tutOpen.value = true; };
+    const closeTut = () => { tutOpen.value = false; try { localStorage.setItem('history_tut_seen', '1'); } catch (e) {} };
+
+    const tutSteps = computed(() => [
+      {
+        title: '这个插件在干什么',
+        sub: '一句话：你只记事件，版图自动算出来',
+        paras: [
+          '传统做法是每个纪元都手动画一遍版图。这里反过来：<b>你只记录「哪个据点易主」</b>，系统按据点把整张地图重新划分。',
+          '所以：加一条事件 → 版图自动变；删一条事件 → 版图自动回滚；切回旧纪元 → 看到的就是当时的样子。',
+          '不用画边界，也不用调颜色，你只需要决定<b>谁在什么时间拿下了哪里</b>。'
+        ],
+        note: '先看一遍这 5 步，再动手。右上角随时点「❓ 教程」可以重新打开。',
+        noteType: 'tut-ok',
+        done: false
+      },
+      {
+        title: '第 1 步 · 建势力',
+        sub: '至少建 2 个，不然打不起来',
+        paras: [
+          '点右上角 <code>＋ 势力</code>，左侧「🏛️ 势力」会多出一条 <code>新势力</code>。',
+          '<b>点一下名字</b>就能直接改，改成你的国家名；右边的色块是它在地图上的颜色。',
+          '下面的 <b>人口 / 军力 / 财力</b> 先随便填，推演时会自动增减。'
+        ],
+        note: '建 2~3 个就够试了。势力删掉后，它名下的据点会变成无主。',
+        noteType: '',
+        done: states.value.length > 0
+      },
+      {
+        title: '第 2 步 · 放据点',
+        sub: '最容易漏的一步：别忘了选「归属」',
+        paras: [
+          '点右上角 <code>＋ 据点</code>，按钮会变成蓝色的 <code>✅ 点地图放置</code>，然后<b>在地图上点一下</b>，据点就落在那儿了。',
+          '然后在左侧「📍 据点」里改三样：<b>名字</b>、<b>类型</b>（要塞/关隘/城市/港口）、<b>归属</b>。',
+          '归属决定这块地是谁的。放两个势力各 2 个据点、位置隔开一点，效果最明显。'
+        ],
+        note: '忘了选归属 → 地图上那块就是空的。想调整边界，不用拖线，直接补一个据点把边界「拽」过去。',
+        noteType: 'tut-warn',
+        done: sites.value.length > 0 && sites.value.every(s => !!s.owner)
+      },
+      {
+        title: '第 3 步 · 记一条事件',
+        sub: '右侧「⚔️ 推演：新增事件」',
+        paras: [
+          '依次选：<b>纪元</b>（默认第一纪元）、<b>时间</b>（如 开元 210）、<b>类型</b>（战争/叛乱/割让/盟约/天灾）、<b>攻方</b>、<b>守方</b>。',
+          '然后在「勾选易主的据点」里<b>点选要换主人的据点</b>（选中变蓝），最后点 <code>▶ 推演并记录</code>。',
+          '结果会同时出现在三处：左侧据点前面的圆点变色、中间地图色块变化、底部推演日志多一行战报。'
+        ],
+        note: '不勾据点也可以记事件，但那样只记了「发生了什么」，版图不会变。',
+        noteType: '',
+        done: db.value.events.length > 0
+      },
+      {
+        title: '第 4 步 · 保存，然后去前台看',
+        sub: '不保存刷新就没了',
+        paras: [
+          '点右上角 <code>💾 保存</code>，数据写进 <code>history.json</code>。',
+          '前台页面是 <code>/history</code>，在「历史模拟」里能拖动时间轴看版图演变。',
+          '想加纪元：点 <code>＋ 纪元</code>，序号自动递增；事件按纪元序号回放，所以序号决定先后。'
+        ],
+        note: '前台页需要跑着 VitePress（npm run dev）才看得到。',
+        noteType: 'tut-ok',
+        done: false
+      }
+    ]);
+
+    const form = ref({ epochId: '', date: '', type: 'war', attacker: '', defender: '', siteIds: [], title: '', armyLoss: 0 });
+
+    // 下拉选项
+    const eventTypeOptions = [
+      { value: 'war', label: '战争' }, { value: 'revolt', label: '叛乱' }, { value: 'cede', label: '割让' },
+      { value: 'ally', label: '盟约' }, { value: 'disaster', label: '天灾' }
+    ];
+    const siteTypeOptions = [
+      { value: 'fortress', label: '要塞' }, { value: 'pass', label: '关隘' },
+      { value: 'city', label: '城市' }, { value: 'port', label: '港口' }
+    ];
+    const epochOptions = computed(() => epochsSorted.value.map(e => ({ value: e.id, label: e.name })));
+    const stateOptions = computed(() => states.value.map(s => ({ value: s.id, label: s.name })));
+    const attackerOptions = computed(() => [{ value: '', label: '未指定' }].concat(stateOptions.value));
+    const defenderOptions = computed(() => [{ value: '', label: '未指定' }].concat(stateOptions.value));
+    const ownerOptions = computed(() => [{ value: '', label: '无主' }].concat(stateOptions.value));
+
+    const epochsSorted = computed(() => [...db.value.epochs].sort((a, b) => (a.ordinal || 0) - (b.ordinal || 0)));
+    const currentEpoch = computed(() => db.value.epochs.find(e => e.id === currentEpochId.value) || epochsSorted.value[0]);
+    const states = computed(() => db.value.states);
+    const sites = computed(() => db.value.sites);
+
+    const stateById = (id) => db.value.states.find(s => s.id === id);
+    const stateColor = (id) => { const s = stateById(id); return s ? s.color : '#666'; };
+    const siteName = (id) => { const s = db.value.sites.find(x => x.id === id); return s ? s.name : '?'; };
+
+    // ---------- 与「世界地图」插件联动 ----------
+    let bgImage = null;                    // 地图插件渲染好的底图
+    const GRID = 4;                        // 地图插件格子尺寸：400×225 ↔ 1600×900
+    const MAP_PALETTE = ['#e6194B', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#42d4f4', '#f032e6', '#bfef45', '#fabed4', '#469990', '#dcbeff', '#9A6324', '#fffac8', '#800000'];
+
+    const loadMapImage = async () => {
+      try {
+        const res = await fetch(`${API}/map?t=${Date.now()}`);
+        const map = await res.json();
+        if (map && map.image) {
+          const im = new Image();
+          im.onload = () => { bgImage = im; render(); };
+          im.src = map.image;
+        }
+      } catch (e) { /* 没有地图就退化成纯色背景 */ }
+    };
+
+    // 还原地图插件的行游程版图：[长度, 值, ...]
+    // ⚠️ 必须整段连续还原：游程是扁平编码的，可以跨行；
+    //    按行切分会把跨行的那一段截断丢弃，整张版图就会错位成条纹
+    const decodeRuns = (runs, cols, rows) => {
+      const out = new Int16Array(cols * rows).fill(-1);
+      let i = 0, pos = 0;
+      while (i + 1 < runs.length && pos < out.length) {
+        const len = runs[i], val = runs[i + 1];
+        i += 2;
+        for (let k = 0; k < len && pos < out.length; k++) out[pos++] = val;
+      }
+      return out;
+    };
+
+    const importFromMap = async () => {
+      try {
+        const res = await fetch(`${API}/map?t=${Date.now()}`);
+        const map = await res.json();
+        if (!map || (!map.image && !(map.markers || []).length && !map.territory)) return log('❌ 地图插件里还没有内容，先去「世界地图」画一版并保存');
+
+        const mCols = (map.territory && map.territory.cols) || db.value.grid.cols;
+        const mRows = (map.territory && map.territory.rows) || db.value.grid.rows;
+        const mH = mRows * GRID;
+        const cells = (map.territory && Array.isArray(map.territory.cells))
+          ? decodeRuns(map.territory.cells, mCols, mRows) : null;
+
+        // ① 势力：不只读 countryNames，而是把版图里真实出现过的国家全部收进来
+        //    （地图上没命名的话显示成「国家 #1」，颜色沿用地图那套调色板）
+        const idMap = {};
+        let stAdded = 0;
+        const ids = new Set();
+        if (cells) {
+          for (let i = 0; i < cells.length; i++) { const v = cells[i]; if (v >= 0 && v < 200) ids.add(v); }
+        }
+        Object.keys(map.countryNames || {}).forEach(k => { if (Number(k) >= 0) ids.add(Number(k)); });
+
+        const sortedIds = [...ids].sort((a, b) => a - b);
+        sortedIds.forEach(cid => {
+          const raw = map.countryNames ? String(map.countryNames[String(cid)] || '').trim() : '';
+          const name = raw || `国家 #${cid + 1}`;
+          let st = db.value.states.find(s => s.name === name);
+          if (!st) {
+            st = { id: UID('st'), name, color: MAP_PALETTE[cid % MAP_PALETTE.length], power: { pop: 100, army: 50, gold: 50 } };
+            db.value.states.push(st);
+            stAdded++;
+          }
+          idMap[String(cid)] = st.id;
+        });
+
+        // ② 据点只来自地图上真实放过的地标，不凭空生成
+        const LINE_TYPES = ['road', 'river', 'defense', 'attack'];
+        const typeMap = { capital: 'city', city: 'city', port: 'port', fortress: 'fortress', watchtower: 'fortress', checkpoint: 'pass' };
+        let siteAdded = 0, autoOwned = 0;
+        (map.markers || []).forEach(m => {
+          if (LINE_TYPES.includes(m.type)) return;
+          const name = String(m.title || '据点').trim();
+          if (!name || db.value.sites.find(s => s.name === name)) return;
+          const gx = Math.max(0, Math.min(mCols - 1, Math.round((m.lng || 0) / GRID)));
+          const gy = Math.max(0, Math.min(mRows - 1, Math.round((mH - (m.lat || 0)) / GRID)));
+          let owner = '';
+          if (cells) {
+            const cid = cells[gy * mCols + gx];
+            if (cid >= 0 && idMap[String(cid)]) { owner = idMap[String(cid)]; autoOwned++; }
+          }
+          db.value.sites.push({ id: UID('p'), name, type: typeMap[m.type] || 'fortress', x: gx, y: gy, owner, garrison: 0 });
+          siteAdded++;
+        });
+
+        // 记录「势力 → 地图国家 id」，同步回地图时要用
+        db.value.mapIds = db.value.mapIds || {};
+        Object.keys(idMap).forEach(cid => { db.value.mapIds[idMap[cid]] = Number(cid); });
+
+        if (map.image && !bgImage) {
+          const im = new Image(); im.onload = () => { bgImage = im; render(); }; im.src = map.image;
+        }
+
+        // ④ 把地图上的真实国界存成「底版」：这样版图和地图长得一模一样，
+        //    之后的战争事件只会在局部改动，而不是把整张图重画一遍
+        if (cells) {
+          const idxOf = {};
+          db.value.states.forEach((s, i) => { idxOf[s.id] = i; });
+          const flat = new Int16Array(mCols * mRows).fill(-1);
+          for (let i = 0; i < cells.length && i < flat.length; i++) {
+            const v = cells[i];
+            if (v >= 0 && idMap[String(v)] !== undefined) flat[i] = idxOf[idMap[String(v)]];
+          }
+          db.value.baseline = { cols: mCols, rows: mRows, rle: encodeRuns(flat), at: Date.now() };
+        }
+
+        refresh();
+        await save();
+        log(`🗺️ 从地图导入：势力 +${stAdded}，据点 +${siteAdded}${cells ? `（按版图自动归属 ${autoOwned} 个）` : ''}${stAdded === 0 && siteAdded === 0 ? '，没有新内容' : ''}`);
+      } catch (e) {
+        log('❌ 导入失败：' + e.message);
+      }
+    };
+
+    // ---------- 同步回世界地图 ----------
+    const syncToMap = async () => {
+      try {
+        if (!territory.value) return log('⚠️ 当前没有版图可同步');
+        const res = await fetch(`${API}/map?t=${Date.now()}`);
+        const map = (await res.json()) || {};
+
+        const { cols, rows } = db.value.grid;
+        const idxToCid = {};
+        db.value.states.forEach((s, i) => {
+          const cid = (db.value.mapIds && db.value.mapIds[s.id] !== undefined) ? db.value.mapIds[s.id] : (100 + i);
+          idxToCid[i] = cid;
+        });
+
+        const flat = new Int16Array(cols * rows).fill(-1);
+        for (let i = 0; i < flat.length; i++) {
+          const si = territory.value[i];
+          flat[i] = (si >= 0 && idxToCid[si] !== undefined) ? idxToCid[si] : -1;
+        }
+
+        map.territory = { cols: cols, rows: rows, cells: encodeRuns(flat), admin: [], effect: [] };
+        map.countryNames = Object.assign({}, map.countryNames || {});
+        db.value.states.forEach((s, i) => { map.countryNames[String(idxToCid[i])] = s.name; });
+
+        const r = await fetch(`${API}/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(map) });
+        if (!r.ok) return log(`❌ 同步失败（HTTP ${r.status}）`);
+        log(`🗺️ 已同步到世界地图：${db.value.states.length} 个势力、${cols}×${rows} 版图。去地图插件点「🔄 重绘」就能看到。`);
+      } catch (e) {
+        log('❌ 同步失败：' + e.message);
+      }
+    };
+
+    // ---------- 推演核心：按纪元回放事件，得到据点归属 ----------
+    const eventsInOrder = computed(() => {
+      const ord = (ev) => {
+        const ep = db.value.epochs.find(e => e.id === ev.epochId);
+        return ep ? (ep.ordinal || 0) : 0;
+      };
+      return [...db.value.events].map((ev, i) => ({ ev, ord: ord(ev), i }))
+        .sort((a, b) => a.ord - b.ord || a.i - b.i);
+    });
+
+    const ownersAtEpoch = computed(() => {
+      const cur = currentEpoch.value;
+      const curOrd = cur ? (cur.ordinal || 0) : 0;
+      const map = {};
+      db.value.sites.forEach(s => { map[s.id] = s.owner || ''; });
+      for (const { ev, ord } of eventsInOrder.value) {
+        if (ord > curOrd) break;
+        (ev.siteChanges || []).forEach(ch => { map[ch.siteId] = ch.to; });
+      }
+      return map;
+    });
+
+    const ownerOf = (siteId) => ownersAtEpoch.value[siteId] || '';
+
+    // ---------- 版图：多源 Dijkstra，从据点向外划分 ----------
+    const territory = ref(null);
+    let terrOwner = null;
+
+    // 行游程压缩 / 还原（和历史底图共用）
+    const encodeRuns = (arr) => {
+      const runs = [];
+      let prev = arr[0], count = 1;
+      for (let i = 1; i < arr.length; i++) {
+        if (arr[i] === prev) count++;
+        else { runs.push(count, prev); prev = arr[i]; count = 1; }
+      }
+      runs.push(count, prev);
+      return runs;
+    };
+
+    const computeTerritory = () => {
+      const { cols, rows } = db.value.grid;
+      const N = cols * rows;
+      const si = {};
+      db.value.states.forEach((s, i) => { si[s.id] = i; });
+
+      const base = db.value.baseline;
+      const curEpoch = currentEpoch.value;
+      const curOrd = curEpoch ? (curEpoch.ordinal || 0) : 0;
+
+      // ===== 有地图底版：直接用地图上的真实国界，事件只做局部改动 =====
+      if (base && base.cols === cols && base.rows === rows && Array.isArray(base.rle)) {
+        const ownerIdx = decodeRuns(base.rle, cols, rows);
+
+        // 回放事件：每个易主的据点，把它「原本所属国」里离它最近的那片格子划走
+        for (const { ev, ord } of eventsInOrder.value) {
+          if (ord > curOrd) break;
+          (ev.siteChanges || []).forEach(ch => {
+            const fromIdx = si[ch.from], toIdx = si[ch.to];
+            const site = db.value.sites.find(s => s.id === ch.siteId);
+            if (!site || fromIdx === undefined || toIdx === undefined) return;
+            for (let i = 0; i < N; i++) {
+              if (ownerIdx[i] !== fromIdx) continue;
+              const x = i % cols, y = Math.floor(i / cols);
+              let bestId = null, bestD = Infinity;
+              for (const s2 of db.value.sites) {
+                const d = (s2.x - x) * (s2.x - x) + (s2.y - y) * (s2.y - y) * 2.2;
+                if (d < bestD) { bestD = d; bestId = s2.id; }
+              }
+              if (bestId === ch.siteId) ownerIdx[i] = toIdx;
+            }
+          });
+        }
+
+        terrOwner = ownerIdx;
+        territory.value = ownerIdx;
+        return;
+      }
+
+      // ===== 没有底版：从据点向外做加权划分 =====
+      const ownerIdx = new Int16Array(N).fill(-1);
+      // ⚠️ 必须用 Float64Array：Float32 存距离会截断精度，
+      //    导致 cur.d > dist[i] 恒成立、大量格子被误判为“过期”而永远不分配
+      const dist = new Float64Array(N).fill(1e9);
+
+      // 简易二叉堆
+      const hi = [], hd = [], hs = [];
+      const push = (i, d, s) => {
+        hi.push(i); hd.push(d); hs.push(s);
+        let k = hi.length - 1;
+        while (k > 0) { const p = (k - 1) >> 1; if (hd[p] <= hd[k]) break; [hi[p], hi[k]] = [hi[k], hi[p]]; [hd[p], hd[k]] = [hd[k], hd[p]]; [hs[p], hs[k]] = [hs[k], hs[p]]; k = p; }
+      };
+      const pop = () => {
+        const r = { i: hi[0], d: hd[0], s: hs[0] };
+        hi[0] = hi[hi.length - 1]; hd[0] = hd[hd.length - 1]; hs[0] = hs[hs.length - 1];
+        hi.pop(); hd.pop(); hs.pop();
+        let k = 0;
+        for (;;) {
+          const l = k * 2 + 1, rr = l + 1; let m = k;
+          if (l < hi.length && hd[l] < hd[m]) m = l;
+          if (rr < hi.length && hd[rr] < hd[m]) m = rr;
+          if (m === k) break;
+          [hi[m], hi[k]] = [hi[k], hi[m]]; [hd[m], hd[k]] = [hd[k], hd[m]]; [hs[m], hs[k]] = [hs[k], hs[m]];
+          k = m;
+        }
+        return r;
+      };
+
+      const owners = ownersAtEpoch.value;
+      // 连续波场：让边界自然弯曲，而不是逐格随机（逐格随机会变成椒盐噪点）
+      const wobble = (x, y) => 0.5 + 0.5 * Math.sin(x * 0.045 + Math.cos(y * 0.031) * 2.1);
+
+      for (const site of db.value.sites) {
+        const st = owners[site.id];
+        if (!st || si[st] === undefined) continue;
+        const cx = Math.max(0, Math.min(cols - 1, Math.round(site.x)));
+        const cy = Math.max(0, Math.min(rows - 1, Math.round(site.y)));
+        const idx = cy * cols + cx;
+        if (dist[idx] > 0) { dist[idx] = 0; push(idx, 0, si[st]); }
+      }
+
+      while (hi.length) {
+        const cur = pop();
+        if (cur.d > dist[cur.i]) continue;
+        if (ownerIdx[cur.i] === -1) ownerIdx[cur.i] = cur.s;
+        const x = cur.i % cols, y = Math.floor(cur.i / cols);
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (!dx && !dy) continue;
+            const nx = x + dx, ny = y + dy;
+            if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+            const ni = ny * cols + nx;
+            const step = (dx && dy ? 1.414 : 1) * (0.80 + wobble(nx, ny) * 0.40);
+            const nd = cur.d + step;
+            if (nd < dist[ni]) { dist[ni] = nd; push(ni, nd, cur.s); }
+          }
+        }
+      }
+
+      terrOwner = ownerIdx;
+      territory.value = ownerIdx;
+    };
+
+    // ---------- 渲染 ----------
+    const render = () => {
+      const cv = canvasEl.value;
+      if (!cv) return;
+      const { cols, rows } = db.value.grid;
+      const W = cv.width, H = cv.height;
+      const ctx = cv.getContext('2d');
+      ctx.clearRect(0, 0, W, H);
+
+      // ① 底图：优先用「世界地图」插件渲染好的那张图，两边看起来就是同一块大陆
+      if (bgImage && bgImage.complete && bgImage.naturalWidth) {
+        ctx.drawImage(bgImage, 0, 0, W, H);
+      } else {
+        ctx.fillStyle = '#0d1b26';
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // ② 版图：半透明色块叠在底图上
+      const cell = document.createElement('canvas');
+      cell.width = cols; cell.height = rows;
+      const cc = cell.getContext('2d');
+      const img = cc.createImageData(cols, rows);
+      const data = img.data;
+      const rgbCache = db.value.states.map(s => hexRgb(s.color));
+
+      for (let i = 0; i < cols * rows; i++) {
+        const o = i * 4;
+        const si = territory.value ? territory.value[i] : -1;
+        if (si < 0 || !rgbCache[si]) { data[o + 3] = 0; continue; }
+        const c = rgbCache[si];
+        data[o] = c[0]; data[o + 1] = c[1]; data[o + 2] = c[2];
+        data[o + 3] = bgImage && bgImage.naturalWidth ? 96 : 205;   // 有底图时更透一些
+      }
+      cc.putImageData(img, 0, 0);
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.drawImage(cell, 0, 0, W, H);
+      if (!(bgImage && bgImage.naturalWidth)) {
+        // 没底图时补一层暗色，避免色块太亮
+        ctx.fillStyle = 'rgba(10,14,20,0.35)';
+        ctx.fillRect(0, 0, W, H);
+      }
+
+      // 国名：按领土重心直接标在版图上（和据点无关，没据点也有名字）
+      if (territory.value) {
+        const acc = [];
+        const total = cols * rows;
+        for (let i = 0; i < total; i++) {
+          const si = territory.value[i];
+          if (si < 0) continue;
+          const a = acc[si] || (acc[si] = { sx: 0, sy: 0, n: 0 });
+          a.sx += i % cols; a.sy += Math.floor(i / cols); a.n++;
+        }
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        acc.forEach((a, si) => {
+          if (!a || a.n < 150) return;
+          const st = db.value.states[si];
+          if (!st) return;
+          const cx = (a.sx / a.n) * (W / cols);
+          const cy = (a.sy / a.n) * (H / rows);
+          const size = Math.max(20, Math.min(40, Math.sqrt(a.n) * 1.5));
+          ctx.font = `bold ${Math.round(size)}px "Microsoft YaHei", "PingFang SC", sans-serif`;
+          ctx.lineWidth = 6;
+          ctx.strokeStyle = 'rgba(0,0,0,.7)';
+          ctx.strokeText(st.name, cx, cy);
+          ctx.fillStyle = 'rgba(255,255,255,.96)';
+          ctx.fillText(st.name, cx, cy);
+        });
+        ctx.restore();
+      }
+
+      // 据点
+      const sx = W / cols, sy = H / rows;
+      db.value.sites.forEach(site => {
+        const px = site.x * sx, py = site.y * sy;
+        const st = stateById(ownerOf(site.id));
+        const color = st ? st.color : '#888';
+        ctx.beginPath();
+        ctx.arc(px, py, site.id === selectedSiteId.value ? 11 : 7, 0, Math.PI * 2);
+        ctx.fillStyle = color;
+        ctx.fill();
+        ctx.lineWidth = site.id === selectedSiteId.value ? 3 : 2;
+        ctx.strokeStyle = site.id === selectedSiteId.value ? '#ffe066' : 'rgba(0,0,0,.7)';
+        ctx.stroke();
+
+        ctx.font = 'bold 20px "Microsoft YaHei", sans-serif';
+        ctx.textAlign = 'center';
+        ctx.lineWidth = 5;
+        ctx.strokeStyle = 'rgba(0,0,0,.75)';
+        ctx.strokeText(site.name, px, py - 16);
+        ctx.fillStyle = '#fff';
+        ctx.fillText(site.name, px, py - 16);
+      });
+    };
+
+    const hexRgb = (hex) => {
+      const s = String(hex || '#888').replace('#', '');
+      const v = s.length === 3 ? s.split('').map(c => c + c).join('') : s.padEnd(6, '0');
+      return [parseInt(v.slice(0, 2), 16) || 0, parseInt(v.slice(2, 4), 16) || 0, parseInt(v.slice(4, 6), 16) || 0];
+    };
+
+    // ---------- 事件列表 ----------
+    const visibleEvents = computed(() => {
+      const cur = currentEpoch.value;
+      if (!cur) return [];
+      return eventsInOrder.value.filter(x => x.ev.epochId === cur.id).map(x => x.ev);
+    });
+
+    const eventSummary = (ev) => {
+      const names = (ev.siteChanges || []).map(c => siteName(c.siteId));
+      const atk = ev.attacker ? stateById(ev.attacker) : null;
+      const def = ev.defender ? stateById(ev.defender) : null;
+      const typeName = { war: '战争', revolt: '叛乱', cede: '割让', ally: '盟约', disaster: '天灾' }[ev.type] || ev.type;
+      let s = typeName;
+      if (atk || def) s += ` · ${atk ? atk.name : '?'} → ${def ? def.name : '?'}`;
+      if (names.length) s += ` · 易主：${names.join('、')}`;
+      if (ev.armyLoss) s += ` · 损兵 ${ev.armyLoss}`;
+      return s;
+    };
+
+    // ---------- 操作 ----------
+    const log = (msg) => { logs.value.unshift(msg); if (logs.value.length > 40) logs.value.pop(); };
+
+    const addEpoch = () => {
+      const ord = Math.max(0, ...db.value.epochs.map(e => e.ordinal || 0)) + 1;
+      const ep = { id: UID('ep'), name: '第' + ord + '纪元', start: '', end: '', ordinal: ord };
+      db.value.epochs.push(ep);
+      currentEpochId.value = ep.id;
+      render();
+    };
+
+    const removeEpoch = (id) => {
+      db.value.epochs = db.value.epochs.filter(e => e.id !== id);
+      db.value.events = db.value.events.filter(e => e.epochId !== id);
+      if (currentEpochId.value === id) currentEpochId.value = (epochsSorted.value[0] || {}).id || '';
+      refresh();
+    };
+
+    const addState = () => {
+      const palette = ['#c0392b', '#2980b9', '#27ae60', '#8e44ad', '#d35400', '#16a085', '#7f8c8d', '#f39c12'];
+      const st = { id: UID('st'), name: '新势力', color: palette[db.value.states.length % palette.length], power: { pop: 100, army: 50, gold: 50 } };
+      db.value.states.push(st);
+      render();
+    };
+
+    const removeState = (id) => {
+      db.value.states = db.value.states.filter(s => s.id !== id);
+      db.value.sites.forEach(s => { if (s.owner === id) s.owner = ''; });
+      db.value.events.forEach(ev => { if (ev.attacker === id) ev.attacker = ''; if (ev.defender === id) ev.defender = ''; });
+      refresh();
+    };
+
+    const removeSite = (id) => {      db.value.sites = db.value.sites.filter(s => s.id !== id);
+      db.value.events.forEach(ev => { ev.siteChanges = (ev.siteChanges || []).filter(c => c.siteId !== id); });
+      if (selectedSiteId.value === id) selectedSiteId.value = '';
+      refresh();
+    };
+
+    const onCanvasClick = (e) => {
+      const cv = canvasEl.value;
+      const rect = cv.getBoundingClientRect();
+      const px = (e.clientX - rect.left) * (cv.width / rect.width);
+      const py = (e.clientY - rect.top) * (cv.height / rect.height);
+      const gx = px / (cv.width / db.value.grid.cols);
+      const gy = py / (cv.height / db.value.grid.rows);
+
+      if (addSiteMode.value) {
+        const st = db.value.states[0];
+        const site = { id: UID('p'), name: '新据点', type: 'fortress', x: Math.round(gx), y: Math.round(gy), owner: st ? st.id : '', garrison: 0 };
+        db.value.sites.push(site);
+        selectedSiteId.value = site.id;
+        addSiteMode.value = false;
+        log(`📍 新增据点「${site.name}」`);
+        refresh();
+        return;
+      }
+
+      // 选中最近的据点
+      const sx = cv.width / db.value.grid.cols, sy = cv.height / db.value.grid.rows;
+      let best = null, bestD = 28;
+      db.value.sites.forEach(s => {
+        const d = Math.hypot(s.x * sx - px, s.y * sy - py);
+        if (d < bestD) { bestD = d; best = s; }
+      });
+      selectedSiteId.value = best ? best.id : '';
+      render();
+    };
+
+    const toggleSite = (id) => {
+      const i = form.value.siteIds.indexOf(id);
+      if (i >= 0) form.value.siteIds.splice(i, 1); else form.value.siteIds.push(id);
+    };
+
+    const applyEvent = () => {
+      const f = form.value;
+      if (!f.epochId) return log('⚠️ 先选一个纪元');
+      if (!f.attacker && !f.defender && !f.siteIds.length) return log('⚠️ 至少选一个势力或据点');
+
+      const changes = f.siteIds.map(sid => ({ siteId: sid, from: ownerOf(sid), to: f.attacker || f.defender }));
+      const typeName = { war: '战争', revolt: '叛乱', cede: '割让', ally: '盟约', disaster: '天灾' }[f.type] || f.type;
+      const atk = stateById(f.attacker), def = stateById(f.defender);
+      const names = f.siteIds.map(sid => siteName(sid));
+
+      const ev = {
+        id: UID('ev'),
+        epochId: f.epochId,
+        date: f.date || '',
+        type: f.type,
+        title: f.title || (atk && def ? `${atk.name} · ${typeName}${def.name}` : typeName),
+        attacker: f.attacker,
+        defender: f.defender,
+        siteChanges: changes,
+        armyLoss: Number(f.armyLoss) || 0,
+        note: ''
+      };
+      db.value.events.push(ev);
+
+      // 战报
+      let line = `【${ev.date || '某年'}】${ev.title}`;
+      if (names.length) line += `：${names.join('、')} 易主${atk ? '归 ' + atk.name : ''}`;
+      if (ev.armyLoss) line += `，损兵 ${ev.armyLoss}`;
+      log(line);
+
+      // 国力结算（简单版）：攻方军力扣损失，守方按失地扣人口
+      if (atk) atk.power.army = Math.max(0, (atk.power.army || 0) - Math.round(ev.armyLoss / 1000));
+      if (def && names.length) def.power.pop = Math.max(0, Math.round((def.power.pop || 0) * 0.96));
+
+      form.value.siteIds = [];
+      form.value.title = '';
+      form.value.armyLoss = 0;
+      refresh();
+    };
+
+    const removeEvent = (id) => {
+      db.value.events = db.value.events.filter(e => e.id !== id);
+      refresh();
+      log('🗑️ 已删除事件，版图已回滚');
+    };
+
+    const refresh = () => {
+      computeTerritory();
+      render();
+    };
+
+    const save = async () => {
+      try {
+        await fetch(`${API}/history`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(db.value) });
+        log('💾 已保存到 history.json');
+      } catch (e) { log('❌ 保存失败：' + e.message); }
+    };
+
+    watch(currentEpochId, () => { refresh(); });
+    watch(() => db.value.sites.map(s => s.owner).join(','), () => { refresh(); });
+
+    onMounted(async () => {
+      try {
+        const res = await fetch(`${API}/history?t=${Date.now()}`);
+        const data = await res.json();
+        if (data && data.epochs) db.value = data;
+      } catch (e) { log('❌ 读取数据失败：' + e.message); }
+      if (!db.value.epochs.length) addEpoch();
+      currentEpochId.value = currentEpochId.value || (epochsSorted.value[0] || {}).id || '';
+      form.value.epochId = currentEpochId.value;
+      await nextTick();
+      refresh();
+      loadMapImage();          // 有地图就用地图当底图
+      // 调试用：?import=1 打开时自动从地图导入一次
+      try { if (new URLSearchParams(location.search).get('import') === '1') await importFromMap(); } catch (e) {}
+      window.addEventListener('resize', render);
+
+      // 第一次打开自动弹教程（?import=1 的自动化场景跳过）
+      try {
+        const skipTut = new URLSearchParams(location.search).get('import') === '1';
+        if (!skipTut && !localStorage.getItem('history_tut_seen')) { tutStep.value = 0; tutOpen.value = true; }
+      } catch (e) {}
+    });
+
+    watch(currentEpochId, (v) => { form.value.epochId = v; });
+
+    return {
+      db, currentEpochId, selectedSiteId, addSiteMode, canvasEl, logs, form,
+      epochsSorted, currentEpoch, states, sites, visibleEvents,
+      tutOpen, tutStep, tutSteps, openTut, closeTut,
+      importFromMap, syncToMap,
+      stateColor, stateById, siteName, ownerOf, eventSummary,
+      addEpoch, removeEpoch, addState, removeState, removeSite,
+      onCanvasClick, toggleSite, applyEvent, removeEvent, save,
+      eventTypeOptions, siteTypeOptions, epochOptions, stateOptions,
+      attackerOptions, defenderOptions, ownerOptions
+    };
+  }
+});
+
+app.component('PickBox', PickBox);
+app.mount('#app');
+</script>
+</body>
+</html>

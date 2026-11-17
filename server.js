@@ -19,7 +19,9 @@ process.on('unhandledRejection', (reason) => {
 const app = express();
 app.use(cors());
 app.use(express.static(__dirname)); 
-app.use(express.json());
+// ⚠️ 地图/纪元快照会把整张 PNG 以 base64 塞进 JSON，
+//    默认 100kb 上限会导致保存静默失败（413），这里必须放开。
+app.use(express.json({ limit: '100mb' }));
 
 app.use('/libs/vue', express.static(path.join(__dirname, 'node_modules/vue/dist')));
 app.use('/libs/marked', express.static(path.join(__dirname, 'node_modules/marked')));
@@ -379,6 +381,32 @@ app.get('/api/map', async (req, res) => {
 
 app.post('/api/map', async (req, res) => {
   await fs.writeJson(path.join(PUBLIC_DIR, 'map.json'), req.body, { spaces: 2 });
+  res.json({ success: true });
+});
+
+// ================= 历史推演接口 =================
+// 设计原则：事件是唯一真相，版图由「据点归属 + 重新划分」算出来
+const HISTORY_FILE = path.join(PUBLIC_DIR, 'history.json');
+const HISTORY_DEFAULT = {
+  version: 1,
+  grid: { cols: 400, rows: 225 },
+  epochs: [
+    { id: 'e1', name: '第一纪元 · 开拓', start: '开元元年', end: '开元 320', ordinal: 1 }
+  ],
+  states: [],
+  sites: [],
+  events: []
+};
+
+app.get('/api/history', async (req, res) => {
+  if (!fs.existsSync(HISTORY_FILE)) {
+    await fs.writeJson(HISTORY_FILE, HISTORY_DEFAULT, { spaces: 2 });
+  }
+  res.json(await fs.readJson(HISTORY_FILE));
+});
+
+app.post('/api/history', async (req, res) => {
+  await fs.writeJson(HISTORY_FILE, req.body, { spaces: 2 });
   res.json({ success: true });
 });
 
@@ -1984,6 +2012,7 @@ const systemPluginMap = {
   'world-tree': { name: '世界观树', icon: '🌍' },
   'map': { name: '世界地图', icon: '🗺️' },
   'epoch-map': { name: '纪元地图', icon: '🕰️' },
+  'history': { name: '历史模拟插件', icon: '📜' },
   'plotline': { name: '剧情大纲', icon: '🎬' },
   'audit': { name: '防吃书校验', icon: '🕵️' },
   'protection': { name: '版权与目标', icon: '🎯' },
@@ -2035,7 +2064,19 @@ app.get('/api/navigation', async (req, res) => {
 
 // 2. 保存导航数据
 app.post('/api/navigation', async (req, res) => {
-  await fs.writeJson(NAVIGATION_FILE, req.body, { spaces: 2 });
+  let navList = Array.isArray(req.body) ? req.body : [];
+  // 🔒 插件工厂是后台的唯一入口，必须常驻后台：
+  //    无论前端传什么，都强制 hideBackend = false；缺失就补一条。
+  const builder = navList.find(n => n && n.id === 'plugin-builder');
+  if (builder) {
+    builder.hideBackend = false;
+  } else {
+    navList.unshift({
+      id: 'plugin-builder', title: '插件工厂', icon: '🏭', desc: '自定义',
+      link: '#', isSystem: true, hideBackend: false, hideFrontend: true
+    });
+  }
+  await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
   res.json({ success: true });
 });
 
@@ -2102,6 +2143,9 @@ app.get('/api/plugins/list', async (req, res) => {
         name = systemPluginMap[id].name;
         icon = systemPluginMap[id].icon;
       }
+      // 导航里改过的标题优先（否则非系统插件永远显示 "XXX 插件"）
+      if (navItem && navItem.title) name = navItem.title;
+      if (navItem && navItem.icon) icon = navItem.icon;
       
       return {
         id: id,

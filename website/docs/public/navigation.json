@@ -55,6 +55,16 @@
     "hideBackend": false
   },
   {
+    "id": "history",
+    "title": "历史模拟插件",
+    "desc": "按事件推演版图更迭，拖动时间轴看势力兴衰。",
+    "icon": "📜",
+    "link": "/history",
+    "isSystem": false,
+    "hideBackend": false,
+    "hideFrontend": false
+  },
+  {
     "id": "plotline",
     "title": "剧情大纲",
     "icon": "🎬",

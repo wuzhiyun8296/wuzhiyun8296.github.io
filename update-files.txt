@@ -7,6 +7,7 @@ plugin/epoch-map.html
 plugin/finance.html
 plugin/github.html
 plugin/graph.html
+plugin/history.html
 plugin/home-editor.html
 plugin/map-core.js
 plugin/map-render.js
@@ -22,6 +23,7 @@ version.json
 website/.vitepress/config.mjs
 website/.vitepress/theme/Layout.vue
 website/.vitepress/theme/components/EpochMap.vue
+website/.vitepress/theme/components/HistoryMap.vue
 website/.vitepress/theme/components/NavCards.vue
 website/.vitepress/theme/custom.css
 website/.vitepress/theme/index.js
@@ -34,6 +36,7 @@ website/docs/components/WorldTreeRender.vue
 website/docs/epoch-map.md
 website/docs/finance.md
 website/docs/graph.md
+website/docs/history.md
 website/docs/map.md
 website/docs/navigation.md
 website/docs/novel/NovelPage.vue

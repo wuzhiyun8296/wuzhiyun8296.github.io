@@ -56,6 +56,8 @@
     .status-btn { display: flex; align-items: center; justify-content: center; gap: 4px; background: transparent; border: 1px solid #444; color: #888; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.2s; margin: 0 auto; width: 80px; }
     .status-btn:hover { background: #333; color: #fff; }
     .status-btn.active { color: #2ea043; border-color: #2ea043; background: rgba(46, 160, 67, 0.1); }
+.status-btn.locked, .status-btn:disabled { cursor: not-allowed; opacity: 0.55; color: #d29922 !important; border-color: #5a4a20 !important; background: rgba(210, 153, 34, 0.08) !important; }
+.status-btn.locked:hover, .status-btn:disabled:hover { background: rgba(210, 153, 34, 0.08) !important; color: #d29922 !important; }
     .action-group { display: flex; gap: 4px; justify-content: center; align-items: center; }
     .btn-icon { background: transparent; border: 1px solid transparent; cursor: pointer; padding: 4px 6px; border-radius: 4px; font-size: 14px; transition: 0.2s; display: flex; align-items: center; justify-content: center; color: #888; }
     .btn-icon:hover { background: #333; color: #fff; }
@@ -180,8 +182,13 @@
                 {{ p.hideFrontend ? '🙈 隐藏' : '👁️ 显示' }}
               </button>
 
-              <button class="status-btn" :class="{ active: !p.hideBackend }" :title="p.hideBackend ? '点击让后台菜单显示' : '点击让后台菜单隐藏'" @click="toggleStatus(p, 'hideBackend')">
-                {{ p.hideBackend ? '🙈 隐藏' : '👁️ 显示' }}
+              <button
+                class="status-btn"
+                :class="{ active: !p.hideBackend, locked: p.id === 'plugin-builder' }"
+                :disabled="p.id === 'plugin-builder'"
+                :title="p.id === 'plugin-builder' ? '插件工厂是后台唯一入口，隐藏后无法再打开，因此永久常驻' : (p.hideBackend ? '点击让后台菜单显示' : '点击让后台菜单隐藏')"
+                @click="toggleStatus(p, 'hideBackend')">
+                {{ p.id === 'plugin-builder' ? '🔒 常驻' : (p.hideBackend ? '🙈 隐藏' : '👁️ 显示') }}
               </button>
 
               <div class="action-group">
@@ -371,6 +378,11 @@ next: false
         };
 
         const toggleStatus = async (p, field) => {
+          // 🔒 插件工厂是后台唯一入口，永远不允许隐藏，连点击都不给
+          if (p.id === 'plugin-builder' && field === 'hideBackend') {
+            openAlert('🔒 不可隐藏', '插件工厂是后台的入口插件。一旦隐藏，后台菜单里就没有它了，你就再也打不开插件管理。所以它被锁定为常驻。', true);
+            return;
+          }
           try {
             const navRes = await fetch(`${API_BASE}/navigation?t=${Date.now()}`);
             let navList = await navRes.json();

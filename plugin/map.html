@@ -206,6 +206,7 @@
             <button class="tb-btn" @click="rollSeed" title="换一个随机种子并立即生成">🔀 随机种子</button>
             <button class="tb-btn" @click="generatePoliticalMap">🎲 生成地图</button>
             <button class="tb-btn" @click="expandMap">🌐 扩大边界</button>
+            <button class="tb-btn" @click="rerenderMap" title="按当前格子数据重新生成图片（同步了历史模拟的版图后用）">🔄 重绘</button>
             <button class="tb-btn" @click="undoBrush" :disabled="undoStack.length === 0" title="Ctrl+Z">↩️ 撤销</button>
             <span class="tb-sep"></span>
             <button class="tb-btn danger" @click="deleteActiveTarget" :disabled="!activeTarget" title="Delete">🗑️ 删除选中</button>
@@ -1533,6 +1534,15 @@
           }
         };
 
+        // 按当前格子数据重新生成图片（历史模拟同步过版图后用它刷新画面）
+        const rerenderMap = () => {
+          if (!gridData || !gridData.length) return showToast('当前没有版图数据', true);
+          terrainCache = null;
+          renderMapToCanvas(true);
+          updateLabels();
+          showToast('🔄 已按当前版图重绘，记得保存');
+        };
+
         const expandMap = () => {
           if (!mapData.value.image) return;
           saveHistory();
@@ -1582,8 +1592,61 @@
         };
 
         const saveMap = async () => {
-          await fetch(`${API_BASE}/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapData.value) });
-          showToast('✅ 数据已保存');
+          // 💡 把格子版图一起存下来（按行游程压缩，通常几 KB）。
+          //    以前只存渲染好的图片，刷新后 gridData 就没了，地图等于只读。
+          try {
+            if (gridData && gridData.length === rows) {
+              mapData.value.territory = {
+                cols: cols, rows: rows,
+                cells: encodeGrid(gridData),
+                admin: encodeGrid(adminGrid),
+                effect: encodeGrid(effectGrid)
+              };
+            }
+          } catch (e) { console.warn('版图压缩失败', e); }
+          try {
+            const res = await fetch(`${API_BASE}/map`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(mapData.value) });
+            if (!res.ok) {
+              const text = await res.text().catch(() => '');
+              showToast(`保存失败（HTTP ${res.status}）：${text.slice(0, 120) || res.statusText}`, true);
+              return;
+            }
+            showToast('✅ 数据已保存');
+          } catch (e) {
+            showToast('保存失败：' + e.message, true);
+          }
+        };
+
+        // 行游程压缩：[长度, 值, 长度, 值, ...]
+        const encodeGrid = (grid) => {
+          const runs = [];
+          for (let y = 0; y < rows; y++) {
+            const row = grid[y] || [];
+            let prev = row[0] === undefined ? -1 : row[0];
+            let count = 1;
+            for (let x = 1; x < cols; x++) {
+              const v = row[x] === undefined ? -1 : row[x];
+              if (v === prev) count++;
+              else { runs.push(count, prev); prev = v; count = 1; }
+            }
+            runs.push(count, prev);
+          }
+          return runs;
+        };
+
+        const decodeGrid = (runs, fill) => {
+          // 整段连续还原：既能读本插件按行断开的编码，也能读历史模拟那种扁平编码
+          const out = new Array(rows).fill(null).map(() => new Array(cols).fill(fill));
+          let i = 0, pos = 0;
+          const total = cols * rows;
+          while (i + 1 < runs.length && pos < total) {
+            const len = runs[i], val = runs[i + 1];
+            i += 2;
+            for (let k = 0; k < len && pos < total; k++, pos++) {
+              out[Math.floor(pos / cols)][pos % cols] = val;
+            }
+          }
+          return out;
         };
 
         // ============ 系统提示框（堆叠式，可同时出现多条） ============
@@ -1746,6 +1809,20 @@
                   L.imageOverlay(mapData.value.image, bounds).addTo(map);
                   map.fitBounds(bounds); map.setMaxBounds(bounds);
                   renderMarkers();
+
+                  // 💡 恢复格子版图：否则刷新后 gridData 是空的，画笔完全失效。
+                  //    这里只还原数据、不重绘，保留已经存好的那张图；
+                  //    等用户真正动笔时再用同一套种子重建地形。
+                  const t = mapData.value.territory;
+                  if (t && t.cols === cols && t.rows === rows && Array.isArray(t.cells)) {
+                    try {
+                      gridData = decodeGrid(t.cells, -1);
+                      if (Array.isArray(t.admin)) adminGrid = decodeGrid(t.admin, -1);
+                      if (Array.isArray(t.effect)) effectGrid = decodeGrid(t.effect, -1);
+                      terrainCache = null;
+                      updateLabels();
+                    } catch (e) { console.warn('版图还原失败', e); }
+                  }
                 };
               }
             } catch (e) {}
@@ -1767,7 +1844,7 @@
           toolbarCollapsed, lineDraftCount, isDrawingLine, toolLabel, toolIcon, toolHint,
           finishLine, clearAllLines, markerLocked, toggleMarkerLock,
           ask, askOk, askCancel,
-          mapData, generatePoliticalMap, rollSeed, expandMap, undoBrush, saveMap, setTool, deleteAllAdmins,
+          mapData, generatePoliticalMap, rollSeed, expandMap, rerenderMap, undoBrush, saveMap, setTool, deleteAllAdmins,
           isPanelOpen, layerVisibility, toggleLayers, activeTarget, onPropertyChange, deleteActiveTarget,
           searchQuery, searchResults, focusOnTarget, exportMapImage, mdFiles,
           newLegend, addLegend, removeLegend
