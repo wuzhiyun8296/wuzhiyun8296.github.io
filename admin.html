@@ -63,6 +63,7 @@
     /* ========== 文章编辑区 ========== */
     #sidebar { width: 260px; background: #252526; border-right: 1px solid #333; display: flex; flex-direction: column; flex-shrink: 0; }
     .sidebar-header { padding: 15px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; gap: 10px; }
+    .sidebar-header button:disabled { opacity: .38; cursor: not-allowed; }
     
     .root-btn { padding: 6px 10px; background: #1e1e1e; color: #888; font-size: 13px; cursor: pointer; border-bottom: 1px solid #333; transition: background 0.2s; }
     .root-btn:hover { background: #333; color: #fff;}
@@ -234,12 +235,12 @@
         <template v-if="currentTab === 'article'">
           <div id="sidebar">
             <div class="sidebar-header">
-              <button @click="newFile" style="flex:1;">新建文件</button>
+              <button @click="newFile" style="flex:1;" :disabled="!selectedFolder" :title="selectedFolder ? '在选中文件夹下新建文件' : '根目录不能直接建文件，请先选一个文件夹'">新建文件</button>
               <button class="secondary" @click="newFolder" style="flex:1;">新建文件夹</button>
             </div>
             
             <div class="root-btn" :class="{ active: selectedFolder === '' }" @click="selectedFolder = ''; currentPath = ''">
-              🏠 根目录 (点击建在根目录)
+              🏠 根目录（仅可新建文件夹）
             </div>
 
             <div class="tree-container">
@@ -582,9 +583,15 @@
         };
 
         const newFile = () => {
-          const prefix = selectedFolder.value ? `${selectedFolder.value}/` : '';
+          // 💡 根目录下只允许新建文件夹：根目录放的是系统页（首页/地图/时间线…），
+          //    在这里新建的文档不会出现在左侧目录里，容易被误以为丢了
+          if (!selectedFolder.value) {
+            showToast('根目录不能直接建文件，请先点左侧一个文件夹（或新建文件夹）', true);
+            return;
+          }
+          const prefix = `${selectedFolder.value}/`;
           openModal({
-            type: 'prompt', title: '📝 新建文件', message: `将在 [${selectedFolder.value || '根目录'}] 下创建。无需输入路径和后缀。`, placeholder1: '请输入文件名',
+            type: 'prompt', title: '📝 新建文件', message: `将在 [${selectedFolder.value}] 下创建。无需输入路径和后缀。`, placeholder1: '请输入文件名',
             callback: (filename) => {
               if (!filename) return;
               let cleanName = filename.trim();

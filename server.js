@@ -120,7 +120,14 @@ app.get('/api/files', async (req, res) => {
       const stat = await fs.stat(fullPath);
       
       if (stat.isDirectory()) {
-        tree.push({ name: file, type: 'folder', children: await getTree(fullPath, false) });
+        // 💡 文件夹也要带 path：否则在文章编辑里删文件夹时 path 是 undefined，
+        //    服务端 path.join(DOCS_DIR, undefined) 直接抛 TypeError
+        tree.push({
+          name: file,
+          type: 'folder',
+          path: path.relative(DOCS_DIR, fullPath).replace(/\\/g, '/'),
+          children: await getTree(fullPath, false)
+        });
       } else if (file.endsWith('.md')) {
         if (isRoot) continue; 
         tree.push({ name: file, type: 'file', path: path.relative(DOCS_DIR, fullPath) });
@@ -155,10 +162,18 @@ app.post('/api/file', async (req, res) => {
 // ================= 智能删除接口 =================
 app.post('/api/delete', async (req, res) => {
   try {
-    const targetPath = req.body.path;
-    const fullPath = path.join(DOCS_DIR, targetPath);
-    
-    if (!fullPath.startsWith(DOCS_DIR)) return res.status(403).json({ error: '非法路径' });
+    const targetPath = req.body && req.body.path;
+    // 💡 先校验：path 必须是字符串，否则 path.join 会抛 TypeError
+    if (typeof targetPath !== 'string' || !targetPath.trim()) {
+      return res.status(400).json({ error: '缺少有效的 path 参数（文件夹和文件都必须带 path）' });
+    }
+    if (/[\\/]\.\./.test(targetPath) || path.isAbsolute(targetPath)) {
+      return res.status(403).json({ error: '非法路径' });
+    }
+
+    const fullPath = path.resolve(DOCS_DIR, targetPath);
+    const docsRoot = path.resolve(DOCS_DIR) + path.sep;
+    if (!fullPath.startsWith(docsRoot)) return res.status(403).json({ error: '非法路径' });
 
     if (fs.existsSync(fullPath)) {
       await fs.remove(fullPath); 
@@ -310,16 +325,21 @@ app.post('/api/sync-tree', async (req, res) => {
     let treeData = fs.existsSync(treePath) ? await fs.readJson(treePath) : [];
     
     const allMdFiles = [];
+    const dirSet = new Set();
     const scanDir = (dir, baseDir) => {
       const files = fs.readdirSync(dir);
       for (const file of files) {
         if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
-        
+
         const fullPath = path.join(dir, file);
         if (fs.statSync(fullPath).isDirectory()) {
+          dirSet.add(path.relative(baseDir, fullPath).replace(/\\/g, '/'));
           scanDir(fullPath, baseDir);
         } else if (file.endsWith('.md') && file !== 'index.md') {
-          allMdFiles.push(path.relative(baseDir, fullPath).replace(/\\/g, '/'));
+          const rel = path.relative(baseDir, fullPath).replace(/\\/g, '/');
+          // 💡 只收「子目录里」的页面：docs 根目录下那些是系统页（地图/时间线/历史模拟…），
+          //    不属于世界观设定，收进树里只会污染结构
+          if (rel.includes('/')) allMdFiles.push(rel);
         }
       }
     };
@@ -352,7 +372,7 @@ app.post('/api/sync-tree', async (req, res) => {
             currentLevel.push(existing);
             addedCount++;
           } else {
-            existing = { type: 'folder', name: part, icon: '📁', children: [] };
+            existing = { type: 'folder', name: part, icon: '📁', children: [], auto: true };
             currentLevel.push(existing);
           }
         }
@@ -363,8 +383,30 @@ app.post('/api/sync-tree', async (req, res) => {
       });
     });
 
+    // 💡 反向同步：物理文件已被删除的条目，从树里移除（只删树节点，不动文件）
+    const existSet = new Set(allMdFiles.map(f => f.replace('.md', '')));
+    let removedCount = 0;
+    const prune = (nodes, prefix) => {
+      for (let i = nodes.length - 1; i >= 0; i--) {
+        const node = nodes[i];
+        const rel = prefix ? `${prefix}/${node.name}` : node.name;
+        if (node.type === 'file') {
+          const key = String(node.slug || '').replace(/^\//, '');
+          if (key && !existSet.has(key)) { nodes.splice(i, 1); removedCount++; }
+        } else if (Array.isArray(node.children)) {
+          prune(node.children, rel);
+          // 空分类：由同步自动创建、且磁盘上目录已不存在的，一并清掉
+          // （手工建的分类不动，避免刚添加就被删）
+          if (node.children.length === 0 && node.auto && !dirSet.has(rel)) {
+            nodes.splice(i, 1); removedCount++;
+          }
+        }
+      }
+    };
+    prune(treeData, '');
+
     await fs.writeJson(treePath, treeData, { spaces: 2 });
-    res.json({ success: true, addedCount, treeData });
+    res.json({ success: true, addedCount, removedCount, treeData });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
