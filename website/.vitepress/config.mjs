@@ -1,4 +1,4 @@
-﻿import { defineConfig } from 'vitepress'
+import { defineConfig } from 'vitepress'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -70,6 +70,7 @@ const wikiLinkPlugin = (md) => {
     return true;
   });
 };
+
 
 export default defineConfig({
   title: "幻想域设定集",

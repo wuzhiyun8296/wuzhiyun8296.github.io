@@ -3255,10 +3255,14 @@ async function cleanupBrokenPages() {
       let st; try { st = await fs.stat(full); } catch (e) { continue; }
       if (st.isDirectory()) {
         await walk(full);
-        try {
-          const left = await fs.readdir(full);
-          if (!left.length && full !== docsDir) await fs.remove(full);   // 清空后的空目录一并删掉
-        } catch (e) { /* ignore */ }
+        // 💡 只清理垃圾目录（plugin / __pycache__ 这类），绝不动用户自己建的空分类
+        const junkName = ['plugin', '__pycache__', 'node_modules'].includes(name);
+        if (junkName) {
+          try {
+            const left = await fs.readdir(full);
+            if (!left.length) await fs.remove(full);
+          } catch (e) { /* ignore */ }
+        }
       } else if (/\.html?\.md$/i.test(name)) {
         try { await fs.remove(full); removed.push(path.relative(docsDir, full)); } catch (e) { /* ignore */ }
       }
@@ -3268,3 +3272,47 @@ async function cleanupBrokenPages() {
   if (removed.length) console.log('[init] 已清理畸形页面：' + removed.join(', '));
 }
 cleanupBrokenPages();
+// 💡 前台侧边栏是 VitePress 启动时扫描 docs 生成的快照：
+//    后台新建/删除分类后，不重启前台就看不到。
+//    这里每 5 秒比对一次 docs 的结构签名，结构变了就"碰一下" config.mjs 的修改时间，
+//    触发 VitePress 自己的「配置变更 → 重启」机制，侧边栏随之重建。
+//    （不用 fs.watch：Windows 上句柄不持有会被 GC 回收，反而时灵时不灵）
+function watchDocsStructure() {
+  const docsDir = path.join(__dirname, 'website', 'docs');
+  const configFile = path.join(__dirname, 'website', '.vitepress', 'config.mjs');
+  const IGNORE_ROOT = ['public', 'assets', 'components', 'node_modules', '.vitepress'];
+
+  const signature = () => {
+    const out = [];
+    const walk = (dir, prefix) => {
+      let ents = [];
+      try { ents = fs.readdirSync(dir, { withFileTypes: true }); } catch (e) { return; }
+      for (const e of ents) {
+        if (e.name.startsWith('.')) continue;
+        if (!prefix && IGNORE_ROOT.includes(e.name)) continue;
+        const rel = prefix ? `${prefix}/${e.name}` : e.name;
+        if (e.isDirectory()) {
+          out.push('D:' + rel);
+          walk(path.join(dir, e.name), rel);
+        } else if (/\.md$/i.test(e.name)) {
+          out.push('F:' + rel);
+        }
+      }
+    };
+    walk(docsDir, '');
+    return out.sort().join('|');
+  };
+
+  let last = signature();
+  setInterval(() => {
+    let now = '';
+    try { now = signature(); } catch (e) { return; }
+    if (now === last) return;
+    last = now;
+    try {
+      fs.utimes(configFile, new Date(), new Date(), () => {});
+      console.log('[sidebar] docs 结构变化，已通知前台重建侧边栏');
+    } catch (e) { /* ignore */ }
+  }, 5000);
+}
+watchDocsStructure();
