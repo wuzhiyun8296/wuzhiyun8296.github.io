@@ -2134,27 +2134,58 @@ const systemPluginMap = {
 };
 
 // 1. 获取导航数据
+// 💡 默认导航（含作用范围 scope）：
+//    both=共用 / site=前台专用 / admin=后端专用 / hidden=都隐藏
+function defaultNavigation() {
+  return [
+    { id: 'writer', title: '沉浸码字', desc: '系统内置', icon: '✍️', link: '/writer', isSystem: true, scope: 'both' },
+    { id: 'plotline', title: '剧情大纲', desc: '系统内置', icon: '🎬', link: '/plotline', isSystem: true, scope: 'both' },
+    { id: 'timeline', title: '时间线', desc: '系统内置', icon: '⏳', link: '/timeline', isSystem: true, scope: 'both' },
+    { id: 'characters', title: '人物档案', desc: '系统内置', icon: '👤', link: '/characters', isSystem: true, scope: 'both' },
+    { id: 'graph', title: '关系图谱', desc: '系统内置', icon: '🕸️', link: '/graph', isSystem: true, scope: 'both' },
+    { id: 'finance', title: '金融中心', desc: '系统内置', icon: '💰', link: '/finance', isSystem: true, scope: 'both' },
+    { id: 'world-tree', title: '世界观树', desc: '系统内置', icon: '🌍', link: '/world-tree', isSystem: true, scope: 'both' },
+    { id: 'map', title: '世界地图', desc: '系统内置', icon: '🗺️', link: '/map', isSystem: true, scope: 'both' },
+    { id: 'epoch-map', title: '纪元地图', desc: '系统内置', icon: '🕰️', link: '/epoch-map', isSystem: true, scope: 'both' },
+    { id: 'audit', title: '防吃书校验', desc: '系统内置', icon: '🕵️', link: '/audit', isSystem: true, scope: 'admin' },
+    { id: 'protection', title: '版权与目标', desc: '系统内置', icon: '🎯', link: '/protection', isSystem: true, scope: 'admin' },
+    { id: 'github', title: '一键推送', desc: '系统内置', icon: '🚀', link: '/github', isSystem: true, scope: 'admin' },
+    { id: 'home-editor', title: '首页设计与导出', desc: '系统内置', icon: '🎨', link: '/home-editor', isSystem: true, scope: 'admin' },
+    { id: 'plugin-builder', title: '插件工厂', desc: '系统内置', icon: '🏭', link: '#', isSystem: true, scope: 'admin' },
+    { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true, scope: 'site' }
+  ];
+}
+
+// 💡 把 scope 和 hideBackend/hideFrontend 对齐（老数据只有两个布尔值，这里自动补 scope）
+function normalizeNavScopes(list) {
+  let changed = false;
+  (Array.isArray(list) ? list : []).forEach((n) => {
+    if (!n) return;
+    const valid = n.scope === 'both' || n.scope === 'site' || n.scope === 'admin' || n.scope === 'hidden';
+    if (!valid) {
+      const hb = !!n.hideBackend, hf = !!n.hideFrontend;
+      n.scope = (hb && hf) ? 'hidden' : hb ? 'site' : hf ? 'admin' : 'both';
+      changed = true;
+    }
+    n.hideBackend = (n.scope === 'site' || n.scope === 'hidden');
+    n.hideFrontend = (n.scope === 'admin' || n.scope === 'hidden');
+    if (n.id === 'plugin-builder') n.hideBackend = false;   // 工厂永久常驻后台
+  });
+  return changed;
+}
+
+// 💡 确保 navigation.json 存在：前端导航页直接读这个静态文件，
+//    缺了它就会显示「没有任何导航数据」
+async function seedNavigation() {
+  if (fs.existsSync(NAVIGATION_FILE)) return;
+  const list = defaultNavigation();
+  normalizeNavScopes(list);
+  await fs.writeJson(NAVIGATION_FILE, list, { spaces: 2 });
+  console.log('[init] 已生成默认 navigation.json');
+}
 app.get('/api/navigation', async (req, res) => {
-  if (!fs.existsSync(NAVIGATION_FILE)) {
-    // 💡 首次初始化：把所有内置核心功能全部写入，确保顺序完整
-    const defaultNav = [
-      { id: 'writer', title: '沉浸码字', desc: '系统内置', icon: '✍️', link: '/writer', isSystem: true },
-      { id: 'plotline', title: '剧情大纲', desc: '系统内置', icon: '🎬', link: '/plotline', isSystem: true },
-      { id: 'timeline', title: '时间线', desc: '系统内置', icon: '⏳', link: '/timeline', isSystem: true },
-      { id: 'characters', title: '人物档案', desc: '系统内置', icon: '👤', link: '/characters', isSystem: true },
-      { id: 'graph', title: '关系图谱', desc: '系统内置', icon: '🕸️', link: '/graph', isSystem: true },
-      { id: 'finance', title: '金融中心', desc: '系统内置', icon: '💰', link: '/finance', isSystem: true },
-      { id: 'world-tree', title: '世界观树', desc: '系统内置', icon: '🌍', link: '/world-tree', isSystem: true },
-      { id: 'map', title: '世界地图', desc: '系统内置', icon: '🗺️', link: '/map', isSystem: true },
-      { id: 'epoch-map', title: '纪元地图', desc: '系统内置', icon: '🕰️', link: '/epoch-map', isSystem: true },
-      { id: 'audit', title: '防吃书校验', desc: '系统内置', icon: '🕵️', link: '/audit', isSystem: true },
-      { id: 'protection', title: '版权与目标', desc: '系统内置', icon: '🎯', link: '/protection', isSystem: true },
-      { id: 'github', title: '一键推送', desc: '系统内置', icon: '🚀', link: '/github', isSystem: true },
-      { id: 'home-editor', title: '首页设计与导出', desc: '系统内置', icon: '🎨', link: '/home-editor', isSystem: true },
-      { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true }
-    ];
-    await fs.writeJson(NAVIGATION_FILE, defaultNav, { spaces: 2 });
-  }
+  await seedNavigation();
+
   
   let navList = await fs.readJson(NAVIGATION_FILE);
   
@@ -2167,6 +2198,7 @@ app.get('/api/navigation', async (req, res) => {
       needSave = true;
     }
   });
+  if (normalizeNavScopes(navList)) needSave = true;
   if (needSave) await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
   
   res.json(navList);
@@ -2175,6 +2207,7 @@ app.get('/api/navigation', async (req, res) => {
 // 2. 保存导航数据
 app.post('/api/navigation', async (req, res) => {
   let navList = Array.isArray(req.body) ? req.body : [];
+  normalizeNavScopes(navList);
   // 🔒 插件工厂是后台的唯一入口，必须常驻后台：
   //    无论前端传什么，都强制 hideBackend = false；缺失就补一条。
   const builder = navList.find(n => n && n.id === 'plugin-builder');

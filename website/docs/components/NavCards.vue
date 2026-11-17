@@ -1,4 +1,4 @@
-<template>
+﻿<template>
   <div class="nav-wrapper">
     <div v-if="loading" class="tip">正在加载数据...</div>
     <div v-else-if="error" class="tip error">
@@ -32,7 +32,16 @@ onMounted(async () => {
     if (!res.ok) throw new Error(`HTTP ${res.status}`)
     const data = await res.json()
     // 💡 过滤掉被设置为「隐藏前端」的卡片
-    navList.value = Array.isArray(data) ? data.filter(n => !n.hideFrontend) : []
+    // 💡 前台只显示「共用 / 前台专用」的条目；后端专用（scope=admin）不出现。
+    //    同时过滤掉没有真实链接的条目（link 为 # 或空），否则点了没反应。
+    const usable = (n) => {
+      if (!n) return false
+      if (n.hideFrontend) return false
+      if (n.scope === 'admin' || n.scope === 'hidden') return false
+      const link = String(n.link || '').trim()
+      return link !== '' && link !== '#'
+    }
+    navList.value = Array.isArray(data) ? data.filter(usable) : []
   } catch (e) {
     error.value = e.message
   } finally {

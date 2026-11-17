@@ -7,7 +7,8 @@
     "link": "#",
     "isSystem": true,
     "hideBackend": false,
-    "hideFrontend": true
+    "hideFrontend": true,
+    "scope": "admin"
   },
   {
     "id": "graph",
@@ -16,7 +17,9 @@
     "icon": "🕸️",
     "link": "/graph",
     "isSystem": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "both",
+    "hideFrontend": false
   },
   {
     "id": "characters",
@@ -25,7 +28,9 @@
     "icon": "👤",
     "link": "/characters",
     "isSystem": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "both",
+    "hideFrontend": false
   },
   {
     "id": "finance",
@@ -34,7 +39,9 @@
     "icon": "💰",
     "link": "/finance",
     "isSystem": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "both",
+    "hideFrontend": false
   },
   {
     "id": "map",
@@ -43,7 +50,9 @@
     "icon": "🗺️",
     "link": "/map",
     "isSystem": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "both",
+    "hideFrontend": false
   },
   {
     "id": "epoch-map",
@@ -52,7 +61,9 @@
     "icon": "🕰️",
     "link": "/epoch-map",
     "isSystem": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "both",
+    "hideFrontend": false
   },
   {
     "id": "history",
@@ -62,7 +73,8 @@
     "link": "/history",
     "isSystem": false,
     "hideBackend": false,
-    "hideFrontend": false
+    "hideFrontend": false,
+    "scope": "both"
   },
   {
     "id": "plotline",
@@ -72,7 +84,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "timeline",
@@ -82,7 +95,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "world-tree",
@@ -92,7 +106,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "dashboard",
@@ -101,7 +116,9 @@
     "desc": "自定义",
     "link": "#",
     "isSystem": true,
-    "hideFrontend": true
+    "hideFrontend": true,
+    "scope": "admin",
+    "hideBackend": false
   },
   {
     "id": "writer",
@@ -111,7 +128,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "article",
@@ -121,7 +139,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "audit",
@@ -131,7 +150,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "protection",
@@ -141,7 +161,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "home-editor",
@@ -151,7 +172,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "github",
@@ -161,7 +183,8 @@
     "link": "#",
     "isSystem": true,
     "hideFrontend": true,
-    "hideBackend": false
+    "hideBackend": false,
+    "scope": "admin"
   },
   {
     "id": "novel",
@@ -169,6 +192,9 @@
     "desc": "阅读主角穿越后在幻想域的奇妙冒险与故事。",
     "icon": "📖",
     "link": "/novel/",
-    "isSystem": true
+    "isSystem": true,
+    "scope": "both",
+    "hideBackend": false,
+    "hideFrontend": false
   }
 ]
