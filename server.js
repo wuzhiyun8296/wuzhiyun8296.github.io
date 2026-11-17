@@ -2493,7 +2493,9 @@ async function collectUpdateFiles() {
     // 💡 页面 md 分两类：
     //    根级（index.md 除外）= 站点页面薄壳，新插件依赖它们，必须同步
     //    子目录（法律/国家/武器/novel）= 真正的设定文章，不外发
-    if (/^website\/docs\/components\/.+\.vue$/i.test(p)) return false;  // 站点组件：随更新下发
+    // 💡 组件目录必须整体放行：页面 md 里 import 了 ../components/*.vue，
+    //    缺任何一个 VitePress 都会报 Failed to resolve import
+    if (p === 'website/docs/components' || p.indexOf('website/docs/components/') === 0) return false;
     if (/^website\/docs\/[^\/]+\.md$/i.test(p)) {
       return /^website\/docs\/index\.md$/i.test(p);   // 只有 index.md 跳过（各人首页不同）
     }
