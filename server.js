@@ -2208,6 +2208,43 @@ app.get('/api/navigation', async (req, res) => {
 app.post('/api/navigation', async (req, res) => {
   let navList = Array.isArray(req.body) ? req.body : [];
   normalizeNavScopes(navList);
+
+  // 💡 前端可见的条目必须有对应页面：没有 website/docs/<slug>.md 就现场生成一份薄壳，
+  //    否则前台点进去就是 VitePress 的 404（典型场景：先勾了「仅后台」后来又改成共用）
+  const createdPages = [];
+  const missingPlugins = [];
+  for (const item of navList) {
+    if (!item || item.hideFrontend) continue;
+    const link = String(item.link || '').trim();
+    if (!link.startsWith('/') || link === '/' || link === '#') continue;
+    const rawPath = link.split('?')[0];
+    const isDirLink = rawPath.endsWith('/');          // /novel/ 这种目录式链接对应 index.md
+    const rel = rawPath.replace(/^\//, '').replace(/\/$/, '');
+    if (!rel) continue;
+    const docRel = isDirLink ? `${rel}/index.md` : (rel.endsWith('.md') ? rel : `${rel}.md`);
+    const docAbs = path.join(DOCS_DIR, docRel);
+    if (fs.existsSync(docAbs)) continue;
+
+    const pluginFile = path.join(__dirname, 'plugin', `${item.id}.html`);
+    if (!fs.existsSync(pluginFile)) { missingPlugins.push(item.id); continue; }
+
+    const md = `---
+title: ${item.title || item.id}
+aside: false
+prev: false
+next: false
+---
+
+<ClientOnly>
+  <iframe src="http://localhost:3001/plugin/${item.id}.html" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
+</ClientOnly>
+`;
+    try {
+      await fs.outputFile(docAbs, md, 'utf-8');
+      createdPages.push(docRel);
+      console.log('[nav] 已为前台补生成页面：' + docRel);
+    } catch (e) { /* 忽略单个失败 */ }
+  }
   // 🔒 插件工厂是后台的唯一入口，必须常驻后台：
   //    无论前端传什么，都强制 hideBackend = false；缺失就补一条。
   const builder = navList.find(n => n && n.id === 'plugin-builder');
@@ -2220,7 +2257,7 @@ app.post('/api/navigation', async (req, res) => {
     });
   }
   await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
-  res.json({ success: true });
+  res.json({ success: true, createdPages, missingPlugins });
 });
 
 // 3. 获取已存在的插件列表（用于后台动态菜单）
