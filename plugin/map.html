@@ -33,8 +33,9 @@
     button.active { background: #d29922; color: #1e1e1e; border: 1px solid #fff; }
     
     .color-picker { display: flex; gap: 4px; align-items: center; flex-wrap: wrap;}
-    .color-swatch { width: 22px; height: 22px; border-radius: 4px; cursor: pointer; border: 2px solid transparent; }
-    .color-swatch.active { border-color: #fff; box-shadow: 0 0 5px #fff; }
+    .color-swatch { width: 26px; height: 26px; border-radius: 5px; cursor: pointer; border: 2px solid transparent; position: relative; display: flex; align-items: center; justify-content: center; }
+    .color-swatch.active { border-color: #fff; box-shadow: 0 0 8px #fff, 0 0 0 2px #0006; transform: scale(1.08); }
+    .swatch-idx { font-size: 11px; font-weight: bold; color: #fff; text-shadow: 0 0 3px #000, 0 0 2px #000; pointer-events: none; line-height: 1; }
     .eraser-swatch { background: repeating-linear-gradient(45deg, #333, #333 4px, #555 4px, #555 8px); display: flex; justify-content: center; align-items: center; font-size: 14px;}
 
     #map-container { flex: 1; background: #111; position: relative; overflow: hidden; z-index: 1;}
@@ -99,6 +100,7 @@
     .bg-transparent { background: transparent !important; border: none !important; box-shadow: none !important; }
     .text-shadow { text-shadow: 1px 1px 2px #000; font-weight: bold; font-size: 13px; }
     .label-country { color: rgba(255,255,255,0.85); font-size: 22px; font-weight: bold; text-shadow: 2px 2px 4px #000; pointer-events: auto; cursor: pointer; white-space: nowrap; padding: 5px; }
+    .label-country-active { color: #ffe066; font-size: 26px; text-shadow: 0 0 12px #ffe066, 0 0 4px #000, 2px 2px 4px #000; }
     .label-country:hover { color: #fff; text-shadow: 0 0 10px #fff; }
     .label-admin { color: rgba(255,255,255,0.95); font-size: 14px; font-weight: bold; text-shadow: 1px 1px 2px #000; pointer-events: auto; cursor: pointer; white-space: nowrap; padding: 2px 5px; background: rgba(0,0,0,0.3); border-radius: 4px;}
     .troop-badge { background: #a82626; color: #fff; font-size: 11px; padding: 1px 4px; border-radius: 8px; margin-left: 2px; border: 1px solid #fff; }
@@ -109,6 +111,67 @@
     .search-box { background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 8px; border-radius: 4px; width: 100%; margin-bottom: 10px; outline: none; }
     .result-item { padding: 8px; border-bottom: 1px solid #333; cursor: pointer; display: flex; justify-content: space-between; transition: background 0.2s;}
     .result-item:hover { background: #333; color: #fff;}
+
+    /* ============ 系统提示框（堆叠式） ============ */
+    .toast-stack { position: fixed; top: 60px; left: 50%; transform: translateX(-50%); z-index: 99999; display: flex; flex-direction: column; align-items: center; gap: 10px; pointer-events: none; }
+    .toast {
+      pointer-events: auto; min-width: 220px; max-width: 380px;
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 12px 14px 14px 14px; border-radius: 10px;
+      background: #252526; color: #eee; font-size: 13px; line-height: 1.5;
+      border: 1px solid #3a3a3a; border-left-width: 4px;
+      box-shadow: 0 8px 24px rgba(0,0,0,0.45);
+      position: relative; overflow: hidden;
+      animation: toastIn .22s cubic-bezier(.2,.9,.3,1.2);
+    }
+    .toast.out { animation: toastOut .18s ease forwards; }
+    .toast-ok { border-left-color: #2ea043; }
+    .toast-err { border-left-color: #d1242f; }
+    .toast-info { border-left-color: #0e639c; }
+    .toast-warn { border-left-color: #d29922; }
+    .toast-icon { font-size: 15px; line-height: 1.4; flex-shrink: 0; }
+    .toast-body { flex: 1; min-width: 0; word-break: break-word; }
+    .toast-bar { position: absolute; left: 0; bottom: 0; height: 2px; background: currentColor; opacity: .55; animation: toastBar linear forwards; }
+    .toast-ok .toast-bar { color: #2ea043; }
+    .toast-err .toast-bar { color: #d1242f; }
+    .toast-info .toast-bar { color: #0e639c; }
+    .toast-warn .toast-bar { color: #d29922; }
+    @keyframes toastIn { from { opacity: 0; transform: translateY(-14px) scale(.96); } to { opacity: 1; transform: none; } }
+    @keyframes toastOut { to { opacity: 0; transform: translateY(-14px) scale(.96); } }
+    @keyframes toastBar { from { width: 100%; } to { width: 0%; } }
+
+    /* ============ 工具栏 ============ */
+    .toolbar { background: #1b1b1c; padding: 8px 10px; border-bottom: 1px solid #333; display: flex; flex-direction: column; gap: 6px; max-height: 46vh; overflow-y: auto; transition: max-height .25s ease; }
+    .toolbar.collapsed { max-height: 44px; overflow: hidden; padding-bottom: 0; }
+    .toolbar-status { display: flex; align-items: center; gap: 10px; padding: 6px 8px; background: #232325; border: 1px solid #333; border-radius: 6px; flex-wrap: wrap; }
+    .tool-chip { display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px; border-radius: 999px; background: #0e639c22; border: 1px solid #0e639c66; color: #7fc4ee; font-size: 12px; font-weight: bold; }
+    .tool-hint { font-size: 12px; color: #888; flex: 1; min-width: 200px; }
+    .tool-toggle { margin-left: auto; background: #2b2b2d; color: #bbb; border: 1px solid #3a3a3a; padding: 4px 10px; border-radius: 6px; font-size: 12px; cursor: pointer; }
+    .tool-toggle:hover { background: #353537; color: #fff; }
+    .row { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; padding: 5px 8px; border-radius: 6px; background: #232325; }
+    .row .row-label { font-size: 12px; font-weight: bold; opacity: .9; }
+    .tb-btn { background: #2f2f31; color: #d8d8d8; border: 1px solid #3d3d3f; padding: 5px 9px; border-radius: 5px; font-size: 12px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 4px; }
+    .tb-btn:hover { background: #3a3a3d; color: #fff; border-color: #4a4a4d; }
+    .tb-btn.active { background: #0e639c; color: #fff; border-color: #4aa3df; box-shadow: 0 0 0 1px #0e639c66, 0 0 12px #0e639c44; }
+    .tb-btn.danger { background: #3a2224; border-color: #5a2a2e; color: #e88; }
+    .tb-btn.danger:hover { background: #4a2a2e; color: #fbb; }
+    .tb-btn:disabled { opacity: .4; cursor: not-allowed; }
+    .tb-sep { width: 1px; height: 16px; background: #3d3d3f; margin: 0 4px; }
+    .tb-input { background: #1a1a1c; border: 1px solid #3d3d3f; color: #eee; padding: 4px 8px; border-radius: 5px; font-size: 12px; outline: none; }
+    .tb-input:focus { border-color: #0e639c; }
+    .line-style-dot { width: 18px; height: 0; border-top: 3px solid currentColor; border-radius: 2px; display: inline-block; }
+
+    /* ============ 确认弹窗（替换浏览器原生 confirm） ============ */
+    .ask-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.55); backdrop-filter: blur(2px); z-index: 100000; display: flex; align-items: center; justify-content: center; animation: fadeIn .15s ease; }
+    .ask-box { width: 380px; max-width: 90vw; background: #262628; border: 1px solid #3d3d40; border-radius: 12px; padding: 22px 22px 18px; box-shadow: 0 24px 60px rgba(0,0,0,0.6); animation: popIn .18s cubic-bezier(.2,.9,.3,1.2); }
+    .ask-title { color: #fff; font-size: 15px; font-weight: bold; margin-bottom: 10px; display: flex; align-items: center; gap: 8px; }
+    .ask-msg { color: #bdbdbd; font-size: 13px; line-height: 1.7; margin-bottom: 20px; word-break: break-word; }
+    .ask-actions { display: flex; justify-content: flex-end; gap: 10px; }
+    .ask-actions .tb-btn { padding: 7px 18px; font-size: 13px; }
+    .ask-actions .tb-btn.primary { background: #0e639c; border-color: #4aa3df; color: #fff; }
+    .ask-actions .tb-btn.primary:hover { background: #1177bb; }
+    @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
+    @keyframes popIn { from { opacity: 0; transform: scale(.94) translateY(8px); } to { opacity: 1; transform: none; } }
   </style>
 </head>
 <body>
@@ -124,30 +187,54 @@
 
     <div class="main-body">
       <div class="left-pane">
-        <div class="toolbar">
+        <div class="toolbar" :class="{ collapsed: toolbarCollapsed }">
+          <!-- 状态行：当前工具 + 操作提示 + 折叠 -->
+          <div class="toolbar-status">
+            <span class="tool-chip">{{ toolIcon }} {{ toolLabel }}</span>
+            <span class="tool-chip brush-chip" v-if="(currentTool === 'brush' || currentTool === 'rect') && currentBrushColor >= 0">
+              🖌️ 国家 #{{ currentBrushColor + 1 }}<template v-if="mapData.countryNames[currentBrushColor]"> · {{ mapData.countryNames[currentBrushColor] }}</template>
+            </span>
+            <span class="tool-chip brush-chip" v-else-if="currentTool === 'brush' || currentTool === 'rect'">🧽 橡皮（擦成海洋）</span>
+            <span class="tool-hint">{{ toolHint }}</span>
+            <button class="tool-toggle" @click="toolbarCollapsed = !toolbarCollapsed">{{ toolbarCollapsed ? '▾ 展开工具栏' : '▴ 收起工具栏' }}</button>
+          </div>
+
           <div class="row">
-            <span style="color: #d29922;">🌍 创世：</span>
-            <input type="number" v-model.number="countryCount" min="2" max="30" style="width:50px; padding:4px; background:#1e1e1e; border:1px solid #444; color:#fff; border-radius:4px;"/>
-            <button class="primary-btn" @click="generatePoliticalMap">🎲 重划版图</button>
-            <button class="secondary" @click="expandMap">🌐 扩大边界</button>
-            <button class="secondary" @click="undoBrush" :disabled="undoStack.length === 0">↩️ 撤销</button>
-            <div style="width: 1px; height: 15px; background: #555; margin: 0 5px;"></div>
-            <span style="color: #0e639c;">🖌️ 国家：</span>
-            <button :class="{ active: currentTool === 'brush' }" @click="setTool('brush')">画笔</button>
-            <button :class="{ active: currentTool === 'rect' }" @click="setTool('rect')">📦 框选</button>
+            <span class="row-label" style="color: #d29922;">🌍 创世</span>
+            <input class="tb-input" type="number" v-model.number="countryCount" min="2" max="30" style="width:52px;" title="国家数量"/>
+            <input class="tb-input" type="text" v-model="seedInput" placeholder="种子(留空=随机)" title="相同种子 + 相同国家数 = 完全相同的地图" style="width:110px;"/>
+            <button class="tb-btn" @click="rollSeed" title="换一个随机种子并立即生成">🔀 随机种子</button>
+            <button class="tb-btn" @click="generatePoliticalMap">🎲 生成地图</button>
+            <button class="tb-btn" @click="expandMap">🌐 扩大边界</button>
+            <button class="tb-btn" @click="undoBrush" :disabled="undoStack.length === 0" title="Ctrl+Z">↩️ 撤销</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn danger" @click="deleteActiveTarget" :disabled="!activeTarget" title="Delete">🗑️ 删除选中</button>
+          </div>
+
+          <div class="row">
+            <span class="row-label" style="color: #0e639c;">🖌️ 国家</span>
+            <button class="tb-btn" :class="{ active: currentTool === 'brush' }" @click="setTool('brush')" title="画笔 (B)">画笔</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'rect' }" @click="setTool('rect')" title="框选填充 (R)">📦 框选</button>
             <div v-if="currentTool === 'brush' || currentTool === 'rect'" class="color-picker">
-              <div v-for="(color, index) in colors" :key="index" class="color-swatch" :class="{ active: currentBrushColor === index }" :style="{ backgroundColor: color }" @click="currentBrushColor = index"></div>
-              <div class="color-swatch eraser-swatch" :class="{ active: currentBrushColor === -1 }" @click="currentBrushColor = -1">🧽</div>
+              <div
+                v-for="id in countrySwatches" :key="'c'+id"
+                class="color-swatch"
+                :class="{ active: currentBrushColor === id }"
+                :style="{ backgroundColor: countryColor(id) }"
+                :title="'国家 #' + (id + 1) + (mapData.countryNames[id] ? ' · ' + mapData.countryNames[id] : '')"
+                @click="currentBrushColor = id"
+              ><span class="swatch-idx">{{ id + 1 }}</span></div>
+              <div class="color-swatch eraser-swatch" :class="{ active: currentBrushColor === -1 }" @click="currentBrushColor = -1" title="橡皮：擦成海洋">🧽</div>
             </div>
           </div>
 
           <div class="row">
-            <span style="color: #911eb4;">🏛️ 行政/特殊：</span>
-            <button :class="{ active: currentTool === 'admin_brush' }" @click="setTool('admin_brush')">行政区画笔</button>
-            <button :class="{ active: currentTool === 'admin_rect' }" @click="setTool('admin_rect')">行政区框选</button>
-            <button class="secondary" @click="deleteAllAdmins">🗑️ 清空行政区</button>
-            <div style="width: 1px; height: 15px; background: #555; margin: 0 5px;"></div>
-            <button :class="{ active: currentTool === 'special_brush' }" @click="setTool('special_brush')">☣️ 涂特殊区</button>
+            <span class="row-label" style="color: #911eb4;">🏛️ 行政/特殊</span>
+            <button class="tb-btn" :class="{ active: currentTool === 'admin_brush' }" @click="setTool('admin_brush')">行政区画笔</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'admin_rect' }" @click="setTool('admin_rect')">行政区框选</button>
+            <button class="tb-btn danger" @click="deleteAllAdmins">🗑️ 清空行政区</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" :class="{ active: currentTool === 'special_brush' }" @click="setTool('special_brush')">☣️ 涂特殊区</button>
             <div v-if="currentTool === 'special_brush'" class="color-picker">
               <div v-for="(color, index) in effectColors" :key="'eff'+index" class="color-swatch" :class="{ active: currentEffectColor === index }" :style="{ backgroundColor: color }" @click="currentEffectColor = index" title="焦土/瘟疫/魔法污染"></div>
               <div class="color-swatch eraser-swatch" :class="{ active: currentEffectColor === -1 }" @click="currentEffectColor = -1">🧽</div>
@@ -155,27 +242,31 @@
           </div>
 
           <div class="row">
-            <span style="color: #a82626;">📍 地标：</span>
-            <button :class="{ active: currentTool === 'capital' }" @click="setTool('capital')">⭐ 首都</button>
-            <button :class="{ active: currentTool === 'city' }" @click="setTool('city')">🏙️ 城市</button>
-            <button :class="{ active: currentTool === 'fortress' }" @click="setTool('fortress')">🏰 要塞</button>
-            <button :class="{ active: currentTool === 'magic_tower' }" @click="setTool('magic_tower')">🔮 魔法塔</button>
-            <button :class="{ active: currentTool === 'portal' }" @click="setTool('portal')">⛩️ 传送阵</button>
-            <button :class="{ active: currentTool === 'monster_lair' }" @click="setTool('monster_lair')">🐉 巢穴</button>
-            <button :class="{ active: currentTool === 'church' }" @click="setTool('church')">⛪ 教堂</button>
-            <button :class="{ active: currentTool === 'trade_post' }" @click="setTool('trade_post')">🏪 贸易站</button>
-            <button :class="{ active: currentTool === 'camp' }" @click="setTool('camp')">🏕️ 兵营</button>
-            <button :class="{ active: currentTool === 'battle' }" @click="setTool('battle')">💥 战场</button>
+            <span class="row-label" style="color: #a82626;">📍 地标</span>
+            <button class="tb-btn" :class="{ active: currentTool === 'capital' }" @click="setTool('capital')">⭐ 首都</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'city' }" @click="setTool('city')">🏙️ 城市</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'fortress' }" @click="setTool('fortress')">🏰 要塞</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'magic_tower' }" @click="setTool('magic_tower')">🔮 魔法塔</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'portal' }" @click="setTool('portal')">⛩️ 传送阵</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'monster_lair' }" @click="setTool('monster_lair')">🐉 巢穴</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'church' }" @click="setTool('church')">⛪ 教堂</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'trade_post' }" @click="setTool('trade_post')">🏪 贸易站</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'camp' }" @click="setTool('camp')">🏕️ 兵营</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'battle' }" @click="setTool('battle')">💥 战场</button>
+            <button class="tb-btn" :class="{ active: !markerLocked }" @click="toggleMarkerLock" :title="markerLocked ? '当前已锁定：点这里解除，解除后图标可拖动' : '当前可拖动：点这里重新锁定位置'">{{ markerLocked ? '🔓 解除锁定' : '🔒 恢复锁定' }}</button>
           </div>
 
           <div class="row">
-            <span style="color: #d29922;">🛣️ 连线：</span>
-            <button :class="{ active: currentTool === 'road' }" @click="setTool('road')">🛣️ 道路</button>
-            <button :class="{ active: currentTool === 'river' }" @click="setTool('river')">🌊 河流</button>
-            <button :class="{ active: currentTool === 'defense' }" @click="setTool('defense')">🧱 防线</button>
-            <button :class="{ active: currentTool === 'attack' }" @click="setTool('attack')">⚔️ 进攻路线</button>
-            <div style="width: 1px; height: 15px; background: #555; margin: 0 10px;"></div>
-            <button :class="{ active: currentTool === 'none' }" @click="setTool('none')" style="background: #333; border: 1px solid #0e639c;">🖐️ 浏览/拖拽模式</button>
+            <span class="row-label" style="color: #d29922;">🛣️ 连线</span>
+            <button class="tb-btn" :class="{ active: currentTool === 'road' }" @click="setTool('road')" title="道路 (1)">🛣️ 道路</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'river' }" @click="setTool('river')" title="河流 (2)">🌊 河流</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'defense' }" @click="setTool('defense')" title="防线 (3)">🧱 防线</button>
+            <button class="tb-btn" :class="{ active: currentTool === 'attack' }" @click="setTool('attack')" title="进攻路线 (4)">⚔️ 进攻路线</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" @click="finishLine" :disabled="!isDrawingLine" title="双击地图也可结束">✅ 结束连线</button>
+            <button class="tb-btn danger" @click="clearAllLines">🧹 清空连线</button>
+            <span class="tb-sep"></span>
+            <button class="tb-btn" :class="{ active: currentTool === 'none' }" @click="setTool('none')" title="浏览 (V)">🖐️ 浏览/拖拽</button>
           </div>
         </div>
 
@@ -264,6 +355,28 @@
         </div>
       </div>
     </div>
+  <!-- ============ 自定义确认弹窗（必须在 #app 内部才受 Vue 编译） ============ -->
+  <div class="ask-overlay" v-if="ask.show" @click.self="askCancel">
+    <div class="ask-box">
+      <div class="ask-title">
+        <span>{{ ask.danger ? '⚠️' : '❓' }}</span>
+        <span>{{ ask.title }}</span>
+      </div>
+      <div class="ask-msg">{{ ask.message }}</div>
+      <input
+        v-if="ask.mode === 'prompt'"
+        class="tb-input ask-input"
+        v-model="ask.input"
+        @keyup.enter="askOk"
+        autofocus
+        style="width:100%; margin-bottom:18px; padding:8px 10px; font-size:13px;"
+      />
+      <div class="ask-actions">
+        <button class="tb-btn" @click="askCancel">取消</button>
+        <button class="tb-btn" :class="{ danger: ask.danger, primary: !ask.danger }" @click="askOk">确定</button>
+      </div>
+    </div>
+  </div>
   </div>
 
   <script>
@@ -292,13 +405,46 @@
         
         const generating = ref(false);
         const countryCount = ref(7);
+        const seedInput = ref('');
+        // 地形缓存：只存种子，重绘时按种子重建，避免把 9 万个数字写进 json
+        let terrainCache = null;
         const currentTool = ref('none');
         const currentBrushColor = ref(0);
         const currentEffectColor = ref(0);
         const colors = COUNTRY_COLORS;
         const effectColors = EFFECT_COLORS;
+
+        // 💡 国家配色：前 15 个用调色板；超出的轮次换亮度 + 通道轮换，避免撞色
+        const colorCache = new Map();
+        const countryColor = (id) => {
+           const key = Number(id) || 0;
+           if (colorCache.has(key)) return colorCache.get(key);
+           const base = COUNTRY_COLORS[key % COUNTRY_COLORS.length];
+           const cycle = Math.floor(key / COUNTRY_COLORS.length);
+           let hex = base;
+           if (cycle > 0) {
+              const rgb = hexToRgb(base);
+              const k = cycle % 2 === 1 ? 1.32 : 0.66;
+              const rot = cycle % 3;
+              const mixed = [rgb[rot % 3], rgb[(rot + 1) % 3], rgb[(rot + 2) % 3]];
+              hex = '#' + mixed.map(v => Math.max(0, Math.min(255, Math.round(v * k))).toString(16).padStart(2, '0')).join('');
+           }
+           colorCache.set(key, hex);
+           return hex;
+        };
+        // 色板数量跟着国家数走，最少 15 个
+        const countrySwatches = computed(() => {
+           const n = Math.max(15, Number(countryCount.value) || 15);
+           return Array.from({ length: n }, (_, i) => i);
+        });
         
         const isPanelOpen = ref(true);
+        const toolbarCollapsed = ref(false);
+        // 标识是否锁定位置（锁定后不可拖动，避免点选时手滑把图标挪走）
+        const markerLocked = ref(true);
+        // 连线草稿：点击累加点，双击/回车结束
+        let lineDraft = [];
+        const lineDraftCount = ref(0);
         const layerVisibility = ref({ labels: true, markers: true });
         const activeTarget = ref(null); 
         const searchQuery = ref('');
@@ -326,6 +472,9 @@
         watch(isPanelOpen, () => {
            setTimeout(() => { if(map) map.invalidateSize(); }, 350);
         });
+        // 画笔颜色 / 工具变化时，刷新地图上的国家名高亮
+        watch(currentBrushColor, () => { try { updateLabels(); } catch (e) {} });
+        watch(currentTool, () => { try { updateLabels(); } catch (e) {} });
 
         const addLegend = () => {
            if(!newLegend.value.text.trim()) return showToast('请输入图例文字', true);
@@ -371,7 +520,7 @@
           const size = sizeMap[type] || 18;
           return L.divIcon({
             className: 'custom-icon',
-            html: `<div style="font-size: ${size}px; filter: drop-shadow(0 0 3px #000);">${iconMap[type] || '📍'}</div>`,
+            html: `<div style="font-size: ${size}px; line-height: 1; text-align: center; filter: drop-shadow(0 0 3px #000);">${iconMap[type] || '📍'}</div>`,
             iconSize: [size, size], iconAnchor: [size/2, size/2]
           });
         };
@@ -382,6 +531,10 @@
           labelsLayer = L.layerGroup().addTo(map);
           
           map.on('click', handleMapClick);
+          // 双击结束连线（连线工具下关掉双击缩放，避免冲突）
+          map.on('dblclick', (e) => {
+            if (LINE_TOOLS.includes(currentTool.value)) { L.DomEvent.stop(e); finishLine(); }
+          });
           map.on('mousemove', (e) => {
              if ((currentTool.value === 'rect' || currentTool.value === 'admin_rect') && rectStartPoint.value) {
                 const bounds = L.latLngBounds(rectStartPoint.value, e.latlng);
@@ -391,22 +544,90 @@
                     rectPreviewLayer.setBounds(bounds);
                 }
              }
-             if (['road', 'river', 'defense', 'attack'].includes(currentTool.value) && roadStartPoint.value) {
-                if (!tempDrawingLayer) {
-                   tempDrawingLayer = L.polyline([roadStartPoint.value, e.latlng], {color: '#fff', weight: 2, dashArray: '4, 4', interactive: false}).addTo(map);
-                } else {
-                   tempDrawingLayer.setLatLngs([roadStartPoint.value, e.latlng]);
+             if (LINE_TOOLS.includes(currentTool.value)) {
+                const snapped = snapPoint(e.latlng);
+                const live = snapped || e.latlng;
+                const previewPts = lineDraft.concat([live]);
+                if (previewPts.length > 1) {
+                   const previewStyle = { color: '#ffffff', weight: 2.5, dashArray: '7,6', opacity: .9, interactive: false };
+                   if (!tempDrawingLayer) {
+                      tempDrawingLayer = L.polyline(previewPts, previewStyle).addTo(map);
+                   } else {
+                      tempDrawingLayer.setLatLngs(previewPts);
+                      tempDrawingLayer.setStyle(previewStyle);
+                   }
                 }
              }
           });
         };
 
+        // 吸附：连线端点自动贴到附近地标（18 像素内）
+        const snapPoint = (latlng) => {
+           if (!map || !mapData.value.markers) return null;
+           const p = map.latLngToContainerPoint(latlng);
+           let best = null, bestD = 18;
+           for (const m of mapData.value.markers) {
+              if (LINE_TOOLS.includes(m.type)) continue;
+              if (typeof m.lat !== 'number') continue;
+              const mp = map.latLngToContainerPoint([m.lat, m.lng]);
+              const d = Math.hypot(mp.x - p.x, mp.y - p.y);
+              if (d < bestD) { bestD = d; best = L.latLng(m.lat, m.lng); }
+           }
+           return best;
+        };
+
+        const clearLineDraft = () => {
+           lineDraft = [];
+           lineDraftCount.value = 0;
+           if (tempDrawingLayer) { map.removeLayer(tempDrawingLayer); tempDrawingLayer = null; }
+        };
+
+        // 结束当前连线（双击 / 回车 / 按钮 都会走这里）
+        const finishLine = () => {
+           if (!LINE_TOOLS.includes(currentTool.value)) return;
+           const type = currentTool.value;
+           const pts = lineDraft.slice();
+           // 去掉双击产生的重复末点
+           if (pts.length >= 2 && map) {
+              const a = map.latLngToContainerPoint(pts[pts.length - 1]);
+              const b = map.latLngToContainerPoint(pts[pts.length - 2]);
+              if (Math.hypot(a.x - b.x, a.y - b.y) < 4) pts.pop();
+           }
+           clearLineDraft();
+           if (pts.length < 2) { showToast('至少需要两个节点才能连线', true); return; }
+           saveHistory();
+           const names = { road: '大道', river: '河流', defense: '防线', attack: '进军' };
+           const mk = { id: Date.now().toString(), type: type, points: pts, title: names[type], desc: '', link: '' };
+           mapData.value.markers.push(mk);
+           renderMarkers();
+           activeTarget.value = mk;
+           isPanelOpen.value = true;
+           showToast(`已创建${names[type]}（${pts.length} 个节点）`);
+        };
+
+        // 一次性清空所有连线
+        const clearAllLines = async () => {
+           const lines = mapData.value.markers.filter(m => LINE_TOOLS.includes(m.type));
+           if (!lines.length) { showToast('当前没有连线', false, 'info'); return; }
+           if (!(await askConfirm(`确定要删除全部 ${lines.length} 条连线吗？此操作可用 Ctrl+Z 撤销。`, { title: '清空连线', danger: true }))) return;
+           saveHistory();
+           mapData.value.markers = mapData.value.markers.filter(m => !LINE_TOOLS.includes(m.type));
+           activeTarget.value = null;
+           renderMarkers();
+           updateLabels();
+           showToast(`已删除 ${lines.length} 条连线`);
+        };
+
         const setTool = (tool) => {
            currentTool.value = tool;
-           roadStartPoint.value = null;
+           clearLineDraft();
            rectStartPoint.value = null;
            if(rectPreviewLayer) { map.removeLayer(rectPreviewLayer); rectPreviewLayer = null; }
            if(tempDrawingLayer) { map.removeLayer(tempDrawingLayer); tempDrawingLayer = null; }
+           // 连线工具下禁用双击缩放，否则和「双击结束」打架
+           try {
+             if (map) { LINE_TOOLS.includes(tool) ? map.doubleClickZoom.disable() : map.doubleClickZoom.enable(); }
+           } catch (e) {}
         };
 
         const toggleLayers = () => {
@@ -421,6 +642,14 @@
            } else { 
                if (map.hasLayer(markersLayer)) map.removeLayer(markersLayer); 
            }
+        };
+
+        // 锁定/解锁标识位置
+        const toggleMarkerLock = () => {
+           markerLocked.value = !markerLocked.value;
+           renderMarkers();
+           updateLabels();
+           showToast(markerLocked.value ? '标识位置已锁定，点选不会再挪动' : '标识可拖动了，注意别误拖', false, 'info');
         };
 
         const handleMapClick = (e) => {
@@ -507,20 +736,13 @@
             return;
           }
 
-          if (['road', 'river', 'defense', 'attack'].includes(currentTool.value)) {
-            if (!roadStartPoint.value) {
-              roadStartPoint.value = e.latlng;
-              showToast(`已记录起点`);
-            } else {
-              const latlngs = [roadStartPoint.value, e.latlng];
-              const type = currentTool.value;
-              let defaultName = { road: '大道', river: '河流', defense: '防线', attack: '进军' }[type];
-              const newMarker = { id: Date.now().toString(), type: type, points: [roadStartPoint.value, e.latlng], title: defaultName, desc: '', link: '' };
-              mapData.value.markers.push(newMarker);
-              roadStartPoint.value = null;
-              if(tempDrawingLayer) { map.removeLayer(tempDrawingLayer); tempDrawingLayer = null; }
-              renderMarkers();
-            }
+          if (LINE_TOOLS.includes(currentTool.value)) {
+            const snapped = snapPoint(e.latlng);
+            const pt = snapped || e.latlng;
+            lineDraft.push(pt);
+            lineDraftCount.value = lineDraft.length;
+            if (tempDrawingLayer) tempDrawingLayer.setLatLngs(lineDraft.concat([pt]));
+            if (snapped) showToast('已吸附到地标', false, 'info');
             return;
           }
 
@@ -542,15 +764,36 @@
           
           mapData.value.markers.forEach(m => {
             let layer = null;
-            if (['road', 'river', 'defense', 'attack'].includes(m.type)) {
-              let lineStyle = { color: '#fff', weight: 3, dashArray: '' };
-              if (m.type === 'road') lineStyle = { color: '#d29922', weight: 3, dashArray: '5, 5' };
-              if (m.type === 'river') lineStyle = { color: '#4363d8', weight: 4, dashArray: '' };
-              if (m.type === 'defense') lineStyle = { color: '#888888', weight: 6, dashArray: '2, 6' };
-              if (m.type === 'attack') lineStyle = { color: '#e6194B', weight: 5 };
-              
-              layer = L.polyline(m.points, lineStyle).addTo(markersLayer);
-              if (m.type === 'attack') layer.getElement()?.classList.add('animated-route');
+            if (LINE_TOOLS.includes(m.type)) {
+              const casingColor = { road: '#5b4a2a', river: '#1e3f57', defense: '#454545', attack: '#6e1a1a' }[m.type] || '#222';
+              const coreColor = { road: '#d8bb7a', river: '#4aa3df', defense: '#cfcfcf', attack: '#e6194B' }[m.type] || '#fff';
+              const coreWeight = { road: 3, river: 4, defense: 4, attack: 4 }[m.type] || 3;
+              const dash = m.type === 'defense' ? '1, 7' : (m.type === 'road' ? '9, 6' : '');
+
+              // 外描边：让线在深色地形上也能看清
+              L.polyline(m.points, {
+                color: casingColor, weight: coreWeight + 4, opacity: 0.85,
+                lineCap: 'round', lineJoin: 'round', interactive: false
+              }).addTo(markersLayer);
+
+              layer = L.polyline(m.points, {
+                color: coreColor, weight: coreWeight, dashArray: dash,
+                opacity: 1, lineCap: 'round', lineJoin: 'round'
+              }).addTo(markersLayer);
+
+              if (m.type === 'attack') {
+                try { layer.getElement()?.classList.add('animated-route'); } catch (e) {}
+                const last = m.points[m.points.length - 1];
+                L.marker(last, {
+                  icon: L.divIcon({
+                    className: 'arrow-head',
+                    html: '<div style="font-size:19px;line-height:19px;color:#e6194B;text-shadow:0 0 5px #000,0 0 2px #000;">➤</div>',
+                    iconSize: [19, 19], iconAnchor: [9, 9]
+                  }),
+                  interactive: false
+                }).addTo(markersLayer);
+              }
+
               layer.bindTooltip(m.title, { permanent: true, direction: 'center', className: 'bg-transparent border-0 text-white text-shadow' });
             } else {
               let tooltipText = m.title;
@@ -558,7 +801,7 @@
                  tooltipText += ` <span class="troop-badge">${m.desc}</span>`;
               }
               
-              layer = L.marker([m.lat, m.lng], { icon: getIcon(m.type), draggable: true }).addTo(markersLayer);
+              layer = L.marker([m.lat, m.lng], { icon: getIcon(m.type), draggable: !markerLocked.value }).addTo(markersLayer);
               layer.bindTooltip(tooltipText, { direction: 'top', offset: [0, -10], className: 'bg-dark text-white border-0' });
               
               layer.on('dragend', (e) => {
@@ -598,11 +841,12 @@
              const lat = mapHeight - (c.y / c.count) * gridSize;
              const lng = (c.x / c.count) * gridSize;
              const cName = mapData.value.countryNames[id] || `国家 #${parseInt(id) + 1}`;
-             const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="label-country">${cName}</div>`, iconSize: [0,0] });
+             const isCurrent = (currentTool.value === 'brush' || currentTool.value === 'rect') && String(id) === String(currentBrushColor.value);
+             const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="label-country${isCurrent ? ' label-country-active' : ''}">${cName}</div>`, iconSize: [0,0] });
              const marker = L.marker([lat, lng], { icon }).addTo(labelsLayer);
-             marker.on('click', (e) => {
+             marker.on('click', async (e) => {
                 L.DomEvent.stopPropagation(e);
-                const newName = prompt('修改国家名称:', cName);
+                const newName = await askPrompt('修改国家名称', cName, { title: '国家名称' });
                 if (newName && newName.trim()) { mapData.value.countryNames[id] = newName; updateLabels(); }
              });
           }
@@ -625,12 +869,12 @@
              const adminName = mapData.value.adminRegions[id]?.name || '行政区';
              const icon = L.divIcon({ className: 'bg-transparent', html: `<div class="label-admin">${adminName}</div>`, iconSize: [0,0] });
              const marker = L.marker([lat, lng], { icon }).addTo(labelsLayer);
-             marker.on('click', (e) => {
+             marker.on('click', async (e) => {
                 L.DomEvent.stopPropagation(e);
-                const action = prompt('修改行政区名称 (输入 "del" 删除):', adminName);
+                const action = await askPrompt('修改行政区名称（输入 del 可删除该行政区）', adminName, { title: '行政区名称' });
                 if (!action) return;
                 if (action.toLowerCase() === 'del') {
-                   if(confirm('确定删除该行政区吗？')){
+                   if(await askConfirm('确定删除该行政区吗？区域内的地标不会删除。', { title: '删除行政区', danger: true })){
                       saveHistory();
                       for(let y=0; y<rows; y++) for(let x=0; x<cols; x++) if(adminGrid[y][x] === parseInt(id)) adminGrid[y][x] = -1;
                       delete mapData.value.adminRegions[id];
@@ -643,48 +887,475 @@
           }
         };
 
+        // ===================== 地形系统（重写） =====================
+        // 思路：种子随机 → 值噪声地形 → 海平面 → 气候分带 → 河流 → 加权边界扩张
+        const hashSeed = (s) => { let h = 2166136261; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 16777619); } return h >>> 0; };
+        const mulberry32 = (a) => () => { a |= 0; a = (a + 0x6D2B79F5) | 0; let t = Math.imul(a ^ (a >>> 15), 1 | a); t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t; return ((t ^ (t >>> 14)) >>> 0) / 4294967296; };
+
+        const buildNoise = (seed) => {
+          const rng = mulberry32(seed >>> 0);
+          const p = new Uint8Array(256);
+          for (let i = 0; i < 256; i++) p[i] = i;
+          for (let i = 255; i > 0; i--) { const j = Math.floor(rng() * (i + 1)); const t = p[i]; p[i] = p[j]; p[j] = t; }
+          const val = (x, y) => p[(x & 255) ^ p[y & 255]] / 255;
+          const smooth = (t) => t * t * (3 - 2 * t);
+          const lerp = (a, b, t) => a + (b - a) * t;
+          return (x, y) => {
+            const xi = Math.floor(x), yi = Math.floor(y);
+            const u = smooth(x - xi), v = smooth(y - yi);
+            return lerp(lerp(val(xi, yi), val(xi + 1, yi), u), lerp(val(xi, yi + 1), val(xi + 1, yi + 1), u), v);
+          };
+        };
+
+        const fbm = (noise, x, y, oct, lac = 2.05, gain = 0.52) => {
+          let amp = 1, freq = 1, sum = 0, norm = 0;
+          for (let i = 0; i < oct; i++) { sum += amp * noise(x * freq, y * freq); norm += amp; amp *= gain; freq *= lac; }
+          return sum / norm;
+        };
+
+        // 生成高度场：低频大陆掩膜 + 域扭曲 + 山脊，不用径向衰减（那会压成椭圆）
+        const buildTerrain = (seed) => {
+          const n1 = buildNoise(seed);
+          const n2 = buildNoise(seed ^ 0x9e3779b9);
+          const C = cols, R = rows;
+          const h = new Float32Array(C * R);
+          const landRatio = 0.44;   // 目标陆地占比
+
+          const smoothstep = (a, b, t) => { const x = Math.max(0, Math.min(1, (t - a) / (b - a))); return x * x * (3 - 2 * x); };
+
+          for (let y = 0; y < R; y++) {
+            const ny = y / R;
+            for (let x = 0; x < C; x++) {
+              const nx = x / C;
+              // ① 域扭曲：让海岸线不规则
+              const wx = nx + 0.30 * (fbm(n2, nx * 3.0 + 11.3, ny * 3.0 + 5.1, 3) - 0.5);
+              const wy = ny + 0.30 * (fbm(n2, nx * 3.0 - 7.7, ny * 3.0 + 19.2, 3) - 0.5);
+
+              // ② 大陆掩膜（低频） + 地形细节（中高频）
+              const cont = fbm(n1, wx * 1.55 + 5.2, wy * 1.55 + 2.7, 4);
+              const detail = fbm(n2, wx * 5.5 + 21.1, wy * 5.5 + 13.4, 6);
+              let v = cont * 0.60 + detail * 0.40;
+
+              // ③ 山脊：给大陆内部制造山脉走向
+              const ridge = 1 - Math.abs(fbm(n1, wx * 4.2 + 31.7, wy * 4.2 + 8.9, 4) * 2 - 1);
+              v += ridge * 0.16 * smoothstep(0.25, 0.75, cont);
+
+              // ④ 最外圈 4% 强制成海洋，避免大陆被裁在边框上
+              const hardEdge = Math.min(nx, 1 - nx, ny, 1 - ny);
+              if (hardEdge < 0.04) v *= 0.01;
+
+              // ⑤ 只在贴边 13% 的范围内做衰减，避免大陆被裁掉，同时不把整块压成圆
+              const edgeX = Math.min(nx, 1 - nx) / 0.13;
+              const edgeY = Math.min(ny, 1 - ny) / 0.13;
+              const edge = smoothstep(0, 1, Math.min(1, Math.min(edgeX, edgeY)));
+              v *= 0.05 + 0.95 * Math.pow(edge, 1.7);
+
+              // ⑤ 拉开对比
+              v = Math.pow(Math.max(0, v), 1.15);
+              h[y * C + x] = v;
+            }
+          }
+
+          // 用分位数定海平面，保证陆地占比可控
+          const sorted = Array.from(h).sort((a, b) => a - b);
+          const sea = sorted[Math.floor(sorted.length * (1 - landRatio))] || 0.2;
+          const maxH = sorted[sorted.length - 1] || 1;
+
+          return { seed: seed >>> 0, cols: C, rows: R, h: h, sea: sea, maxH: maxH, rivers: null };
+        };
+
+        // 没有地形缓存时按存档里的种子重建
+        const ensureTerrain = () => {
+          const t = mapData.value.terrain;
+          const seed = (t && t.seed) ? (t.seed >>> 0) : 0;
+          if (!terrainCache || terrainCache.cols !== cols || terrainCache.rows !== rows || terrainCache.seed !== seed) {
+            terrainCache = seed ? buildTerrain(seed) : null;
+            if (terrainCache) terrainCache.rivers = traceRivers(terrainCache);
+          }
+          return terrainCache;
+        };
+
+        // 陆地配色：按海拔/纬度/湿度分带
+        const landColor = (terr, x, y, i, gid) => {
+          const C = cols, R = rows;
+          const country = gid >= 0 ? COUNTRY_COLORS[gid % COUNTRY_COLORS.length] : null;
+
+          let base;
+          if (!terr || terr.cols !== C || terr.rows !== R) {
+            base = [126, 143, 104];
+          } else {
+            const hv = terr.h[i];
+            const rel = Math.max(0, Math.min(1, (hv - terr.sea) / Math.max(0.001, terr.maxH - terr.sea)));
+            const lat = Math.abs(y / R - 0.5) * 2;                       // 0 赤道 → 1 极地
+            const moist = 0.5 + 0.5 * Math.sin(x * 0.07 + y * 0.05) * Math.cos(y * 0.04);
+            const cold = Math.min(1, lat * 1.05 + rel * 0.35);
+
+            if (rel > 0.82) base = [232, 234, 234];                       // 雪线
+            else if (rel > 0.66) base = [150, 146, 138];                  // 高山裸岩
+            else if (cold > 0.78) base = [220, 226, 226];                 // 雪原
+            else if (cold > 0.62) base = [150, 166, 148];                 // 苔原
+            else if (cold > 0.45) base = [92, 118, 92];                   // 针叶林
+            else if (moist < 0.34) base = [214, 190, 138];                // 沙漠
+            else if (moist < 0.45) base = [186, 180, 118];                // 草原
+            else if (lat < 0.28) base = [74, 116, 68];                    // 雨林
+            else base = [104, 140, 88];                                   // 温带草原/林地
+            // 近海浅滩提亮
+            if (rel < 0.06) base = [214, 200, 158];
+          }
+
+          if (country) {
+            const c = hexToRgb(country);
+            // 只做淡淡的政治染色，别把地形色压掉
+            base = [Math.round(base[0] * 0.86 + c[0] * 0.14), Math.round(base[1] * 0.86 + c[1] * 0.14), Math.round(base[2] * 0.86 + c[2] * 0.14)];
+          }
+          return base;
+        };
+
+        const hexToRgb = (hex) => {
+          const s = String(hex || '#888888').replace('#', '');
+          const v = s.length === 3 ? s.split('').map(c => c + c).join('') : s.padEnd(6, '8');
+          return [parseInt(v.slice(0, 2), 16) || 0, parseInt(v.slice(2, 4), 16) || 0, parseInt(v.slice(4, 6), 16) || 0];
+        };
+
+        // 河流：从高处沿最陡下降回溯到海，累积流量决定河宽
+        const traceRivers = (terr) => {
+          if (!terr) return [];
+          const C = terr.cols, R = terr.rows, h = terr.h, sea = terr.sea;
+          const rng = mulberry32((terr.seed ^ 0x5bf03635) >>> 0);
+          const rivers = [];
+          const sources = [];
+          // 取海拔前 20% 的陆地格作为潜在源头
+          const cand = [];
+          for (let i = 0; i < h.length; i++) if (h[i] > sea + 0.10) cand.push(i);
+          cand.sort((a, b) => h[b] - h[a]);
+          const want = Math.min(140, Math.floor(cand.length * 0.06));
+          for (let k = 0; k < want && k < cand.length; k++) {
+            const idx = cand[Math.floor(rng() * Math.min(cand.length, Math.max(1, Math.floor(cand.length * 0.5))))];
+            if (sources.indexOf(idx) === -1) sources.push(idx);
+          }
+
+          for (const start of sources) {
+            let cur = start;
+            const path = [];
+            let guard = 0;
+            while (guard++ < 900) {
+              const x = cur % C, y = Math.floor(cur / C);
+              path.push({ x: x, y: y });
+              if (h[cur] <= sea) break;
+              // 找最低邻居
+              let best = -1, bestH = h[cur];
+              for (let dy = -1; dy <= 1; dy++) {
+                for (let dx = -1; dx <= 1; dx++) {
+                  if (!dx && !dy) continue;
+                  const nx = x + dx, ny = y + dy;
+                  if (nx < 0 || ny < 0 || nx >= C || ny >= R) continue;
+                  const ni = ny * C + nx;
+                  if (h[ni] < bestH) { bestH = h[ni]; best = ni; }
+                }
+              }
+              if (best < 0) break;
+              cur = best;
+            }
+            if (path.length > 12) rivers.push({ pts: path, w: Math.min(5, 1 + path.length / 60) });
+          }
+          return rivers;
+        };
+
+        // 国家划分：用「代价扩张」代替 BFS，边界会自然贴合地形
+        const assignCountries = (terr, count) => {
+          const C = cols, R = rows;
+          const rng = mulberry32(((terr ? terr.seed : 1) ^ 0x2545F491) >>> 0);
+          const landCells = [];
+          for (let y = 0; y < R; y++) for (let x = 0; x < C; x++) {
+            if (gridData[y] && gridData[y][x] === -2) landCells.push({ x, y, i: y * C + x });
+          }
+          if (!landCells.length) return;
+
+          // 首都：最远点采样，保证分布均匀
+          const capitals = [];
+          const pick = landCells[Math.floor(rng() * landCells.length)];
+          capitals.push(pick);
+          while (capitals.length < count) {
+            let best = null, bestD = -1;
+            for (let k = 0; k < 400; k++) {
+              const c = landCells[Math.floor(rng() * landCells.length)];
+              let dmin = Infinity;
+              for (const cap of capitals) { const d = (c.x - cap.x) ** 2 + (c.y - cap.y) ** 2; if (d < dmin) dmin = d; }
+              if (dmin > bestD) { bestD = dmin; best = c; }
+            }
+            if (!best) break;
+            capitals.push(best);
+          }
+
+          // 简易二叉堆
+          const heap = [];
+          const push = (item) => { heap.push(item); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p].cost <= heap[i].cost) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+          const pop = () => { const top = heap[0]; const last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = i * 2 + 1, r = l + 1; let m = i; if (l < heap.length && heap[l].cost < heap[m].cost) m = l; if (r < heap.length && heap[r].cost < heap[m].cost) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+
+          const cost = new Float32Array(C * R).fill(Infinity);
+          capitals.forEach((cap, id) => {
+            // 首都位置优先放在低海拔（平原/河谷）
+            cost[cap.i] = 0;
+            push({ x: cap.x, y: cap.y, i: cap.i, id, cost: 0 });
+          });
+
+          const rndNoise = buildNoise((terr ? terr.seed : 7) ^ 0x77aa55);
+          while (heap.length) {
+            const cur = pop();
+            if (gridData[cur.y][cur.x] !== -2 && gridData[cur.y][cur.x] !== cur.id) continue;
+            if (gridData[cur.y][cur.x] === -2) gridData[cur.y][cur.x] = cur.id;
+            else if (gridData[cur.y][cur.x] !== cur.id) continue;
+            for (let dy = -1; dy <= 1; dy++) {
+              for (let dx = -1; dx <= 1; dx++) {
+                if (!dx && !dy) continue;
+                const nx = cur.x + dx, ny = cur.y + dy;
+                if (nx < 0 || ny < 0 || nx >= C || ny >= R) continue;
+                if (gridData[ny][nx] !== -2) continue;
+                const ni = ny * C + nx;
+                // 代价：距离 + 海拔差（山脉是天然屏障，权重给足）+ 噪声（边界不规则）
+                const dh = terr && terr.cols === C ? Math.abs(terr.h[ni] - terr.h[cur.i]) * 95 : 0;
+                const jitter = rndNoise(nx * 0.42, ny * 0.42) * 1.4;
+                const nc = cur.cost + (dx && dy ? 1.414 : 1) + dh + jitter;
+                if (nc < cost[ni]) { cost[ni] = nc; push({ x: nx, y: ny, i: ni, id: cur.id, cost: nc }); }
+              }
+            }
+          }
+        };
+
+        // 去掉单格噪点，让海岸线干净一些
+        const cleanMask = (passes = 2) => {
+          for (let p = 0; p < passes; p++) {
+            const snapshot = gridData.map(row => row.slice());
+            for (let y = 1; y < rows - 1; y++) {
+              for (let x = 1; x < cols - 1; x++) {
+                const cur = snapshot[y][x] === -1;
+                let landN = 0;
+                for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+                  if (!dx && !dy) continue;
+                  if (snapshot[y + dy][x + dx] !== -1) landN++;
+                }
+                if (cur && landN >= 6) gridData[y][x] = -2;
+                else if (!cur && landN <= 2) gridData[y][x] = -1;
+              }
+            }
+          }
+        };
+
         const renderMapToCanvas = (resetView = false) => {
+          const W = mapWidth, H = mapHeight;
+          const terr = ensureTerrain();
           const canvas = document.createElement('canvas');
-          canvas.width = mapWidth; canvas.height = mapHeight;
+          canvas.width = W; canvas.height = H;
           const ctx = canvas.getContext('2d');
-          
-          ctx.fillStyle = '#1e3a5f';
-          ctx.fillRect(0, 0, mapWidth, mapHeight);
-          
-          for(let y=0; y<rows; y++) {
-            for(let x=0; x<cols; x++) {
-              if(gridData[y] && gridData[y][x] !== -1) {
-                ctx.fillStyle = COUNTRY_COLORS[gridData[y][x] % COUNTRY_COLORS.length];
-                ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
+          ctx.imageSmoothingEnabled = true;
+          ctx.imageSmoothingQuality = 'high';
+
+          // ① 逐像素渲染地形：对高度/陆地率做双线性采样，海岸线在像素级判定
+          //    这样细节是真的画出来的，而不是把 400×225 拉伸放大
+          const hasTerr = terr && terr.cols === cols && terr.rows === rows;
+          const img = ctx.createImageData(W, H);
+          const data = img.data;
+
+          // 每格预计算：山体阴影系数
+          const cellShade = new Float32Array(cols * rows);
+          const cellWater = new Uint8Array(cols * rows);
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              const i = y * cols + x;
+              const gid = (gridData[y] && gridData[y][x] !== undefined) ? gridData[y][x] : -1;
+              cellWater[i] = gid === -1 ? 1 : 0;
+              if (hasTerr && gid !== -1) {
+                const hC = terr.h[i];
+                const hR = terr.h[Math.min(terr.h.length - 1, i + 1)];
+                const hD = terr.h[Math.min(terr.h.length - 1, i + cols)];
+                cellShade[i] = Math.max(-1, Math.min(1, ((hC - hR) * 2.2 + (hC - hD) * 2.2) * 9));
               }
             }
           }
-          ctx.strokeStyle = 'rgba(0,0,0,0.6)'; ctx.lineWidth = 1.5;
-          for(let y=0; y<rows; y++) {
-            for(let x=0; x<cols; x++) {
-              const id = gridData[y][x];
+
+          // 国家色预计算
+          const countryRgbCache = {};
+          const countryRgbOf = (id) => countryRgbCache[id] || (countryRgbCache[id] = hexToRgb(countryColor(id)));
+          const adminRgbMap = {};
+          const effectRgb = EFFECT_COLORS.map(hexToRgb);
+
+          const seaV = hasTerr ? terr.sea : 0.2;
+          const maxV = hasTerr ? terr.maxH : 1;
+
+          for (let py = 0; py < H; py++) {
+            const fy = py / gridSize;
+            const y0 = Math.min(rows - 1, Math.floor(fy));
+            const ty = fy - y0;
+            const y1 = Math.min(rows - 1, y0 + 1);
+            const row0 = gridData[y0] || [];
+            const base0 = y0 * cols, base1 = y1 * cols;
+            const lat = Math.abs(py / H - 0.5) * 2;
+
+            for (let px = 0; px < W; px++) {
+              const fx = px / gridSize;
+              const x0 = Math.min(cols - 1, Math.floor(fx));
+              const tx = fx - x0;
+              const x1 = Math.min(cols - 1, x0 + 1);
+
+              const w00 = cellWater[base0 + x0], w10 = cellWater[base0 + x1];
+              const w01 = cellWater[base1 + x0], w11 = cellWater[base1 + x1];
+              const water = (w00 * (1 - tx) + w10 * tx) * (1 - ty) + (w01 * (1 - tx) + w11 * tx) * ty;
+
+              const gid = (row0[x0] !== undefined) ? row0[x0] : -1;
+              let r, g, b;
+
+              if (water > 0.55) {
+                // 海洋：按深度分三档，浅海更亮
+                let depth = 0.08;
+                if (hasTerr) {
+                  const h = (terr.h[base0 + x0] * (1 - tx) + terr.h[base0 + x1] * tx) * (1 - ty)
+                          + (terr.h[base1 + x0] * (1 - tx) + terr.h[base1 + x1] * tx) * ty;
+                  depth = seaV - h;
+                }
+                const t = water; // 越靠岸越亮
+                if (depth > 0.16) { r = 14; g = 40; b = 64; }
+                else if (depth > 0.06) { r = 26; g = 66; b = 96; }
+                else { r = 52; g = 108; b = 138; }
+                r += Math.round((1 - t) * 26); g += Math.round((1 - t) * 22); b += Math.round((1 - t) * 14);
+              } else {
+                // 陆地：双线性取高度 → 气候分带
+                let hv = seaV + 0.2;
+                if (hasTerr) {
+                  hv = (terr.h[base0 + x0] * (1 - tx) + terr.h[base0 + x1] * tx) * (1 - ty)
+                     + (terr.h[base1 + x0] * (1 - tx) + terr.h[base1 + x1] * tx) * ty;
+                }
+                const rel = Math.max(0, Math.min(1, (hv - seaV) / Math.max(0.001, maxV - seaV)));
+                const moist = 0.5 + 0.5 * Math.sin(fx * 0.07 + fy * 0.05) * Math.cos(fy * 0.04);
+                const cold = Math.min(1, lat * 1.05 + rel * 0.35);
+
+                if (rel > 0.82) { r = 236; g = 238; b = 238; }
+                else if (rel > 0.66) { r = 152; g = 148; b = 140; }
+                else if (cold > 0.78) { r = 224; g = 229; b = 229; }
+                else if (cold > 0.62) { r = 150; g = 168; b = 150; }
+                else if (cold > 0.45) { r = 92; g = 120; b = 92; }
+                else if (moist < 0.34) { r = 216; g = 192; b = 140; }
+                else if (moist < 0.45) { r = 188; g = 182; b = 120; }
+                else if (lat < 0.28) { r = 74; g = 118; b = 68; }
+                else { r = 104; g = 142; b = 88; }
+
+                if (rel < 0.05) { r = 218; g = 204; b = 162; }   // 沙滩
+
+                // 政治染色（很淡，别盖住地形）
+                if (gid >= 0) {
+                  const c = countryRgbOf(gid);
+                  r = Math.round(r * 0.88 + c[0] * 0.12);
+                  g = Math.round(g * 0.88 + c[1] * 0.12);
+                  b = Math.round(b * 0.88 + c[2] * 0.12);
+                }
+
+                // 山体阴影（双线性取每格阴影）
+                if (hasTerr) {
+                  const sh = (cellShade[base0 + x0] * (1 - tx) + cellShade[base0 + x1] * tx) * (1 - ty)
+                           + (cellShade[base1 + x0] * (1 - tx) + cellShade[base1 + x1] * tx) * ty;
+                  const k = 1 + sh * 0.34;
+                  r *= k; g *= k; b *= k;
+                }
+              }
+
+              // 海岸线：陆地率在 0.38~0.62 的过渡带提亮，形成一条干净的岸线
+              if (water > 0.38 && water < 0.62) {
+                const edge = 1 - Math.abs(water - 0.5) / 0.12;
+                r = Math.round(r * (1 - edge * 0.5) + 238 * edge * 0.5);
+                g = Math.round(g * (1 - edge * 0.5) + 226 * edge * 0.5);
+                b = Math.round(b * (1 - edge * 0.5) + 190 * edge * 0.5);
+              }
+
+              // 行政区
+              const aId = adminGrid[y0] ? adminGrid[y0][x0] : -1;
+              if (aId !== undefined && aId !== -1) {
+                const reg = mapData.value.adminRegions[aId];
+                const key = reg && reg.color ? reg.color : '#ff9999';
+                if (!adminRgbMap[key]) adminRgbMap[key] = hexToRgb(key);
+                const ac = adminRgbMap[key];
+                r = r * 0.72 + ac[0] * 0.28; g = g * 0.72 + ac[1] * 0.28; b = b * 0.72 + ac[2] * 0.28;
+              }
+              // 特殊区域
+              const eId = effectGrid[y0] ? effectGrid[y0][x0] : -1;
+              if (eId !== undefined && eId !== -1) {
+                const ec = effectRgb[eId] || effectRgb[0];
+                r = r * 0.45 + ec[0] * 0.55; g = g * 0.45 + ec[1] * 0.55; b = b * 0.45 + ec[2] * 0.55;
+              }
+
+              // 纸面颗粒，避免大色块显得平
+              const grain = (((px * 73856093) ^ (py * 19349663)) & 3) - 1.5;
+              const o = (py * W + px) * 4;
+              data[o] = Math.max(0, Math.min(255, r + grain));
+              data[o + 1] = Math.max(0, Math.min(255, g + grain));
+              data[o + 2] = Math.max(0, Math.min(255, b + grain));
+              data[o + 3] = 255;
+            }
+          }
+          ctx.putImageData(img, 0, 0);
+
+          // ④ 河流
+          if (terr && terr.rivers && terr.rivers.length) {
+            ctx.save();
+            ctx.lineCap = 'round'; ctx.lineJoin = 'round';
+            for (const rv of terr.rivers) {
+              ctx.beginPath();
+              rv.pts.forEach((pt, k) => {
+                const px = pt.x * gridSize + gridSize / 2, py = pt.y * gridSize + gridSize / 2;
+                k === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+              });
+              ctx.strokeStyle = 'rgba(58, 112, 150, 0.85)';
+              ctx.lineWidth = Math.max(1, rv.w * 0.9);
+              ctx.stroke();
+            }
+            ctx.restore();
+          }
+
+          // ⑤ 国界（比原来细，带一点柔光）
+          ctx.save();
+          ctx.lineJoin = 'round'; ctx.lineCap = 'round';
+          ctx.strokeStyle = 'rgba(38, 32, 26, 0.62)';
+          ctx.lineWidth = 1.6;
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              const id = gridData[y] ? gridData[y][x] : -1;
               if (id === -1) continue;
-              if (x < cols - 1 && gridData[y][x+1] !== id) { ctx.beginPath(); ctx.moveTo((x+1) * gridSize, y * gridSize); ctx.lineTo((x+1) * gridSize, (y+1) * gridSize); ctx.stroke(); }
-              if (y < rows - 1 && gridData[y+1][x] !== id) { ctx.beginPath(); ctx.moveTo(x * gridSize, (y+1) * gridSize); ctx.lineTo((x+1) * gridSize, (y+1) * gridSize); ctx.stroke(); }
+              const px = x * gridSize, py = y * gridSize;
+              if (x < cols - 1 && gridData[y][x + 1] !== id && gridData[y][x + 1] !== -1) { ctx.beginPath(); ctx.moveTo(px + gridSize, py); ctx.lineTo(px + gridSize, py + gridSize); ctx.stroke(); }
+              if (y < rows - 1 && gridData[y + 1][x] !== id && gridData[y + 1][x] !== -1) { ctx.beginPath(); ctx.moveTo(px, py + gridSize); ctx.lineTo(px + gridSize, py + gridSize); ctx.stroke(); }
             }
           }
-          for(let y=0; y<rows; y++) {
-            for(let x=0; x<cols; x++) {
-              const aId = adminGrid[y]?.[x];
-              if(aId !== undefined && aId !== -1) {
-                const color = mapData.value.adminRegions[aId]?.color || '#ff9999';
-                ctx.fillStyle = color + '80'; ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-              }
+          ctx.restore();
+
+          // ⑥ 国名
+          if (mapData.value.countryNames) {
+            const agg = {};
+            for (let y = 0; y < rows; y++) for (let x = 0; x < cols; x++) {
+              const id = gridData[y] ? gridData[y][x] : -1;
+              if (id < 0) continue;
+              if (!agg[id]) agg[id] = { sx: 0, sy: 0, n: 0 };
+              agg[id].sx += x; agg[id].sy += y; agg[id].n++;
             }
-          }
-          for(let y=0; y<rows; y++) {
-            for(let x=0; x<cols; x++) {
-              const eId = effectGrid[y]?.[x];
-              if(eId !== undefined && eId !== -1) {
-                ctx.fillStyle = EFFECT_COLORS[eId] + 'a0'; ctx.fillRect(x * gridSize, y * gridSize, gridSize, gridSize);
-              }
+            ctx.save();
+            ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+            for (const id in agg) {
+              const name = mapData.value.countryNames[id];
+              if (!name) continue;
+              const a = agg[id];
+              const cx = (a.sx / a.n) * gridSize, cy = (a.sy / a.n) * gridSize;
+              ctx.font = `bold ${Math.max(16, Math.min(34, Math.sqrt(a.n) * 2.2))}px "Source Han Serif SC","Songti SC",serif`;
+              ctx.lineWidth = 4; ctx.strokeStyle = 'rgba(28, 24, 18, 0.55)';
+              ctx.strokeText(name, cx, cy);
+              ctx.fillStyle = 'rgba(255, 250, 235, 0.92)';
+              ctx.fillText(name, cx, cy);
             }
+            ctx.restore();
           }
+
+          // ⑦ 暗角，让画面更集中
+          const vg = ctx.createRadialGradient(W / 2, H / 2, Math.min(W, H) * 0.35, W / 2, H / 2, Math.max(W, H) * 0.75);
+          vg.addColorStop(0, 'rgba(0,0,0,0)');
+          vg.addColorStop(1, 'rgba(0,0,0,0.35)');
+          ctx.fillStyle = vg;
+          ctx.fillRect(0, 0, W, H);
 
           updateMapImage(canvas.toDataURL('image/png'), resetView);
         };
@@ -708,92 +1379,110 @@
           };
         };
 
+        // 去掉面积过小的孤立陆地（碎点看着脏）
+        const removeSpecks = (minSize = 12) => {
+          const seen = new Array(rows).fill(null).map(() => new Array(cols).fill(false));
+          for (let y = 0; y < rows; y++) {
+            for (let x = 0; x < cols; x++) {
+              if (seen[y][x] || gridData[y][x] === -1) continue;
+              const stack = [[x, y]]; const comp = [];
+              seen[y][x] = true;
+              while (stack.length) {
+                const [cx, cy] = stack.pop(); comp.push([cx, cy]);
+                for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+                  const nx = cx + dx, ny = cy + dy;
+                  if (nx < 0 || ny < 0 || nx >= cols || ny >= rows) continue;
+                  if (seen[ny][nx] || gridData[ny][nx] === -1) continue;
+                  seen[ny][nx] = true; stack.push([nx, ny]);
+                }
+              }
+              if (comp.length < minSize) comp.forEach(([cx, cy]) => { gridData[cy][cx] = -1; });
+            }
+          }
+        };
+
+        // 换一个随机种子，并立即用它生成（避免种子和画面对不上）
+        const rollSeed = () => {
+          const chars = 'abcdefghijkmnpqrstuvwxyz23456789';
+          let s = '';
+          for (let i = 0; i < 6; i++) s += chars[Math.floor(Math.random() * chars.length)];
+          seedInput.value = s;
+          showToast(`已换新种子 ${s}，正在生成…`, false, 'info');
+          generatePoliticalMap();
+        };
+
         const generatePoliticalMap = () => {
           generating.value = true;
+          const tStart = Date.now();
           setTimeout(() => {
             try {
-              undoStack.length = 0; 
+              undoStack.length = 0;
               mapData.value.adminRegions = {}; mapData.value.countryNames = {}; nextAdminId = 1;
               gridData = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
               adminGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
               effectGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
-              
-              const numCenters = Math.floor(Math.random() * 3) + 2;
-              const centers = [];
-              for(let i=0; i<numCenters; i++) { centers.push({ x: cols * (0.2 + Math.random() * 0.6), y: rows * (0.2 + Math.random() * 0.6), r: cols * (0.2 + Math.random() * 0.3) }); }
 
-              let totalLandPixels = 0;
-              for(let y=0; y<rows; y++) {
-                for(let x=0; x<cols; x++) {
-                  let dist = Infinity;
-                  for(let c of centers) {
-                    const warpX = Math.sin(y * 0.05 + c.x) * 10;
-                    const warpY = Math.cos(x * 0.05 + c.y) * 10;
-                    let d = Math.sqrt((x - c.x + warpX)**2 + (y - c.y + warpY)**2) / c.r;
-                    if (d < dist) dist = d;
-                  }
-                  const n1 = Math.sin(x * 0.08) * Math.cos(y * 0.12) * 0.25;
-                  const n2 = Math.sin(x * 0.25 + y * 0.18) * 0.15;
-                  const n3 = Math.cos(x * 0.04 - y * 0.22) * 0.2;
-                  dist = dist + n1 + n2 + n3;
-                  if (dist < 1.0) { gridData[y][x] = -2; totalLandPixels++; }
+              // 种子：相同种子 + 相同参数 = 完全相同的地图
+              const s = String(seedInput.value || '').trim();
+              const seed = s ? hashSeed(s) : ((Math.random() * 0xFFFFFFFF) >>> 0);
+              seedInput.value = s || String(seed);
+              mapData.value.terrain = { seed: seed >>> 0 };
+
+              // ① 地形
+              terrainCache = buildTerrain(seed >>> 0);
+
+              // ② 海平面 → 陆地/海洋
+              for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                  gridData[y][x] = terrainCache.h[y * cols + x] > terrainCache.sea ? -2 : -1;
+                }
+              }
+              cleanMask(3);        // 抹掉单格噪点，海岸线更干净
+              removeSpecks(14);    // 去掉碎岛
+
+              // 💡 强制四周留出海洋边距：海平面是分位数自适应的，
+              //    只靠高度衰减没用，必须在掩膜上兜底，否则大陆会顶到画布边缘
+              const mg = Math.max(4, Math.round(Math.min(cols, rows) * 0.05));
+              for (let y = 0; y < rows; y++) {
+                for (let x = 0; x < cols; x++) {
+                  const wob = Math.round(Math.sin(x * 0.11) * 2.5 + Math.cos(y * 0.09) * 2.5);
+                  const m = mg + wob;
+                  if (x < m || y < m || x >= cols - m || y >= rows - m) gridData[y][x] = -1;
                 }
               }
 
-              if (totalLandPixels < countryCount.value * 100) {
-                 for(let y=0; y<rows; y++) for(let x=0; x<cols; x++) gridData[y][x] = -2;
-              }
+              // ③ 河流
+              terrainCache.rivers = traceRivers(terrainCache);
 
-              const visited = new Array(rows).fill(null).map(() => new Array(cols).fill(false));
-              const queue = []; let head = 0;
-              for(let x=0; x<cols; x++) { queue.push([x, 0]); queue.push([x, rows-1]); }
-              for(let y=0; y<rows; y++) { queue.push([0, y]); queue.push([cols-1, y]); }
-              while(head < queue.length) {
-                const [cx, cy] = queue[head++];
-                if(cx < 0 || cx >= cols || cy < 0 || cy >= rows) continue;
-                if(visited[cy][cx] || gridData[cy][cx] !== -1) continue;
-                visited[cy][cx] = true;
-                queue.push([cx+1, cy], [cx-1, cy], [cx, cy+1], [cx, cy-1]);
-              }
-              for(let y=0; y<rows; y++) {
-                for(let x=0; x<cols; x++) { if(gridData[y][x] === -1 && !visited[y][x]) gridData[y][x] = -2; }
-              }
-
-              let seeds = []; let attempts = 0;
-              while(seeds.length < countryCount.value && attempts < 10000) {
-                const rx = Math.floor(Math.random() * cols);
-                const ry = Math.floor(Math.random() * rows);
-                if (gridData[ry][rx] === -2) { gridData[ry][rx] = seeds.length; seeds.push({ x: rx, y: ry, id: seeds.length }); }
-                attempts++;
-              }
-
-              let bfsQueue = [...seeds]; let bfsHead = 0;
-              while(bfsHead < bfsQueue.length) {
-                const curr = bfsQueue[bfsHead++];
-                const dirs = [[0,1], [1,0], [0,-1], [-1,0]].sort(() => Math.random() - 0.5);
-                for(let d of dirs) {
-                  const nx = curr.x + d[0], ny = curr.y + d[1];
-                  if(nx>=0 && nx<cols && ny>=0 && ny<rows && gridData[ny][nx] === -2) {
-                    gridData[ny][nx] = curr.id; bfsQueue.push({ x: nx, y: ny, id: curr.id });
-                  }
-                }
-              }
+              // ④ 国家（加权扩张，边界会顺着山脉走）
+              const n = Math.max(2, Math.min(30, Number(countryCount.value) || 7));
+              countryCount.value = n;
+              assignCountries(terrainCache, n);
 
               renderMapToCanvas(true);
               if (mapData.value.markers.length > 0) mapData.value.markers = [];
-              renderMarkers(); updateLabels(); 
-              showToast('🪄 版图已生成！');
-            } catch (e) { console.error(e); } finally { generating.value = false; }
-          }, 50);
+              renderMarkers(); updateLabels();
+              showToast(`🪄 地图已生成（种子 ${seedInput.value}，用时 ${Date.now() - tStart} ms）`);
+            } catch (e) {
+              console.error(e);
+              const msg = e && e.stack ? e.stack.split('\n').slice(0, 5).join(' | ') : String(e);
+              document.title = 'ERR: ' + (e && e.message ? e.message : e);
+              const box = document.createElement('div');
+              box.style.cssText = 'position:fixed;top:70px;left:20px;z-index:99999;max-width:900px;background:#a82626;color:#fff;padding:14px;font:13px/1.5 Consolas,monospace;border-radius:6px;white-space:pre-wrap;';
+              box.textContent = msg;
+              document.body.appendChild(box);
+              showToast('生成失败：' + (e && e.message ? e.message : e), true);
+            } finally { generating.value = false; }
+          }, 30);
         };
 
         const onPropertyChange = () => {
            renderMarkers();
         };
 
-        const deleteActiveTarget = () => {
+        const deleteActiveTarget = async () => {
            if(!activeTarget.value) return;
-           if(confirm('确定要删除该目标吗？')) {
+           if(await askConfirm('确定要删除该目标吗？此操作可用 Ctrl+Z 撤销。', { title: '删除目标', danger: true })) {
               mapData.value.markers = mapData.value.markers.filter(m => m.id !== activeTarget.value.id);
               activeTarget.value = null;
               renderMarkers();
@@ -822,6 +1511,7 @@
             adminRegions: JSON.parse(JSON.stringify(mapData.value.adminRegions)),
             countryNames: JSON.parse(JSON.stringify(mapData.value.countryNames)),
             customLegends: JSON.parse(JSON.stringify(mapData.value.customLegends)),
+            terrain: JSON.parse(JSON.stringify(mapData.value.terrain || null)),
             nextAdminId: nextAdminId, width: mapWidth, height: mapHeight
           });
         };
@@ -832,6 +1522,8 @@
             gridData = state.grid; adminGrid = state.adminGrid; effectGrid = state.effectGrid;
             mapData.value.markers = state.markers; mapData.value.adminRegions = state.adminRegions; mapData.value.countryNames = state.countryNames;
             mapData.value.customLegends = state.customLegends;
+            mapData.value.terrain = state.terrain || null;
+            terrainCache = null;
             nextAdminId = state.nextAdminId; mapWidth = state.width; mapHeight = state.height;
             cols = mapWidth / gridSize; rows = mapHeight / gridSize;
             
@@ -871,8 +1563,7 @@
           showToast('🌐 边界已扩大！');
         };
 
-        const deleteAllAdmins = () => {
-          if (!confirm('确定清空所有行政区划吗？')) return;
+        const deleteAllAdmins = async () => {          if (!(await askConfirm('确定清空所有行政区划吗？此操作可用 Ctrl+Z 撤销。', { title: '清空行政区', danger: true }))) return;
           saveHistory();
           adminGrid = new Array(rows).fill(null).map(() => new Array(cols).fill(-1));
           mapData.value.adminRegions = {};
@@ -895,12 +1586,133 @@
           showToast('✅ 数据已保存');
         };
 
-        const showToast = (msg, isError = false) => {
-          const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
-          const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
-          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
-          document.body.appendChild(toast);
-          setTimeout(() => toast.remove(), 2500);
+        // ============ 系统提示框（堆叠式，可同时出现多条） ============
+        const TOAST_META = {
+          ok:   { icon: '✅', cls: 'toast-ok' },
+          err:  { icon: '⛔', cls: 'toast-err' },
+          info: { icon: '💬', cls: 'toast-info' },
+          warn: { icon: '⚠️', cls: 'toast-warn' }
+        };
+        const getToastStack = () => {
+          let el = document.getElementById('toast-stack');
+          if (!el) { el = document.createElement('div'); el.id = 'toast-stack'; el.className = 'toast-stack'; document.body.appendChild(el); }
+          return el;
+        };
+        const showToast = (msg, isError = false, kind) => {
+          const type = kind || (isError ? 'err' : 'ok');
+          const meta = TOAST_META[type] || TOAST_META.ok;
+          const stack = getToastStack();
+          // 同时最多 4 条
+          while (stack.children.length >= 4) stack.removeChild(stack.firstChild);
+
+          const el = document.createElement('div');
+          el.className = 'toast ' + meta.cls;
+
+          const icon = document.createElement('span');
+          icon.className = 'toast-icon';
+          icon.textContent = meta.icon;
+
+          const body = document.createElement('div');
+          body.className = 'toast-body';
+          body.textContent = msg;
+
+          const bar = document.createElement('i');
+          bar.className = 'toast-bar';
+          bar.style.animationDuration = (type === 'err' ? 3800 : 2400) + 'ms';
+
+          el.appendChild(icon); el.appendChild(body); el.appendChild(bar);
+          el.addEventListener('click', () => remove());
+          stack.appendChild(el);
+
+          let done = false;
+          function remove() {
+            if (done) return;
+            done = true;
+            el.classList.add('out');
+            setTimeout(() => el.remove(), 200);
+          }
+          setTimeout(remove, type === 'err' ? 3800 : 2400);
+        };
+
+        // ============ 当前工具信息 ============
+        const TOOL_META = {
+          none:        { icon: '🖐️', label: '浏览 / 拖拽', hint: '拖拽平移、滚轮缩放' },
+          brush:       { icon: '🖌️', label: '国家画笔',   hint: '点击或拖动给格子上色，右侧色板换颜色' },
+          rect:        { icon: '📦', label: '国家框选',   hint: '点起点 → 再点终点，整个矩形区域上色' },
+          admin_brush: { icon: '🏛️', label: '行政区画笔', hint: '涂抹生成行政区，可单独改颜色和名字' },
+          admin_rect:  { icon: '🏛️', label: '行政区框选', hint: '点起点 → 再点终点，整块区域划为行政区' },
+          special_brush:{ icon: '☣️', label: '特殊区域',  hint: '涂抹焦土 / 瘟疫 / 魔法污染' },
+          road:        { icon: '🛣️', label: '道路',       hint: '连续点击加节点，双击（或回车上）结束' },
+          river:       { icon: '🌊', label: '河流',       hint: '连续点击加节点，双击结束；建议顺着山谷画' },
+          defense:     { icon: '🧱', label: '防线',       hint: '连续点击加节点，双击结束' },
+          attack:      { icon: '⚔️', label: '进攻路线',   hint: '连续点击加节点，双击结束；末端自动加箭头' }
+        };
+        const LINE_TOOLS = ['road', 'river', 'defense', 'attack'];
+        const toolLabel = computed(() => (TOOL_META[currentTool.value] || {}).label || '地标');
+        const toolIcon = computed(() => (TOOL_META[currentTool.value] || {}).icon || '📍');
+        const toolHint = computed(() => {
+          if (LINE_TOOLS.includes(currentTool.value)) {
+            if (lineDraftCount.value > 0) return `已放置 ${lineDraftCount.value} 个节点 · 双击或回车结束，Esc 取消`;
+            return (TOOL_META[currentTool.value] || {}).hint || '';
+          }
+          return (TOOL_META[currentTool.value] || {}).hint || '点击地图放置地标';
+        });
+        const isDrawingLine = computed(() => lineDraftCount.value > 0);
+
+        // ============ 自定义确认弹窗（替代浏览器原生 confirm） ============
+        const ask = ref({ show: false, title: '确认操作', message: '', danger: false, mode: 'confirm', input: '' });
+        let askResolve = null;
+        const askConfirm = (message, opts) => new Promise((resolve) => {
+          const o = opts || {};
+          askResolve = resolve;
+          ask.value = { show: true, title: o.title || '确认操作', message: message, danger: !!o.danger, mode: 'confirm', input: '' };
+        });
+        // 输入框弹窗：返回输入的字符串，取消返回 null
+        const askPrompt = (message, defaultValue, opts) => new Promise((resolve) => {
+          const o = opts || {};
+          askResolve = resolve;
+          ask.value = { show: true, title: o.title || '输入内容', message: message, danger: false, mode: 'prompt', input: defaultValue == null ? '' : String(defaultValue) };
+        });
+        const askOk = () => {
+          ask.value.show = false;
+          const r = askResolve; askResolve = null;
+          if (!r) return;
+          if (ask.value.mode === 'prompt') {
+            const v = String(ask.value.input || '').trim();
+            r(v === '' ? null : v);
+          } else {
+            r(true);
+          }
+        };
+        const askCancel = () => {
+          const mode = ask.value.mode;
+          ask.value.show = false;
+          const r = askResolve; askResolve = null;
+          if (r) r(mode === 'prompt' ? null : false);
+        };
+
+        // ============ 快捷键 ============
+        const onMapKeydown = (ev) => {
+          const tag = (ev.target && ev.target.tagName) || '';
+          if (/^(INPUT|TEXTAREA|SELECT)$/.test(tag)) return;   // 输入框里不抢键
+          const k = (ev.key || '').toLowerCase();
+
+          if (ev.key === 'Escape') { clearLineDraft(); return; }
+          if (ev.key === 'Enter') {
+            if (LINE_TOOLS.includes(currentTool.value) && lineDraft.length >= 2) { ev.preventDefault(); finishLine(); }
+            return;
+          }
+          if ((ev.ctrlKey || ev.metaKey) && k === 'z') { ev.preventDefault(); undoBrush(); return; }
+          if (ev.key === 'Delete' && activeTarget.value) { ev.preventDefault(); deleteActiveTarget(); return; }
+          if (ev.ctrlKey || ev.metaKey || ev.altKey) return;
+
+          if (k === 'v') setTool('none');
+          else if (k === 'b') setTool('brush');
+          else if (k === 'r') setTool('rect');
+          else if (k === '1') setTool('road');
+          else if (k === '2') setTool('river');
+          else if (k === '3') setTool('defense');
+          else if (k === '4') setTool('attack');
         };
 
         onMounted(async () => {
@@ -937,12 +1749,25 @@
                 };
               }
             } catch (e) {}
+
+            // 💡 调试/分享用：map.html?auto=种子 载入后自动生成一张地图
+            try {
+              const q = new URLSearchParams(location.search);
+              const autoSeed = q.get('auto');
+              if (autoSeed) { seedInput.value = autoSeed; setTimeout(() => generatePoliticalMap(), 300); }
+            } catch (e) {}
           }, 200);
+
+          window.addEventListener('keydown', onMapKeydown);
         });
 
         return { 
-          generating, countryCount, currentTool, currentBrushColor, currentEffectColor, colors, effectColors, undoStack,
-          mapData, generatePoliticalMap, expandMap, undoBrush, saveMap, setTool, deleteAllAdmins,
+          generating, countryCount, seedInput, currentTool, currentBrushColor, currentEffectColor, colors, effectColors, undoStack,
+          countryColor, countrySwatches,
+          toolbarCollapsed, lineDraftCount, isDrawingLine, toolLabel, toolIcon, toolHint,
+          finishLine, clearAllLines, markerLocked, toggleMarkerLock,
+          ask, askOk, askCancel,
+          mapData, generatePoliticalMap, rollSeed, expandMap, undoBrush, saveMap, setTool, deleteAllAdmins,
           isPanelOpen, layerVisibility, toggleLayers, activeTarget, onPropertyChange, deleteActiveTarget,
           searchQuery, searchResults, focusOnTarget, exportMapImage, mdFiles,
           newLegend, addLegend, removeLegend
