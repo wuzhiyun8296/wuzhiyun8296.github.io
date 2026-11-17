@@ -1,4 +1,21 @@
-﻿const express = require('express');
+/*
+ * 幻想域设定集（my-world-system）
+ * Copyright (C) 2026 wuzhiyun8296
+ * SPDX-License-Identifier: GPL-3.0-only
+ *
+ * 本程序是自由软件：你可以依据 GNU 通用公共许可证（GPL-3.0）的条款
+ * 再分发和/或修改它。分发本程序或修改版本时，必须同样以 GPL-3.0 开源。
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, version 3.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ */
+const express = require('express');
 const fs = require('fs-extra');
 const path = require('path');
 const cors = require('cors');

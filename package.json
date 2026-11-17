@@ -10,9 +10,9 @@
     "preview": "vitepress preview website",
     "start": "node server.js"
   },
-  "keywords": [],
-  "author": "",
-  "license": "ISC",
+  "keywords": ["worldbuilding", "vitepress", "writing", "fantasy"],
+  "author": "wuzhiyun8296",
+  "license": "GPL-3.0-only",
   "dependencies": {
     "cors": "^2.8.6",
     "echarts": "^6.1.0",
