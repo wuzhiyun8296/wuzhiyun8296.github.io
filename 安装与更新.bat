@@ -410,6 +410,31 @@ echo.
 echo        [OK] 下载完成
 if !BAD! GTR 0 echo        [注意] 有 !BAD! 个文件没下载成功（可重跑一次）
 
+rem 第二遍：把没下到 / 下成空文件的，再补一次
+pushd "!TGL!"
+set /a MISS=0
+for /f "usebackq delims=" %%F in ("!LIST!") do (
+  if not "%%F"=="" (
+    set "REL=%%F"
+    set "REL=!REL:/=\!"
+    set "CHK=1"
+    if not exist "!REL!" set "CHK=0"
+    if exist "!REL!" for %%A in ("!REL!") do if %%~zA LSS 1 set "CHK=0"
+    if "!CHK!"=="0" (
+      for %%D in ("!REL!") do set "DIR=%%~dpD"
+      if not "!DIR!"=="" if not exist "!DIR!" mkdir "!DIR!" >nul 2>nul
+      set "GOT=0"
+      if defined BASE1 call :GET1 "%%F" "!REL!" && set "GOT=1"
+      if "!GOT!"=="0" if defined BASE2 call :GET2 "%%F" "!REL!" && set "GOT=1"
+      if "!GOT!"=="0" if defined BASE3 call :GET3 "%%F" "!REL!" && set "GOT=1"
+      if "!GOT!"=="1" set /a MISS+=1
+    )
+  )
+)
+popd
+if !MISS! GTR 0 echo        已补下 !MISS! 个之前没成功的文件
+if not exist "!TGL!\plugin\dashboard.html" echo        [注意] 仪表盘页面缺失，请再跑一次更新
+
 rem 启动必需的 4 个文件（ASCII 名）：清单里可能还没收录，这里直接按名取
 for %%N in (start.vbs start.bat loading.html icon3.ico) do (
   if not exist "!TGL!\%%N" call :FETCH "%%N" "!TGL!\%%N"
