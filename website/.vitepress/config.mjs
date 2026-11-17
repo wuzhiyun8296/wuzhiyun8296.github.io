@@ -1,4 +1,4 @@
-import { defineConfig } from 'vitepress'
+﻿import { defineConfig } from 'vitepress'
 import fs from 'fs'
 import path from 'path'
 import { fileURLToPath } from 'url'
@@ -23,6 +23,8 @@ function getSidebarItems(dir) {
         })
       }
     } else if (file.endsWith('.md')) {
+      // 💡 跳过 xxx.html.md 这类畸形文件（历史 bug 生成，不该出现在导航里）
+      if (/\.html?\.md$/i.test(file)) continue
       const title = file.replace('.md', '')
       const relativePath = path.relative(path.resolve(__dirname, '../docs'), fullPath).replace(/\\/g, '/').replace('.md', '')
       items.push({ text: title, link: `/${relativePath}` })
@@ -38,7 +40,7 @@ function generateSidebar() {
 
   const dirs = fs.readdirSync(docsDir).filter(f => {
     const fullPath = path.join(docsDir, f)
-    return fs.statSync(fullPath).isDirectory() && !f.startsWith('.') && !['assets', 'public', 'components', 'novel'].includes(f)
+    return fs.statSync(fullPath).isDirectory() && !f.startsWith('.') && !['assets', 'public', 'components', 'novel', 'plugin', 'node_modules'].includes(f)
   })
 
   dirs.forEach(dir => {

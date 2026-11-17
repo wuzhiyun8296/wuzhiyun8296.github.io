@@ -3241,3 +3241,30 @@ async function ensureHomeIndex() {
   }
 }
 ensureHomeIndex();
+// 💡 启动时清理历史 bug 留下的畸形页面：website/docs/**/xxx.html.md
+//    （早期版本把 /plugin/xxx.html 当成前台路由，生成了 map.html.md 之类的文件）
+async function cleanupBrokenPages() {
+  const docsDir = path.join(__dirname, 'website', 'docs');
+  const removed = [];
+  const walk = async (dir) => {
+    let entries = [];
+    try { entries = await fs.readdir(dir); } catch (e) { return; }
+    for (const name of entries) {
+      if (name.startsWith('.')) continue;
+      const full = path.join(dir, name);
+      let st; try { st = await fs.stat(full); } catch (e) { continue; }
+      if (st.isDirectory()) {
+        await walk(full);
+        try {
+          const left = await fs.readdir(full);
+          if (!left.length && full !== docsDir) await fs.remove(full);   // 清空后的空目录一并删掉
+        } catch (e) { /* ignore */ }
+      } else if (/\.html?\.md$/i.test(name)) {
+        try { await fs.remove(full); removed.push(path.relative(docsDir, full)); } catch (e) { /* ignore */ }
+      }
+    }
+  };
+  await walk(docsDir);
+  if (removed.length) console.log('[init] 已清理畸形页面：' + removed.join(', '));
+}
+cleanupBrokenPages();
