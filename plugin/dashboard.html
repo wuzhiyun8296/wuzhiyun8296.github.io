@@ -1,4 +1,4 @@
-<!-- 文件路径: plugin/dashboard.html -->
+﻿<!-- 文件路径: plugin/dashboard.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -100,7 +100,7 @@
         <!-- 日常进度提醒 -->
         <div v-else>
           <h2>📢 系统公告</h2>
-          <div class="notice-text">{{ sysNotice || '欢迎回到幻想域，创造属于你的史诗。' }}</div>
+          <div class="notice-text">{{ sysNotice || '欢迎回来。' }}</div>
           <div class="progress-info">
             <span>🎯 版权存证节点：{{ certTarget }} 字</span>
             <span>📝 当前：{{ stats.totalWords }} 字</span>
@@ -319,7 +319,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `幻想域备份_${new Date().toISOString().split('T')[0]}.json`;
+            a.download = `备份_${new Date().toISOString().split('T')[0]}.json`;
             a.click();
             URL.revokeObjectURL(url);
           } catch (e) { alert('备份下载失败'); }

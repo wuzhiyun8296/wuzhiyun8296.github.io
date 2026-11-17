@@ -1,4 +1,4 @@
-<!-- 文件路径: plugin/home-editor.html -->
+﻿<!-- 文件路径: plugin/home-editor.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -122,7 +122,7 @@
         <h3 class="section-title">⚙️ 基础站点信息</h3>
         <div class="form-group">
           <label>浏览器标签页标题</label>
-          <input type="text" v-model="homeData.siteTitle" placeholder="例如：幻想域设定集">
+          <input type="text" v-model="homeData.siteTitle" placeholder="例如：我的幻想世界">
         </div>
 
         <!-- 💡 美化后的图标上传区域 -->
@@ -151,7 +151,7 @@
         <h3 class="section-title">🌟 顶部展示区 (Hero)</h3>
         <div class="form-group">
           <label>大标题 (Name)</label>
-          <input type="text" v-model="homeData.name" placeholder="例如：幻想域">
+          <input type="text" v-model="homeData.name" placeholder="例如：我的世界">
         </div>
         <div class="form-group">
           <label>副标题 (Text)</label>
@@ -197,7 +197,7 @@
         </div>
         <div class="form-group">
           <label>版块导语</label>
-          <input type="text" v-model="homeData.modulesLead" placeholder="六个入口，通往幻想域的每一处角落。">
+          <input type="text" v-model="homeData.modulesLead" placeholder="一句话介绍你的世界导览">
         </div>
         <div v-for="(item, index) in homeData.modules" :key="'m' + index" class="feature-card">
           <button class="btn-del" @click="removeModule(index)">✖</button>
@@ -227,7 +227,7 @@
         </div>
         <div class="form-group">
           <label>版块导语</label>
-          <input type="text" v-model="homeData.routesLead" placeholder="第一次来到幻想域，可以任选一条线开始。">
+          <input type="text" v-model="homeData.routesLead" placeholder="给新读者一句引导">
         </div>
         <div v-for="(item, index) in homeData.routes" :key="'r' + index" class="feature-card">
           <button class="btn-del" @click="removeRoute(index)">✖</button>
@@ -350,37 +350,23 @@
       setup() {
         // 全部字段都可在这里兜底，删掉 home-config.json 也能正常出首页
         const defaultHome = {
-          siteTitle: '幻想域设定集',
+          // 💡 全新安装应显示空白（自定义），不要把作者的幻想域内容当成默认模板
+          siteTitle: '我的幻想世界',
           siteIcon: '/icon.svg',
-          name: '幻想域',
-          text: 'The Veiled Kindred Spirits',
-          tagline: '当物理与魔法交织，帝国的齿轮在暗中转动。',
-          btn1Text: '探索世界',
+          name: '我的幻想世界',
+          text: '',
+          tagline: '',
+          btn1Text: '',
           btn1Link: '/world-navigation',
-          btn2Text: '查看编年史',
+          btn2Text: '',
           btn2Link: '/timeline',
-          features: [
-            { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动，贝勒（Bale）为唯一法定货币。十二圆桌骑士共同监管。' },
-            { title: '魔法与物理', desc: '拥有魔力者方能施展魔法，而穿越者对此免疫。在这个阶级固化的世界里，反抗的种子正在发芽。' },
-            { title: '幻想域联盟', desc: '穿越者组成的秘密联盟，致力于推翻帝国统治，建立一个人魔共存的理想国。' }
-          ],
+          features: [],
           modulesTitle: '世界导览',
-          modulesLead: '六个入口，通往幻想域的每一处角落。',
-          modules: [
-            { icon: '🌍', title: '世界观树', desc: '帝国、教会与联盟的设定总纲，按层级逐层展开。', href: '/world-navigation' },
-            { icon: '⏳', title: '幻想域编年史', desc: '按时间轴梳理的纪元更迭与帝国大事记。', href: '/timeline' },
-            { icon: '👤', title: '人物档案', desc: '各阵营核心成员的档案、立绘与生平。', href: '/characters' },
-            { icon: '🕸️', title: '关系图谱', desc: '拖拽式查看人物与势力之间错综复杂的暗线。', href: '/graph' },
-            { icon: '🗺️', title: '世界地图', desc: '大陆诸国、战略要冲与地标的交互式地图。', href: '/map' },
-            { icon: '💰', title: '金融中心', desc: '实时物价、货币汇率与股市波动的推演沙盘。', href: '/finance' }
-          ],
-          routesTitle: '三条入门路线',
-          routesLead: '第一次来到幻想域，可以任选一条线开始。',
-          routes: [
-            { step: '01', name: '新读者路线', desc: '世界观树 → 编年史 → 正文第一章。先建立地理与历史坐标，再进入故事。', linkText: '从世界观树开始 →', href: '/world-navigation' },
-            { step: '02', name: '人物志路线', desc: '人物档案 → 关系图谱 → 挑一个角色追到底。看清谁在借谁的手。', linkText: '从人物档案开始 →', href: '/characters' },
-            { step: '03', name: '商道与魔法路线', desc: '帝国商贸法典 → 金融中心 → 看一场没有硝烟的经济战。', linkText: '从金融中心开始 →', href: '/finance' }
-          ],
+          modulesLead: '',
+          modules: [],
+          routesTitle: '入门路线',
+          routesLead: '',
+          routes: [],
           navEntry: {
             enabled: true,
             icon: '🧭',

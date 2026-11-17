@@ -1,4 +1,4 @@
-const express = require('express');
+﻿const express = require('express');
 const fs = require('fs-extra');
 const path = require('path');
 const cors = require('cors');
@@ -251,20 +251,11 @@ app.post('/api/graph', async (req, res) => {
 app.get('/api/finance', async (req, res) => {
   const filePath = path.join(PUBLIC_DIR, 'finance.json');
   if (!fs.existsSync(filePath)) {
+    // 💡 全新安装不该看到作者的示例数据：给空表，让用户自己填
     await fs.writeJson(filePath, {
-      items: [
-        { name: '黑面包', price: 1 },
-        { name: '淡啤酒', price: 3 },
-        { name: '治疗药水(小)', price: 50 }
-      ],
-      stocks: [
-        { symbol: 'TMC', name: '秋月商会 (The Moonvale Co.)', basePrice: 100, currentPrice: 100, history: [] }
-      ],
-      currencies: [
-        { symbol: 'Gold', name: '黄金 (基准)', basePrice: 1, currentPrice: 1 },
-        { symbol: 'GC', name: '帝国金币', basePrice: 0.1, currentPrice: 0.1 },
-        { symbol: 'SC', name: '联邦银币', basePrice: 0.01, currentPrice: 0.01 }
-      ]
+      items: [],
+      stocks: [],
+      currencies: []
     }, { spaces: 2 });
   }
   res.json(await fs.readJson(filePath));
@@ -514,16 +505,8 @@ app.get('/api/version', async (req, res) => {
 app.get('/api/plotline', async (req, res) => {
   const filePath = path.join(PUBLIC_DIR, 'plotline.json');
   if (!fs.existsSync(filePath)) {
-    const defaultData = [
-      {
-        id: "v_1",
-        title: "第一卷：初入幻想域",
-        chapters: [
-          { id: "c_1", title: "第一章：觉醒", desc: "主角发现自己拥有异能..." },
-          { id: "c_2", title: "第二章：相遇", desc: "在集市遇到了神秘商人..." }
-        ]
-      }
-    ];
+    // 💡 全新安装从空白大纲开始，不要塞示例卷章
+    const defaultData = [];
     await fs.writeJson(filePath, defaultData, { spaces: 2 });
   }
   res.json(await fs.readJson(filePath));
@@ -694,7 +677,7 @@ app.get('/api/library/export', async (req, res) => {
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <title>${bookName} - 幻想域小说集</title>
+  <title>${bookName} - 小说集</title>
   <style>
     body { font-family: 'Microsoft YaHei', 'PingFang SC', sans-serif; background-color: #f4f4f4; color: #333; line-height: 2; margin: 0; padding: 0; font-size: 18px; }
     .container { max-width: 800px; margin: 0 auto; background: #fff; padding: 60px 80px; box-shadow: 0 10px 30px rgba(0,0,0,0.1); border-radius: 8px; margin-top: 40px; margin-bottom: 40px; }
@@ -718,7 +701,7 @@ app.get('/api/library/export', async (req, res) => {
 <body>
   <div class="container">
     <h1 class="book-title">${bookName}</h1>
-    <div class="book-subtitle">幻想域小说集 · 一键成书</div>
+    <div class="book-subtitle">小说集 · 一键成书</div>
     <div class="toc"><h2>📖 目录</h2>${tocHtml}</div>
     <div class="main-content">${contentHtml}</div>
     <div style="text-align: center; color: #999; font-size: 14px; margin-top: 60px;">— 全书完 —</div>
@@ -1852,12 +1835,13 @@ const SITE_NOTICE_FILE = path.join(PUBLIC_DIR, 'site-notice.json'); // 💡 新�
 // 1. 读取/保存保护配置
 app.get('/api/protection/config', async (req, res) => {
   if (!fs.existsSync(PROTECTION_CONFIG_FILE)) {
+    // 💡 全新安装：作者名和版权文案留空，界面上显示「自定义」，等用户自己填
     await fs.writeJson(PROTECTION_CONFIG_FILE, {
       enableNovelSync: true, 
       enableWatermark: true, 
-      authorName: '幻想域作者', 
+      authorName: '', 
       enableAntiCopy: true, 
-      copyrightText: '本文摘自《幻想域》，请支持正版。',
+      copyrightText: '',
       targetWords: 0,
       lastCertifiedMilestone: 0 // 💡 新增：记录上次提醒的里程碑（0代表没提示过，1代表十万字提示过，2代表二十万字...）
     }, { spaces: 2 });
@@ -2150,7 +2134,7 @@ app.get('/api/navigation', async (req, res) => {
       { id: 'protection', title: '版权与目标', desc: '系统内置', icon: '🎯', link: '/protection', isSystem: true },
       { id: 'github', title: '一键推送', desc: '系统内置', icon: '🚀', link: '/github', isSystem: true },
       { id: 'home-editor', title: '首页设计与导出', desc: '系统内置', icon: '🎨', link: '/home-editor', isSystem: true },
-      { id: 'novel', title: '幻想域小说', desc: '阅读主角的奇妙冒险。', icon: '📖', link: '/novel/', isSystem: true }
+      { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true }
     ];
     await fs.writeJson(NAVIGATION_FILE, defaultNav, { spaces: 2 });
   }
@@ -2708,42 +2692,28 @@ app.get('/api/update/zip', async (req, res) => {
 
 // ================= 首页 Markdown 生成器（后台可配置） =================
 const HOME_DEFAULTS = {
-  siteTitle: '幻想域设定集',
+  // 💡 全新安装的首页从空白开始，不预填作者的「幻想域」内容
+  siteTitle: '我的幻想世界',
   siteIcon: '/icon.svg',
-  name: '幻想域',
-  text: 'The Veiled Kindred Spirits',
-  tagline: '当物理与魔法交织，帝国的齿轮在暗中转动。',
-  btn1Text: '探索世界',
-  btn1Link: '/world-navigation',
-  btn2Text: '查看编年史',
-  btn2Link: '/timeline',
-  features: [
-    { title: '帝国商贸法典', desc: '规范帝国境内一切商业活动，贝勒（Bale）为唯一法定货币，由十二圆桌骑士共同监管。' },
-    { title: '魔法与物理', desc: '拥有魔力者方能施展魔法，而穿越者对此免疫。在阶级固化的世界里，反抗的种子正在发芽。' },
-    { title: '幻想域联盟', desc: '穿越者组成的秘密联盟，致力于推翻帝国统治，建立一个人魔共存的理想国。' }
-  ],
+  name: '我的幻想世界',
+  text: '',
+  tagline: '在这里搭起你自己的世界。',
+  btn1Text: '',
+  btn1Link: '',
+  btn2Text: '',
+  btn2Link: '',
+  features: [],
   modulesTitle: '世界导览',
-  modulesLead: '六个入口，通往幻想域的每一处角落。',
-  modules: [
-    { icon: '🌍', title: '世界观树', desc: '帝国、教会与联盟的设定总纲，按层级逐层展开。', href: '/world-navigation' },
-    { icon: '⏳', title: '幻想域编年史', desc: '按时间轴梳理的纪元更迭与帝国大事记。', href: '/timeline' },
-    { icon: '👤', title: '人物档案', desc: '各阵营核心成员的档案、立绘与生平。', href: '/characters' },
-    { icon: '🕸️', title: '关系图谱', desc: '拖拽式查看人物与势力之间错综复杂的暗线。', href: '/graph' },
-    { icon: '🗺️', title: '世界地图', desc: '大陆诸国、战略要冲与地标的交互式地图。', href: '/map' },
-    { icon: '💰', title: '金融中心', desc: '实时物价、货币汇率与股市波动的推演沙盘。', href: '/finance' }
-  ],
-  routesTitle: '三条入门路线',
-  routesLead: '第一次来到幻想域，可以任选一条线开始。',
-  routes: [
-    { step: '01', name: '新读者路线', desc: '世界观树 → 编年史 → 正文第一章。先建立地理与历史坐标，再进入故事。', linkText: '从世界观树开始 →', href: '/world-navigation' },
-    { step: '02', name: '人物志路线', desc: '人物档案 → 关系图谱 → 挑一个角色追到底。看清谁在借谁的手。', linkText: '从人物档案开始 →', href: '/characters' },
-    { step: '03', name: '商道与魔法路线', desc: '帝国商贸法典 → 金融中心 → 看一场没有硝烟的经济战。', linkText: '从金融中心开始 →', href: '/finance' }
-  ],
+  modulesLead: '',
+  modules: [],
+  routesTitle: '入门路线',
+  routesLead: '',
+  routes: [],
   navEntry: {
-    enabled: true,
+    enabled: false,
     icon: '🧭',
     text: '快捷导航中心',
-    desc: '工具与交互页面的总入口，人物、地图、金融等模块都在这里。',
+    desc: '',
     link: '/navigation'
   }
 };

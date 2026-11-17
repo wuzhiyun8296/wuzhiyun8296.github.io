@@ -1,11 +1,11 @@
-<!-- 文件路径: website/docs/components/NavCards.vue -->
+﻿<!-- 文件路径: website/docs/components/NavCards.vue -->
 <template>
   <div class="nav-grid">
     <a href="/novel/" class="nav-card">
       <div class="nav-icon">📖</div>
       <div class="nav-content">
-        <h3>幻想域小说</h3>
-        <p>阅读主角穿越后在幻想域的奇妙冒险与故事。</p>
+        <h3>小说书架</h3>
+        <p>阅读你写下的故事。</p>
       </div>
     </a>
 
@@ -28,8 +28,8 @@
     <a href="/timeline" class="nav-card">
       <div class="nav-icon">⏳</div>
       <div class="nav-content">
-        <h3>幻想域编年史</h3>
-        <p>回顾帝国506年至今的重大历史事件与主线时间线。</p>
+        <h3>编年史</h3>
+        <p>按时间轴回顾世界大事记。</p>
       </div>
     </a>
 
@@ -45,7 +45,7 @@
       <div class="nav-icon">🗺️</div>
       <div class="nav-content">
         <h3>世界地图</h3>
-        <p>交互式查看幻想域大陆的各个国家与地标。</p>
+        <p>交互式查看大陆上的诸国与地标。</p>
       </div>
     </a>
 
