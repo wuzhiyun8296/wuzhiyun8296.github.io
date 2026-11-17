@@ -2053,6 +2053,43 @@ app.get('/api/plugins/list', async (req, res) => {
     let allPlugins = files.map(f => f.replace('.html', ''));
     allPlugins = [...new Set([...allPlugins, 'article', 'dashboard', 'plugin-builder'])];
 
+    // 💡 自动注册：扫描到但导航里没有的插件（比如作者新加、更新后落到本地的），
+    //    自动补进 navigation.json，否则它会被默认隐藏、后台看不到按钮。
+    let navChanged = false;
+    for (const id of allPlugins) {
+      if (navList.findIndex(n => n.id === id) >= 0) continue;
+      if (!systemPluginMap[id] && !files.includes(id + '.html')) continue;
+
+      let title = systemPluginMap[id] ? systemPluginMap[id].name : '';
+      const icon = systemPluginMap[id] ? systemPluginMap[id].icon : '🧩';
+      if (!title) {
+        // 从插件 html 的 <title> 里抠一个名字出来
+        try {
+          const html = fs.readFileSync(path.join(pluginDir, id + '.html'), 'utf-8');
+          const t = html.match(/<title>([^<]+)<\/title>/i);
+          title = t ? t[1].trim() : '';
+        } catch (e) { /* ignore */ }
+      }
+      if (!title) title = id;
+
+      navList.push({
+        id: id,
+        title: title,
+        desc: '自动注册的插件',
+        icon: icon,
+        link: '#',
+        isSystem: !!systemPluginMap[id],
+        hideFrontend: true,   // 只进后台，不默认暴露到前台导航
+        hideBackend: false,
+        autoRegistered: true
+      });
+      navChanged = true;
+      console.log(`[PLUGIN] 自动注册新插件: ${id} → ${title}`);
+    }
+    if (navChanged) {
+      try { await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 }); } catch (e) { /* ignore */ }
+    }
+
     const plugins = allPlugins.map(id => {
       const isSys = !!systemPluginMap[id];
       const navIdx = navList.findIndex(n => n.id === id);
@@ -2293,7 +2330,13 @@ async function collectUpdateFiles() {
     if (p.indexOf('website/docs/public/') === 0) return true;
     if (p.indexOf('website/docs/novel/chapters/') === 0) return true;
     if (p.indexOf('website/docs/assets/') === 0) return true;
-    if (/^website\/docs\/.*\.md$/i.test(p)) return true;   // 私人文章不进更新包
+    // 💡 页面 md 分两类：
+    //    根级（index.md 除外）= 站点页面薄壳，新插件依赖它们，必须同步
+    //    子目录（法律/国家/武器/novel）= 真正的设定文章，不外发
+    if (/^website\/docs\/[^\/]+\.md$/i.test(p)) {
+      return /^website\/docs\/index\.md$/i.test(p);   // 只有 index.md 跳过（各人首页不同）
+    }
+    if (/^website\/docs\/.+\.md$/i.test(p)) return true;
     if (/^website\/docs\/.*\.json$/i.test(p)) return true; // 站点数据（纪元地图等）也不外发
     if (/\.log$/i.test(p)) return true;
     if (/\.zip$/i.test(p)) return true;
