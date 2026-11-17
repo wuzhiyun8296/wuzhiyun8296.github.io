@@ -3118,3 +3118,17 @@ app.listen(3001, () => {
     } catch (e) { /* ignore */ }
   })();
 });
+// ================= 💡 兜底：缺少首页文件时自动生成 =================
+// 全新安装的目录里没有 website/docs/index.md（首页属于各人自定义，不在更新清单里），
+// 缺了它 VitePress 访问 / 会直接 404。启动时发现缺失就按空白模板补一份。
+async function ensureHomeIndex() {
+  const f = path.join(DOCS_DIR, 'index.md');
+  try {
+    if (fs.existsSync(f)) return;
+    await fs.writeFile(f, buildHomeMarkdown({}), 'utf-8');
+    console.log('[init] 缺少 website/docs/index.md，已生成空白首页');
+  } catch (e) {
+    console.log('[init] 生成默认首页失败：' + e.message);
+  }
+}
+ensureHomeIndex();
