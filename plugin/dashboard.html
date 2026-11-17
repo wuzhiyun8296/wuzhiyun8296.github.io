@@ -18,6 +18,16 @@
     .notice-board.normal h2 { color: #fff; font-size: 16px; margin: 0 0 8px 0; }
     .notice-board.normal .notice-text { color: #d29922; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
     .notice-board.normal .progress-info { color: #888; font-size: 13px; display: flex; align-items: center; gap: 15px; }
+    .version-line { margin-top: 10px; padding-top: 10px; border-top: 1px dashed #3a3a3a; display: flex; align-items: center; gap: 14px; flex-wrap: wrap; font-size: 13px; }
+    .ver-chip { color: #8fa0ad; display: inline-flex; align-items: center; gap: 6px; }
+    .ver-chip b { color: #e6e6e6; font-weight: 600; letter-spacing: .5px; font-family: Consolas, monospace; }
+    .ver-repo { color: #5f6b75; font-size: 11px; font-style: normal; font-family: Consolas, monospace; }
+    .ver-checking { color: #7f8c99; }
+    .ver-new { color: #f0b429; font-weight: 600; }
+    .ver-ok { color: #2ea043; font-weight: 600; }
+    .ver-unknown { color: #a06a6a; }
+    .ver-cur { color: #9fb8c9; }
+    .ver-cur b { color: #e6e6e6; font-weight: 600; letter-spacing: .5px; }
     
     /* 版权警报状态 */
     .notice-board.alert { background: linear-gradient(135deg, rgba(168, 38, 38, 0.2), rgba(210, 153, 34, 0.2)); border: 1px solid #a82626; border-left: 4px solid #a82626; animation: pulseRed 2s infinite alternate; }
@@ -95,6 +105,18 @@
             <span>🎯 版权存证节点：{{ certTarget }} 字</span>
             <span>📝 当前：{{ stats.totalWords }} 字</span>
             <span style="color: #0e639c; font-weight: bold;">进度：{{ progressPercent }}%</span>
+          </div>
+          <div class="version-line">
+            <span class="ver-chip">📦 本地 <b>{{ version.current || '未知' }}</b></span>
+            <span class="ver-chip">☁️ 远程 <b>{{ version.latest || '未知' }}</b></span>
+            <span class="ver-chip" :title="version.repoUrl || ''">
+              🔗 来源 <b>{{ version.platformLabel || '—' }}</b>
+              <i v-if="version.repo" class="ver-repo">{{ version.repo }}</i>
+            </span>
+            <span v-if="versionChecking" class="ver-checking">🔍 正在检查更新…</span>
+            <span v-else-if="version.hasUpdate === true" class="ver-new">🆕 有新版本可用</span>
+            <span v-else-if="version.hasUpdate === false" class="ver-ok">✅ 当前为最新版</span>
+            <span v-else class="ver-unknown" :title="version.error || ''">⚠️ 无法获取远程版本</span>
           </div>
         </div>
         
@@ -188,6 +210,9 @@
         const stats = ref({ totalWords: 0, chapterCount: 0, charCount: 0, markerCount: 0 });
         const config = ref({});
         const configLoaded = ref(false);
+        // 版本信息：current 本地固定版本，latest 远端最新，hasUpdate 三者对比结果
+        const version = ref({ current: '', latest: '', hasUpdate: null, error: '' });
+        const versionChecking = ref(true);
 
         // 计算进度和存证节点
         const certTarget = computed(() => config.value.certTarget || 100000);
@@ -236,6 +261,15 @@
 
             const resInbox = await fetch(`${API_BASE}/inbox`);
             inboxList.value = await resInbox.json();
+
+            // 版本信息（单独 try，网络问题不影响其他数据）
+            try {
+              const rv = await fetch(`${API_BASE}/version?t=${Date.now()}`);
+              version.value = await rv.json();
+            } catch (e) {
+              version.value = { current: '', latest: '', hasUpdate: null, error: '无法连接更新源' };
+            }
+            versionChecking.value = false;
           } catch (e) {
             console.error('数据读取失败', e);
           }
@@ -295,6 +329,7 @@
 
         return { 
           stats, configLoaded, certTarget, sysNotice, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
+        version, versionChecking,
           searchQuery, searchResults, isSearching, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
         };
       }

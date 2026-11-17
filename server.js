@@ -410,6 +410,64 @@ app.post('/api/history', async (req, res) => {
   res.json({ success: true });
 });
 
+// ================= 版本信息（仪表盘展示用） =================
+// 本地 version.json + 远端 version.json 对比，结果缓存 5 分钟，避免每次刷新都打网络
+let versionCache = { at: 0, data: null };
+const VERSION_CACHE_MS = 5 * 60 * 1000;
+
+app.get('/api/version', async (req, res) => {
+  try {
+    const force = String(req.query.force || '') === '1';
+    if (!force && versionCache.data && (Date.now() - versionCache.at) < VERSION_CACHE_MS) {
+      return res.json({ ...versionCache.data, cached: true });
+    }
+    const local = await readLocalVersion();
+    const cfg = await readUpdateConfig();
+
+    // 逐个源去问（并行），把每个仓库的版本都带回去
+    const list = Array.isArray(cfg.sources) ? cfg.sources : [];
+    const results = await Promise.all(list.map(async (s) => {
+      const platform = s.repo.host === 'gitee.com' ? 'gitee' : 'github';
+      const base = {
+        platform: platform,
+        label: platform === 'gitee' ? 'Gitee' : 'GitHub',
+        repo: `${s.repo.owner}/${s.repo.repo}`,
+        url: s.repo.pageUrl,
+        branch: s.branch
+      };
+      try {
+        const v = await fetchRemoteVersion(s.repo, s.branch);
+        return { ...base, ok: true, version: v.id, pushedAt: v.pushedAt || '' };
+      } catch (e) {
+        return { ...base, ok: false, version: '', error: e.message };
+      }
+    }));
+
+    const good = results.filter(r => r.ok);
+    const primary = good[0] || null;
+    const latest = primary ? primary.version : '';
+    const data = {
+      current: local.id || '',
+      latest: latest,
+      hasUpdate: latest ? latest !== local.id : null,
+      // 主用来源（第一个读成功的仓库）
+      source: primary ? `${primary.platform}/${primary.repo}` : '',
+      platform: primary ? primary.platform : '',
+      platformLabel: primary ? primary.label : '',
+      repo: primary ? primary.repo : '',
+      repoUrl: primary ? primary.url : '',
+      // 全部来源明细（含失败的）
+      sources: results,
+      error: good.length ? '' : (results[0] ? results[0].error : '没有配置更新源'),
+      checkedAt: Date.now()
+    };
+    versionCache = { at: Date.now(), data: data };
+    res.json(data);
+  } catch (e) {
+    res.json({ current: '', latest: '', hasUpdate: null, error: e.message, sources: [] });
+  }
+});
+
 // ================= 高级剧情线管理接口 =================
 app.get('/api/plotline', async (req, res) => {
   const filePath = path.join(PUBLIC_DIR, 'plotline.json');
