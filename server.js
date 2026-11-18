@@ -1761,6 +1761,20 @@ server_log.txt
           manifestFiles.push({ path: rel, size: -1, sha256: '' });
         }
       }
+      // 💡 中文名的启动文件只能放进 JSON 清单（update-files.txt 保持纯 ASCII，
+      //    否则批处理按 GBK 读会变乱码）；JSON 走 UTF-8，没有这个问题
+      for (const extra of ['安装与更新.bat', '一键启动.vbs']) {
+        try {
+          const abs = path.join(__dirname, extra);
+          if (!fs.existsSync(abs)) continue;
+          if (manifestFiles.some((f) => f.path === extra)) continue;
+          const raw = await fs.readFile(abs);
+          const buf = normalizeEol(raw);
+          manifestBytes += buf.length;
+          manifestFiles.push({ path: extra, size: buf.length, sha256: crypto.createHash('sha256').update(buf).digest('hex'), optional: true });
+        } catch (e) { /* 忽略 */ }
+      }
+
       await fs.writeJson(path.join(__dirname, 'update-manifest.json'), {
         version: versionInfo.id,
         count: manifestFiles.length,
@@ -2735,6 +2749,7 @@ async function applyRawUpdate(sources) {
   if (!bases.includes(chosen.base)) bases.unshift(chosen.base);
 
   const deadBases = new Set();
+  const optionalPaths = new Set(['安装与更新.bat', '一键启动.vbs']);
 
   // ---------- 3) 生成本次要下载的清单 ----------
   let entries;
@@ -2812,7 +2827,7 @@ async function applyRawUpdate(sources) {
         const hostTag = String(base).replace(/^https:\/\//, '').split('/')[0];
         try {
           updateJobSet({ file: rel, filePercent: 0 });
-          const buf = await httpsGetBuffer(`${base}/${relUrl}`, 30000, {
+          const buf = await httpsGetBuffer(`${base}/${encodeURI(relUrl)}`, 30000, {
             onProgress: (info) => {
               updateJobSet({
                 speed: Math.round(info.speed || 0),
@@ -2837,7 +2852,14 @@ async function applyRawUpdate(sources) {
           }
         }
       }
-      if (!ok) still.push(rel);
+      if (!ok) {
+        // 💡 可选文件（如安装脚本）失败不影响整体更新
+        if (optionalPaths.has(rel)) {
+          updateJobLog(`⚠ ${rel} 没能更新（不影响使用）`);
+        } else {
+          still.push(rel);
+        }
+      }
       finished++;
       // 💡 不清零速度：让界面一直显示最近的速度，不会「闪一下就没」
       updateJobSet({ percent: Math.round((finished / pendingTotal) * 100), filePercent: 100 });

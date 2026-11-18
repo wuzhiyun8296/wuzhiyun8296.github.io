@@ -223,7 +223,7 @@
         // '' = 不干预（用勾选/默认值）；'self' = 作者自用不发版本；'test' = 测试中（发版本）
         const publishMode = ref('');
         const PRESET_SELF = '作者正在给自己的网站更新，暂不发布新版本，先别更新哦～';
-        const PRESET_TEST = '更新测试中，请不要更新（作者正在调试），等稳定了再更哦～';
+        const PRESET_TEST = '更新测试中，请不要更新（作者正在调试），等稳定了再更哦～如果不小心更新了，请进入安装目录，点击「安装与更新.bat」，按提示修复就好啦';
 
         const usePreset = (kind) => {
           if (publishMode.value === kind) {   // 再点一次 = 取消

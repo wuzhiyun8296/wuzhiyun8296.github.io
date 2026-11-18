@@ -1,7 +1,7 @@
 {
-  "version": "20261118-144455",
-  "count": 48,
-  "totalBytes": 684429,
+  "version": "20261118-144937",
+  "count": 50,
+  "totalBytes": 706272,
   "files": [
     {
       "path": "admin.html",
@@ -50,8 +50,8 @@
     },
     {
       "path": "plugin/github.html",
-      "size": 16144,
-      "sha256": "70074824917fa8919573b3255b877551613053264077346fb6e32a32eed8f465"
+      "size": 16253,
+      "sha256": "a23f75f69bb925834f3b2e0fe9e240021a589d81746a2fe99fa3e6b2a7ee1007"
     },
     {
       "path": "plugin/graph.html",
@@ -115,8 +115,8 @@
     },
     {
       "path": "server.js",
-      "size": 142017,
-      "sha256": "27dc9a87823523bf496964896b94b3de0959144085bf2f42da6f0ae3b2b21dbe"
+      "size": 143101,
+      "sha256": "3f6aa4b198e6ca6c83ef6e8a2da902771a0f1cd70d6c652b7b82fd25e6e1eb1b"
     },
     {
       "path": "start.bat",
@@ -136,7 +136,7 @@
     {
       "path": "version.json",
       "size": 170,
-      "sha256": "9c5b9730bd4e65238857e78c5090b8b170a2d472b11814ae5cf4ce722cc66f9a"
+      "sha256": "fdbe4a6db5afe03352ad3abd4554de98b1202cd9438637e5de5c266f36fb4b49"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -242,6 +242,18 @@
       "path": "website/docs/world-navigation.md",
       "size": 278,
       "sha256": "62587d3b8707f470f96e3e8010113778f6915cf82f988834a534224c0d63728b"
+    },
+    {
+      "path": "安装与更新.bat",
+      "size": 20307,
+      "sha256": "5ad6adebffe1269051829cacbd0b319f738fbb39f0e30136e3a8581cec3f45c8",
+      "optional": true
+    },
+    {
+      "path": "一键启动.vbs",
+      "size": 343,
+      "sha256": "a1a9a585edad58294ec6b271b670ce257357bf22187b38c1f0530d34743774ca",
+      "optional": true
     }
   ]
 }
