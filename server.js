@@ -1924,45 +1924,6 @@ app.get('/api/git/check-update', async (req, res) => {
             logs: [`${newer.host}: 远端 ${newer.remoteId}，本地 ${local.id || '（无）'}`]
           });
         }
-        // 💡 版本号一致，再核对一遍本地文件：有缺失/被改坏（比如批处理变成 LF）
-        //    就自动触发一次「修复式更新」，不用等新版本
-        const bad = [];
-        try {
-          for (const s of cfg.sources) {
-            // 💡 每个源单独 try：GitHub 走不通（证书/网络）就换下一个，不能整体放弃
-            try {
-              const base = rawBaseUrls(s.repo, s.branch)[0];
-              const text = await Promise.race([
-                httpsGetText(`${base}/update-manifest.json`, 6000),
-                new Promise((_, rej) => setTimeout(() => rej(new Error('超时')), 6000))
-              ]);
-              const mf = JSON.parse(text);
-              if (!mf || !Array.isArray(mf.files) || !mf.files.length) continue;
-              for (const f of mf.files) {
-                if (!f || !f.path || !f.sha256) continue;
-                const abs = path.join(__dirname, f.path);
-                let same = false;
-                try {
-                  const raw = await fs.readFile(abs);
-                  const buf = normalizeEol(raw);
-                  same = crypto.createHash('sha256').update(buf).digest('hex') === f.sha256;
-                  if (same && needsCrlf(f.path) && hasBareLf(raw)) same = false;
-                } catch (e) { same = false; }
-                if (!same) bad.push(f.path);
-              }
-              break;   // 拿到一份清单就够了
-            } catch (e) { /* 这个源不行，试下一个 */ }
-          }
-        } catch (e) { /* 清单读不到就跳过自检 */ }
-
-        if (bad.length) {
-          return res.json({
-            success: true,
-            hasUpdate: true,
-            mode: 'repair',
-            logs: [`发现 ${bad.length} 个文件需要修复（缺失或被改动）：${bad.slice(0, 6).join(' / ')}`]
-          });
-        }
         return res.json({
           success: true,
           hasUpdate: false,
