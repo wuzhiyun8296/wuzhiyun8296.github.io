@@ -41,14 +41,16 @@ const FIREWALL_CONFIG_FILE = path.join(__dirname, 'firewall-config.json');
 function readFirewallConfig() {
   // ⚠️ 安全默认：手机访问关闭（只允许本机）、跨域收紧、记录日志
   //    只有配置文件里明确写 localOnly: false 才会对外开放
-  let cfg = { localOnly: true, strictCors: true, logRequests: true };
+  let cfg = { localOnly: true, strictCors: true, logRequests: true, remotePassHash: '' };
   try {
     if (fs.existsSync(FIREWALL_CONFIG_FILE)) {
       const raw = JSON.parse(fs.readFileSync(FIREWALL_CONFIG_FILE, 'utf-8'));
       cfg = {
         localOnly: raw.localOnly === false ? false : true,
         strictCors: raw.strictCors === false ? false : true,
-        logRequests: raw.logRequests === false ? false : true
+        logRequests: raw.logRequests === false ? false : true,
+        // 🔐 远程访问密码（哈希）必须保留，否则一重启就要重新设
+        remotePassHash: typeof raw.remotePassHash === 'string' ? raw.remotePassHash : ''
       };
     }
   } catch (e) {
@@ -100,9 +102,30 @@ app.use((req, res, next) => {
       method: req.method,
       path: req.path
     });
+
   }
   next();
 });
+app.use((req, res, next) => {
+  // 仅本机模式：不拦截
+  if (firewallConfig.localOnly) return next();
+
+  // 💡 本机自己访问永远放行：开着远程访问时，桌面端不该被要求登录
+  const ra = String(req.socket.remoteAddress || '');
+  if (ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1') return next();
+  if (isPublicPath(req.path)) return next();
+  if (isAuthed(req)) return next();
+
+  // 已登录状态查询之类的接口放行
+  if (req.path === '/api/auth/login' || req.path === '/api/auth/status') return next();
+
+  if (req.path.startsWith('/api/')) {
+    return res.status(401).json({ error: '未登录或登录已过期', needLogin: true });
+  }
+  // 页面请求：跳转到登录页
+  return res.redirect('/login.html');
+});
+
 app.use(express.static(__dirname)); 
 // ⚠️ 地图/纪元快照会把整张 PNG 以 base64 塞进 JSON，
 //    默认 100kb 上限会导致保存静默失败（413），这里必须放开。
@@ -2558,6 +2581,112 @@ function mobileInfo(id) {
   }
 }
 
+// ================= 🔐 远程访问鉴权 =================
+// 💡 只有「手机访问已开启」（localOnly = false）时才要求登录：
+//    本机访问不做任何拦截，桌面端体验完全不变。
+const AUTH_SESSIONS = new Map();          // token -> { expire }
+const AUTH_FAILS = new Map();             // ip -> { count, until }
+const AUTH_TTL_MS = 24 * 60 * 60 * 1000;  // 登录有效期 24 小时
+
+function hashRemotePassword(pw) {
+  return crypto.createHash('sha256').update('mw-remote:' + String(pw)).digest('hex');
+}
+
+function parseCookies(req) {
+  const out = {};
+  const raw = req.headers.cookie || '';
+  for (const part of raw.split(';')) {
+    const i = part.indexOf('=');
+    if (i < 0) continue;
+    out[part.slice(0, i).trim()] = decodeURIComponent(part.slice(i + 1).trim());
+  }
+  return out;
+}
+
+function isAuthed(req) {
+  const token = parseCookies(req).mw_auth;
+  if (!token) return false;
+  const hit = AUTH_SESSIONS.get(token);
+  if (!hit) return false;
+  if (hit.expire < Date.now()) { AUTH_SESSIONS.delete(token); return false; }
+  return true;
+}
+
+function clientIp(req) {
+  return String((req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).replace('::ffff:', '');
+}
+
+// 不需要登录就能访问的路径
+function isPublicPath(p) {
+  if (p === '/login.html') return true;
+  if (p.startsWith('/api/auth/')) return true;
+  if (p.startsWith('/libs/')) return true;
+  if (p === '/favicon.ico' || p === '/icon3.ico') return true;
+  if (/\.(css|js|mjs|png|jpe?g|gif|svg|webp|ico|woff2?|ttf|map)$/i.test(p)) return true;
+  return false;
+}
+
+
+
+// 查询是否需要登录
+app.get('/api/auth/status', (req, res) => {
+  res.json({
+    required: !firewallConfig.localOnly,
+    authed: firewallConfig.localOnly ? true : isAuthed(req),
+    hasPassword: !!firewallConfig.remotePassHash
+  });
+});
+
+// 登录
+app.post('/api/auth/login', (req, res) => {
+  const ip = clientIp(req);
+  const now = Date.now();
+  const fail = AUTH_FAILS.get(ip) || { count: 0, until: 0 };
+  if (fail.until > now) {
+    return res.status(429).json({ error: '试错太多次，请等一分钟再试' });
+  }
+
+  const cfg = firewallConfig;
+  if (!cfg.remotePassHash) {
+    return res.status(400).json({ error: '还没设置远程访问码，请在本机「防火墙」页面设置' });
+  }
+  const pw = String((req.body && req.body.password) || '');
+  if (!pw) return res.status(400).json({ error: '请输入远程访问码' });
+
+  if (hashRemotePassword(pw) !== cfg.remotePassHash) {
+    fail.count += 1;
+    if (fail.count >= 5) { fail.count = 0; fail.until = now + 60000; }
+    AUTH_FAILS.set(ip, fail);
+    return res.status(401).json({ error: '访问码不对' });
+  }
+
+  AUTH_FAILS.delete(ip);
+  const token = crypto.randomBytes(24).toString('hex');
+  AUTH_SESSIONS.set(token, { expire: now + AUTH_TTL_MS });
+  res.setHeader('Set-Cookie', `mw_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_TTL_MS / 1000}`);
+  res.json({ success: true });
+});
+
+// 退出
+app.post('/api/auth/logout', (req, res) => {
+  const token = parseCookies(req).mw_auth;
+  if (token) AUTH_SESSIONS.delete(token);
+  res.setHeader('Set-Cookie', 'mw_auth=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0');
+  res.json({ success: true });
+});
+
+// 设置 / 修改远程访问密码（仅本机可用）
+app.post('/api/auth/password', async (req, res) => {
+  if (!firewallConfig.localOnly && !isAuthed(req)) {
+    return res.status(401).json({ error: '请先登录' });
+  }
+  const pw = String((req.body && req.body.password) || '');
+  if (pw.length < 4) return res.status(400).json({ error: '访问码至少 4 位' });
+  firewallConfig = { ...firewallConfig, remotePassHash: hashRemotePassword(pw) };
+  try { await fs.writeJson(FIREWALL_CONFIG_FILE, firewallConfig, { spaces: 2 }); } catch (e) {}
+  res.json({ success: true });
+});
+
 // ================= 🛡️ 防火墙接口 =================
 // 当前监听情况 + 开关配置
 app.get('/api/firewall/config', (req, res) => {
@@ -2747,11 +2876,28 @@ app.get('/api/firewall/lan-info', async (req, res) => {
 app.post('/api/firewall/lan', async (req, res) => {
   try {
     const enable = !!(req.body && req.body.enable);
+    const pw = String((req.body && req.body.password) || '');
+
+    if (enable) {
+      // 🔐 对外开放必须先有密码，否则整个校园网都能进
+      if (pw) {
+        if (pw.length < 4) return res.status(400).json({ error: '远程访问码至少 4 位' });
+        firewallConfig = { ...firewallConfig, remotePassHash: hashRemotePassword(pw) };
+      } else if (!firewallConfig.remotePassHash) {
+        return res.status(400).json({ error: '开启手机访问前必须先设置一个远程访问码', needPassword: true });
+      }
+    }
+
     firewallConfig = { ...firewallConfig, localOnly: !enable };
     await fs.writeJson(FIREWALL_CONFIG_FILE, firewallConfig, { spaces: 2 });
 
     // 先重启前台（让新的 host 生效），再重启后台（会断开当前连接）
     restartFrontendDev();
+
+    if (!enable) {
+      // 关闭对外访问：清空所有登录状态
+      AUTH_SESSIONS.clear();
+    }
 
     res.json({ success: true, enable, restarting: true });
 

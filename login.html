@@ -125,7 +125,7 @@
     <div class="brand">
       <div class="logo">📖</div>
       <h1>幻想域设定集</h1>
-      <p>输入密码以进入创作后台</p>
+      <p>请输入远程访问码</p>
     </div>
 
     <div class="card" id="card">
@@ -140,13 +140,13 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="请输入密码"
+          placeholder="请输入远程访问码"
         >
-        <button class="eye" id="eye" type="button" aria-label="显示或隐藏密码">👁️</button>
+        <button class="eye" id="eye" type="button" aria-label="显示或隐藏访问码">👁️</button>
       </div>
 
       <button class="btn-login" id="btn">进 入 系 统</button>
-      <div class="error" id="err">密码不对，再试一次</div>
+      <div class="error" id="err">访问码不对，再试一次</div>
     </div>
 
     <div class="foot">
@@ -167,7 +167,7 @@
     const toastEl = document.getElementById('toast');
 
     // 提示语（和后台共用同一个 localStorage 键）
-    hintEl.textContent = '💡 ' + (localStorage.getItem('admin_hint') || '默认密码：123456');
+    hintEl.textContent = '💡 ' + (localStorage.getItem('admin_hint') || '远程访问码在本机「防火墙」页面设置');
 
     // 已登录直接进后台
     if (sessionStorage.getItem('admin_auth') === 'true') {
@@ -190,20 +190,8 @@
       pwdInput.focus();
     });
 
-    const doLogin = () => {
-      const input = pwdInput.value.trim();
-      const currentPwd = localStorage.getItem('admin_pwd') || '123456';
-
-      if (input === currentPwd) {
-        sessionStorage.setItem('admin_auth', 'true');
-        loginBtn.textContent = '进入中…';
-        loginBtn.disabled = true;
-        showToast('✅ 验证通过');
-        setTimeout(() => { location.href = '/admin.html'; }, 300);
-        return;
-      }
-
-      errEl.classList.add('show');
+    const fail = (msg) => {
+      errEl.textContent = msg || '访问码不对，再试一次';
       pwdInput.classList.add('err');
       cardEl.classList.add('shake');
       pwdInput.value = '';
@@ -212,8 +200,52 @@
         cardEl.classList.remove('shake');
         pwdInput.classList.remove('err');
       }, 400);
-      setTimeout(() => { errEl.classList.remove('show'); }, 2200);
+      setTimeout(() => { errEl.classList.remove('show'); }, 2400);
       pwdInput.focus();
+    };
+
+    const doLogin = async () => {
+      const input = pwdInput.value.trim();
+      if (!input) { pwdInput.focus(); return; }
+
+      loginBtn.disabled = true;
+      loginBtn.textContent = '验证中…';
+
+      try {
+        // 远程访问：交给服务端校验
+        const res = await fetch('/api/auth/login', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ password: input })
+        });
+
+        if (res.ok) {
+          sessionStorage.setItem('admin_auth', 'true');
+          loginBtn.textContent = '进入中…';
+          showToast('✅ 验证通过');
+          setTimeout(() => { location.href = '/admin.html'; }, 300);
+          return;
+        }
+
+        const data = await res.json().catch(() => ({}));
+        loginBtn.disabled = false;
+        loginBtn.textContent = '进 入 系 统';
+        fail(data.error);
+        return;
+      } catch (e) {
+        // 接口不可用（旧后端 / 仅本机模式）→ 退回本地校验
+        const currentPwd = localStorage.getItem('admin_pwd') || '123456';
+        if (input === currentPwd) {
+          sessionStorage.setItem('admin_auth', 'true');
+          loginBtn.textContent = '进入中…';
+          showToast('✅ 验证通过');
+          setTimeout(() => { location.href = '/admin.html'; }, 300);
+          return;
+        }
+        loginBtn.disabled = false;
+        loginBtn.textContent = '进 入 系 统';
+        fail();
+      }
     };
 
     loginBtn.addEventListener('click', doLogin);

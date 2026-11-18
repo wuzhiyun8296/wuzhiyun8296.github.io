@@ -121,6 +121,13 @@
     }
     .lan-url.off code { color: #666; }
     .lan-actions { margin-top: 14px; }
+    .pw-row { display: flex; align-items: center; gap: 12px; padding: 10px 0 0; border-top: 1px dashed #333; margin-top: 10px; }
+    .pw-input { flex: 1; display: flex; gap: 8px; min-width: 0; }
+    .pw-input input {
+      flex: 1; min-width: 0; background: #1a1a1a; border: 1px solid #3a3a3a; color: #eee;
+      padding: 8px 11px; border-radius: 8px; font-size: 14px; outline: none;
+    }
+    .pw-input input:focus { border-color: #0e639c; }
     .btn.tiny { padding: 5px 10px; font-size: 12px; }
 
     .btn {
@@ -256,6 +263,20 @@
           </div>
         </div>
 
+        <div class="pw-row">
+          <div class="lan-label">远程访问码</div>
+          <div class="pw-input">
+            <input
+              type="password"
+              v-model="remotePw"
+              :placeholder="hasPassword ? '已设置，如需修改请重新输入' : '开启手机访问前必须设置（至少 4 位）'"
+            />
+            <button class="btn tiny" @click="savePassword" :disabled="pwSaving">
+              {{ pwSaving ? '保存中…' : (hasPassword ? '修改' : '设置') }}
+            </button>
+          </div>
+        </div>
+
         <div class="lan-actions">
           <button
             v-if="lanBusy"
@@ -388,6 +409,9 @@
         const lan = ref({ lanIps: [], backendUrl: '', frontUrl: '', backendPublic: false, frontPublic: false });
         const lanBusy = ref(false);
         const lanBusyText = ref('处理中…');
+        const remotePw = ref('');
+        const hasPassword = ref(false);
+        const pwSaving = ref(false);
         // 前后台都对外开放才算「已开启」
         const lanOpen = computed(() => !!(lan.value.backendPublic && lan.value.frontPublic));
         const toast = ref({ show: false, text: '', error: false });
@@ -441,17 +465,57 @@
           } catch (e) { /* 忽略 */ }
         };
 
+        const loadAuthStatus = async () => {
+          try {
+            const res = await fetch('/api/auth/status?t=' + Date.now(), { cache: 'no-store' });
+            if (!res.ok) return;
+            const d = await res.json();
+            hasPassword.value = !!d.hasPassword;
+          } catch (e) { /* 忽略 */ }
+        };
+
+        const savePassword = async () => {
+          const pw = String(remotePw.value || '').trim();
+          if (pw.length < 4) { showToast('访问码至少 4 位', true); return; }
+          pwSaving.value = true;
+          try {
+            const res = await fetch('/api/auth/password', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ password: pw })
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || '保存失败');
+            hasPassword.value = true;
+            remotePw.value = '';
+            showToast('✅ 远程访问码已保存');
+          } catch (e) {
+            showToast(e.message, true);
+          } finally {
+            pwSaving.value = false;
+          }
+        };
+
         // 📱 开关手机访问（会重启前后台）
         const setLan = async (enable) => {
           if (lanBusy.value) return;
+          const pw = String(remotePw.value || '').trim();
+          if (enable && !pw && !hasPassword.value) {
+            showToast('请先设置远程访问码', true);
+            return;
+          }
           lanBusy.value = true;
           lanBusyText.value = enable ? '正在开启手机访问…' : '正在关闭手机访问…';
           try {
-            await fetch(`${API_BASE}/firewall/lan?t=${Date.now()}`, {
+            const res = await fetch(`${API_BASE}/firewall/lan?t=${Date.now()}`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ enable })
+              body: JSON.stringify({ enable, password: pw })
             });
+            if (!res.ok) {
+              const d = await res.json().catch(() => ({}));
+              throw new Error(d.error || '操作失败');
+            }
             showToast(enable ? '已开启，正在重启前后台…' : '已关闭，正在重启前后台…');
             // 等后台重启回来
             const t0 = Date.now();
@@ -572,13 +636,14 @@
 
         onMounted(() => {
           loadConfig();
+          loadAuthStatus();
           loadLan();
           loadLogs();
           setInterval(loadLogs, 5000);
           setInterval(loadLan, 8000);
         });
 
-        return { cfg, cfgError, cfgErrorCode, restartBackendAndReload, triedUrls, loadConfig, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
+        return { cfg, remotePw, hasPassword, pwSaving, savePassword, cfgError, cfgErrorCode, restartBackendAndReload, triedUrls, loadConfig, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
       }
     }).mount('#app');
   </script>

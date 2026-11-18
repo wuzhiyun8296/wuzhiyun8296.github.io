@@ -927,7 +927,23 @@
         const logout = () => {
           openModal({
             type: 'confirm', title: '🚪 退出登录', message: '确定要退出主控台吗？', isDanger: true,
-            callback: () => { sessionStorage.removeItem('admin_auth'); isAuthenticated.value = false; password.value = ''; }
+            callback: async () => {
+              sessionStorage.removeItem('admin_auth');
+              isAuthenticated.value = false;
+              password.value = '';
+
+              // 💡 远程登录的会话存在服务端，必须一起注销
+              try {
+                await fetch(`${API_BASE}/auth/logout`, { method: 'POST' });
+              } catch (e) { /* 忽略 */ }
+
+              // 远程模式：退回专用登录页（那里输远程访问码）
+              try {
+                const r = await fetch('/api/auth/status?t=' + Date.now(), { cache: 'no-store' });
+                const st = await r.json();
+                if (st && st.required) { location.replace('/login.html'); return; }
+              } catch (e) { /* 忽略 */ }
+            }
           });
         };
 
@@ -1072,6 +1088,21 @@
 
         const handleKeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') { e.preventDefault(); saveFile(); } };
         
+        // 💡 会话过期（服务端 401）时自动回到登录页
+        const originalFetch = window.fetch.bind(window);
+        window.fetch = async (...args) => {
+          const res = await originalFetch(...args);
+          if (res.status === 401) {
+            try {
+              const data = await res.clone().json();
+              if (data && data.needLogin && !location.pathname.endsWith('/login.html')) {
+                location.replace('/login.html');
+              }
+            } catch (e) { /* 非 JSON 忽略 */ }
+          }
+          return res;
+        };
+
         const loadDynamicPlugins = () => {
           fetch(`${API_BASE}/plugins/list?t=${Date.now()}`)
             .then(res => res.json())
