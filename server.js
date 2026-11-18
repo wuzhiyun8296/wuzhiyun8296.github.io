@@ -1580,7 +1580,8 @@ app.post('/api/git/config', async (req, res) => {
 });
 
 app.post('/api/git/push', async (req, res) => {
-  const { message, note } = req.body;
+  const { message, note, bumpVersion } = req.body;
+  const shouldBumpVersion = bumpVersion !== false;   // 默认发布新版本号
   if (!message) return res.status(400).json({ error: '请填写提交信息' });
   // 💡 没填更新说明时的默认文案（俏皮提醒：这一版是作者自己在折腾）
   const DEFAULT_PUSH_NOTE = '作者正在给自己的网站更新中，这一版还在测试，先别更新哦～';
@@ -1706,14 +1707,27 @@ server_log.txt
 
     // 💡 写入版本特征码：客户端靠它判断「远端是不是比我新」
     //    放在 git add 之前，保证它一定进这次提交
-    const versionInfo = {
-      id: makeVersionId(),
-      pushedAt: new Date().toISOString(),
-      note: String(updateNote || '').replace(/"/g, '').slice(0, 200)
-    };
+    // 💡 shouldnBump=false（作者自用更新）时沿用旧版本号：
+    //    客户端就不会认为「有新版本」，也就不会提示更新
+    let versionInfo;
+    if (shouldBumpVersion) {
+      versionInfo = {
+        id: makeVersionId(),
+        pushedAt: new Date().toISOString(),
+        note: String(updateNote || '').replace(/"/g, '').slice(0, 200)
+      };
+    } else {
+      let prev = { id: '', pushedAt: '' };
+      try { prev = await readLocalVersion(); } catch (e) { /* ignore */ }
+      versionInfo = {
+        id: (prev && prev.id) || makeVersionId(),
+        pushedAt: (prev && prev.pushedAt) || new Date().toISOString(),
+        note: String(updateNote || '').replace(/"/g, '').slice(0, 200)
+      };
+    }
     try {
       await fs.writeJson(VERSION_FILE, versionInfo, { spaces: 2 });
-      logs.push(`> 版本特征码: ${versionInfo.id}\n`);
+      logs.push(`> 版本特征码: ${versionInfo.id}${shouldBumpVersion ? '（已发布新版本）' : '（作者自用，未发布新版本）'}\n`);
     } catch (e) {
       logs.push(`> 版本特征码写入失败（不影响推送）: ${e.message}\n`);
     }
@@ -2925,6 +2939,15 @@ async function runUpdateFlow() {
   const failures = [];
   let applied = null;
 
+  // 💡 先记住远端版本号，更新完用它校验：本地版本号没变就说明文件其实没更全
+  let expectedVersionId = '';
+  try {
+    const rv = await fetchRemoteVersion(sources[0].repo, sources[0].branch);
+    expectedVersionId = rv && rv.id ? rv.id : '';
+  } catch (e) { /* 拿不到就不校验 */ }
+  if (expectedVersionId) updateJobLog(`远端版本：${expectedVersionId}`);
+
+
   // 1. 首选：按文件清单逐个下载（Gitee raw / GitHub raw / jsDelivr 均可）
   updateJobSet({ stage: 'download', source: sources[0].repo.host, percent: 0 });
   updateJobLog('正在读取文件清单…');
@@ -3009,6 +3032,21 @@ async function runUpdateFlow() {
     updateJobSet({ stage: 'error', running: false, ok: false, error: '更新失败，请重试', finishedAt: Date.now() });
     updateJobLog('❌ 更新失败，请重试（版本号保持不变）');
     throw new Error('更新失败，请重试');
+  }
+
+  // 💡 兜底路径（压缩包）有时会「下成功但内容不全」：用版本号做最终校验
+  if (expectedVersionId) {
+    try {
+      const local = await readLocalVersion();
+      if (local && local.id && local.id !== expectedVersionId) {
+        updateJobSet({ stage: 'error', running: false, ok: false, error: '更新失败，请重试', finishedAt: Date.now() });
+        updateJobLog(`❌ 版本号未更新（本地 ${local.id} / 远端 ${expectedVersionId}），判定更新失败`);
+        throw new Error('更新失败，请重试');
+      }
+    } catch (e) {
+      if (String(e.message || '') === '更新失败，请重试') throw e;
+      /* 读取失败不影响判定 */
+    }
   }
   updateJobSet({ stage: 'record' });
   updateJobLog('正在记录版本信息…');

@@ -39,6 +39,15 @@
       line-height: 1.6; resize: vertical; font-family: inherit;
     }
     .note-field textarea:focus { outline: none; border-color: #0e639c; }
+    .note-presets { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; }
+    .preset-btn {
+      background: #2d2d2d; color: #ccc; border: 1px solid #444; border-radius: 6px;
+      padding: 6px 12px; font-size: 12px; cursor: pointer; transition: all .15s;
+    }
+    .preset-btn:hover { border-color: #0e639c; color: #fff; }
+    .preset-btn.on { background: #0e639c; border-color: #0e639c; color: #fff; }
+    .preset-hint { margin-top: 6px; font-size: 12px; color: #888; }
+
     .note-count { text-align: right; font-size: 11px; color: #666; margin-top: 4px; }
     .push-form { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 15px;}
     
@@ -153,6 +162,18 @@
           :disabled="isPushing"
         ></textarea>
         <div class="note-count">{{ pushNote.length }} / 200</div>
+        <div class="note-presets">
+          <button type="button" class="preset-btn" :class="{ on: publishMode === 'self' }" @click="usePreset('self')" :disabled="isPushing">
+            🛠 作者自用更新（不发新版本）
+          </button>
+          <button type="button" class="preset-btn" :class="{ on: publishMode === 'test' }" @click="usePreset('test')" :disabled="isPushing">
+            🧪 更新测试中（发新版本）
+          </button>
+        </div>
+        <div class="preset-hint" v-if="publishMode">
+          <template v-if="publishMode === 'self'">本次推送<b>不会</b>生成新版本号，别人的客户端不会提示更新</template>
+          <template v-else>本次推送<b>会</b>生成新版本号，别人点检测更新就能看到（说明里已提醒先别更新）</template>
+        </div>
       </div>
       <div class="action-row">
         <input 
@@ -199,6 +220,19 @@
         const isConfigOpen = ref(false);
         const commitMsg = ref('Update world settings from admin panel');
         const pushNote = ref('');
+        // '' = 不干预（用勾选/默认值）；'self' = 作者自用不发版本；'test' = 测试中（发版本）
+        const publishMode = ref('');
+        const PRESET_SELF = '作者正在给自己的网站更新，暂不发布新版本，先别更新哦～';
+        const PRESET_TEST = '更新测试中，请不要更新（作者正在调试），等稳定了再更哦～';
+
+        const usePreset = (kind) => {
+          if (publishMode.value === kind) {   // 再点一次 = 取消
+            publishMode.value = '';
+            return;
+          }
+          publishMode.value = kind;
+          pushNote.value = kind === 'self' ? PRESET_SELF : PRESET_TEST;
+        };
         const giteeHint = ref(null);
         const pushedVersion = ref('');
         const isPushing = ref(false);
@@ -269,7 +303,7 @@
             const res = await fetch(`${API_BASE}/git/push`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: commitMsg.value, note: pushNote.value })
+              body: JSON.stringify({ message: commitMsg.value, note: pushNote.value, bumpVersion: publishMode.value !== 'self' })
             });
             const data = await res.json();
             
@@ -281,6 +315,7 @@
               giteeHint.value = data.gitee || null;
               pushedVersion.value = data.versionId || '';
               pushNote.value = '';
+              publishMode.value = '';
 
               // 通知外层主控台弹窗提醒（比 iframe 里的提示条显眼）
               if (window.parent && window.parent !== window && data.gitee) {
@@ -302,7 +337,7 @@
 
         onMounted(loadConfig);
 
-        return { pushNote, 
+        return { pushNote, publishMode, usePreset, 
           config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
           giteeHint, pushedVersion,
           saveConfig, pushToGithub 

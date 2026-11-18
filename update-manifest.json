@@ -1,7 +1,7 @@
 {
-  "version": "20261118-143407",
+  "version": "20261118-144455",
   "count": 48,
-  "totalBytes": 680440,
+  "totalBytes": 684429,
   "files": [
     {
       "path": "admin.html",
@@ -50,8 +50,8 @@
     },
     {
       "path": "plugin/github.html",
-      "size": 14028,
-      "sha256": "fbf74a2a1a3cafe2315354d6b8813f0a2e14d1f4eba7c03d0e765335664b180f"
+      "size": 16144,
+      "sha256": "70074824917fa8919573b3255b877551613053264077346fb6e32a32eed8f465"
     },
     {
       "path": "plugin/graph.html",
@@ -115,8 +115,8 @@
     },
     {
       "path": "server.js",
-      "size": 140144,
-      "sha256": "73a82121411a24cf75924e8215fd359092c6ff5d2a13eb20f8df9b9192be3e35"
+      "size": 142017,
+      "sha256": "27dc9a87823523bf496964896b94b3de0959144085bf2f42da6f0ae3b2b21dbe"
     },
     {
       "path": "start.bat",
@@ -136,7 +136,7 @@
     {
       "path": "version.json",
       "size": 170,
-      "sha256": "c4b2adda3f0d12a58b64599824e8f1a9adf75c875379c540b6a43fc1d48481ad"
+      "sha256": "9c5b9730bd4e65238857e78c5090b8b170a2d472b11814ae5cf4ce722cc66f9a"
     },
     {
       "path": "website/.vitepress/config.mjs",
