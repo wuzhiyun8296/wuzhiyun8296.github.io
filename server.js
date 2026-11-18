@@ -1582,8 +1582,9 @@ async function backupBeforeUpdate(items) {
     }
     saved.push(item);
   }
+  // 💡 只保留最近 2 份备份：够回滚用，又不会让客户端越更越占地方
   const all = (await fs.readdir(root)).sort();
-  while (all.length > 3) {
+  while (all.length > 2) {
     await fs.remove(path.join(root, all.shift()));
   }
   return { dir: path.relative(__dirname, dir), saved };
@@ -2865,6 +2866,23 @@ async function applyRawUpdate(sources) {
   }
 
   const total = entries.length;
+
+  // 💡 清掉上次更新中断留下的临时文件（xxx.__tmp123456）
+  try {
+    const walk = async (dir) => {
+      const list = await fs.readdir(dir);
+      for (const name of list) {
+        const abs = path.join(dir, name);
+        if (name.includes('__tmp') && /__tmp\d+$/.test(name)) { await fs.remove(abs); continue; }
+        const st = await fs.stat(abs);
+        if (st.isDirectory() && !name.includes('node_modules') && name !== '.git' && name !== '.update_backup') {
+          await walk(abs);
+        }
+      }
+    };
+    await walk(__dirname);
+  } catch (e) { /* 清理失败不影响更新 */ }
+
   updateJobSet({ stage: 'compare' });
   updateJobLog(`清单共 ${total} 个文件，正在比对本地…`);
 
