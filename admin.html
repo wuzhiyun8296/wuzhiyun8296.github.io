@@ -226,6 +226,7 @@
         
         <div class="nav-actions">
           <button class="action-btn" @click="checkUpdate">🔄 检测更新</button>
+          <button class="action-btn" @click="repairFiles" :disabled="isCheckingUpdate">🔧 修复文件</button>
           <button class="action-btn" @click="changePassword">🔐 改密</button>
           <button class="action-btn danger" @click="logout">退出登录</button>
         </div>
@@ -538,6 +539,64 @@
             isCheckingUpdate.value = false;
           }
         };
+        // 🔧 修复文件：不做版本判定，直接把本地和远端清单比对，
+        //    缺失/损坏的文件重新下载（比如 .bat 变成 LF 导致闪退）
+        const repairFiles = async () => {
+          if (isCheckingUpdate.value) return;
+          isCheckingUpdate.value = true;
+          const startedAt = Date.now();
+          try {
+            openModal({
+              type: 'confirm',
+              title: '🔧 正在修复',
+              message: '正在核对本地文件…',
+              updateLogs: '',
+              loading: true,
+              hideActions: true,
+              progress: null
+            });
+            await fetch(`${API_BASE}/update/repair?t=${Date.now()}`);
+            await sleep(300);
+
+            let job = null;
+            while (true) {
+              await sleep(500);
+              const res = await fetch(`${API_BASE}/update/status?t=${Date.now()}`);
+              const data = await res.json();
+              job = data.job || null;
+              if (!job) break;
+
+              const pct = (typeof job.percent === 'number') ? `　${job.percent}%` : '';
+              modal.value.message = `${job.message || '处理中…'}${pct}`;
+              modal.value.progress = (typeof job.percent === 'number') ? job.percent : null;
+              modal.value.updateLogs = (job.logs || []).map((l) => `<div>${l}</div>`).join('');
+              if (!job.running) break;
+              if (Date.now() - startedAt > 6 * 60 * 1000) break;
+            }
+
+            if (job && job.ok) {
+              openModal({
+                type: 'confirm',
+                title: '✅ 修复完成',
+                message: '缺失或损坏的文件已经重新下载好。' +
+                  '<br><br><b>把后台这个黑色窗口关掉，重新双击桌面快捷方式就能用上新文件咯～</b>'
+              });
+            } else {
+              openModal({
+                type: 'confirm',
+                title: '❌ 修复失败',
+                message: (job && job.error ? job.error : '超时未完成') +
+                  '<br><br>可能是网络问题，稍后再试一次；还不行就把控制台日志发给作者。',
+                isDanger: true
+              });
+            }
+          } catch (e) {
+            openModal({ type: 'confirm', title: '❌ 请求失败', message: e.message, isDanger: true });
+          } finally {
+            isCheckingUpdate.value = false;
+          }
+        };
+
         const changePassword = () => {
           openModal({
             type: 'prompt-double', title: '🔐 修改安全密码', message: '第一个输入框填写新密码，第二个填写提示语。若新密码留空，则恢复默认 123456。', placeholder1: '请输入新密码', placeholder2: '请输入密码提示语 (下次登录显示)',
@@ -736,7 +795,7 @@
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
           navGroupRef, handleNavWheel,
-          dynamicPlugins, checkUpdate
+          dynamicPlugins, checkUpdate, repairFiles
         };
       }
     });

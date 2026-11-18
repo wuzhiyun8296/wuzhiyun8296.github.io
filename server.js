@@ -3158,7 +3158,22 @@ async function runUpdateFlow() {
   // 💡 兜底路径（压缩包）有时会「下成功但内容不全」：用版本号做最终校验
   if (expectedVersionId) {
     try {
-      const local = await readLocalVersion();
+      let local = await readLocalVersion();
+      // 💡 版本文件没跟上（增量比对跳过 / 下载漏了）：单独补一次
+      if (!local.id || local.id !== expectedVersionId) {
+        for (const s of sources) {
+          for (const base of rawBaseUrls(s.repo, s.branch)) {
+            try {
+              const buf = await httpsGetBuffer(`${base}/version.json`, 15000);
+              const v = JSON.parse(buf.toString('utf8'));
+              if (v && v.id) { await fs.writeJson(VERSION_FILE, v, { spaces: 2 }); local = await readLocalVersion(); }
+              break;
+            } catch (e) { /* 换下一个源 */ }
+          }
+          if (local.id === expectedVersionId) break;
+        }
+        if (local.id === expectedVersionId) updateJobLog(`版本号已补写为 ${local.id}`);
+      }
       if (local && local.id && local.id !== expectedVersionId) {
         updateJobSet({ stage: 'error', running: false, ok: false, error: '更新失败，请重试', finishedAt: Date.now() });
         updateJobLog(`❌ 版本号未更新（本地 ${local.id} / 远端 ${expectedVersionId}），判定更新失败`);
@@ -3195,6 +3210,22 @@ app.get('/api/update/start', async (req, res) => {
 
   updateJobReset();
   updateJobLog('准备更新…');
+  res.json({ success: true, job: updateJobSnapshot() });
+
+  runUpdateFlow().catch((e) => {
+    updateJobSet({ running: false, ok: false, error: e.message, stage: 'error', finishedAt: Date.now() });
+    updateJobLog('❌ ' + e.message);
+  });
+});
+
+// 💡 修复接口：不判定版本，直接把本地和远端清单逐个比对，
+//    缺的、坏的文件重新下载（.bat 变成 LF 之类的问题就靠它修）
+app.get('/api/update/repair', async (req, res) => {
+  if (updateJob.running) return res.json({ success: true, job: updateJobSnapshot(), already: true });
+
+  updateJobReset();
+  updateJobSet({ repairMode: true });
+  updateJobLog('开始修复：正在核对本地文件…');
   res.json({ success: true, job: updateJobSnapshot() });
 
   runUpdateFlow().catch((e) => {
