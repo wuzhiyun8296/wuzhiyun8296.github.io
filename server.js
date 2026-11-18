@@ -1881,6 +1881,42 @@ server_log.txt
 
 // ================= 💡 检测并拉取 GitHub 更新 =================
 app.get('/api/git/check-update', async (req, res) => {
+  // 💡 先按「版本号」自动比对（和仪表盘同一套判据）：
+  //    文件更新完 version.json 就变了，不会再因为 commit 没记录而提示「有新版本」
+  try {
+    const cfg = await readUpdateConfig();
+    const local = await readLocalVersion();
+    if (cfg.sources.length) {
+      const hits = [];
+      for (const s of cfg.sources) {
+        try {
+          const rv = await Promise.race([
+            fetchRemoteVersion(s.repo, s.branch),
+            new Promise((_, rej) => setTimeout(() => rej(new Error('超时')), 5000))
+          ]);
+          if (rv && rv.id) hits.push({ host: s.repo.host, remoteId: rv.id });
+        } catch (e) { /* 这个源读不到就跳过 */ }
+      }
+      if (hits.length) {
+        const newer = hits.find((h) => h.remoteId !== local.id);
+        if (newer) {
+          return res.json({
+            success: true,
+            hasUpdate: true,
+            mode: 'version',
+            logs: [`${newer.host}: 远端 ${newer.remoteId}，本地 ${local.id || '（无）'}`]
+          });
+        }
+        return res.json({
+          success: true,
+          hasUpdate: false,
+          mode: 'version',
+          logs: [`版本号一致：${local.id}`]
+        });
+      }
+    }
+  } catch (e) { /* 版本比对失败就继续走下面的 git 比对 */ }
+
   // 💡 没有 git-config.json（例如朋友那边没有 Token）时，自动改走匿名更新检查：
   //    只读 update-config.json 里的公开仓库地址，不需要任何凭据。
   if (!fs.existsSync(GIT_CONFIG_FILE)) return anonymousCheckUpdate(res);
@@ -2853,7 +2889,16 @@ async function applyRawUpdate(sources) {
           });
           if (!buf || !buf.length) throw new Error('空文件');
           const outBuf = needsCrlf(rel) ? toCrlf(buf) : buf;
-          await fs.outputFile(path.join(__dirname, rel), outBuf);
+          const dest = path.join(__dirname, rel);
+          // 💡 先写临时文件再改名：写一半断电/被杀，也不会留下半个坏脚本
+          const tmp = `${dest}.__tmp${Date.now()}`;
+          try {
+            await fs.outputFile(tmp, outBuf);
+            await fs.move(tmp, dest, { overwrite: true });
+          } catch (e) {
+            try { await fs.remove(tmp); } catch (e2) { /* ignore */ }
+            await fs.outputFile(dest, outBuf);   // 改名失败（如文件被占用）就直接覆盖
+          }
           updateJobSet({ bytesDone: (updateJob.bytesDone || 0) + buf.length });
           ok = true;
           break;
