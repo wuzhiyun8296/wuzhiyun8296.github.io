@@ -418,6 +418,23 @@
         const isCheckingUpdate = ref(false);
         const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
+        // 💡 等服务重启回来：重启期间请求会失败，这里一直重试到成功为止
+        const waitForServerBack = async (maxMs = 90000) => {
+          const t0 = Date.now();
+          await sleep(2500);
+          while (Date.now() - t0 < maxMs) {
+            try {
+              const r = await fetch(`${API_BASE}/update/status?t=${Date.now()}`, { cache: 'no-store' });
+              if (r.ok) {
+                const d = await r.json();
+                if (d && d.success && d.job && !d.job.running) return true;
+              }
+            } catch (e) { /* 还没起来 */ }
+            await sleep(1000);
+          }
+          return false;
+        };
+
         const doUpdate = async (logsHtml) => {
           openModal({
             type: 'confirm',
@@ -479,12 +496,19 @@
               const extra = `<div style="margin-top:8px;font-size:12px;color:#888;">来源：${job.source}　下载通道：${job.via || '-'}　耗时：${job.elapsed || 0} 秒</div>`;
               openModal({
                 type: 'confirm',
+                title: '✅ 更新完成',
+                message: '新版本已经装好啦 ✨<br><br><b>正在自动重启后台服务，稍等一下页面会自己刷新…</b>' + extra,
+                loading: true,
+                hideActions: true
+              });
+              await waitForServerBack();
+              openModal({
+                type: 'confirm',
                 title: '✅ 更新完成啦',
-                message: '新版本已经装好啦 ✨' +
-                  `<br><br><b>把后台这个黑色窗口关掉，重新双击桌面上的「幻想域设定集」快捷方式，就能用上新版本咯～</b>` +
-                  `<br><span style="color:#888;">（浏览器会自己重新打开，旧的那几个窗口直接关掉就行）</span>${extra}`,
+                message: '新版本已经生效，页面马上自动刷新 ✨' + extra,
                 callback: () => { window.location.reload(); }
               });
+              setTimeout(() => window.location.reload(), 1200);
             } else {
               openModal({
                 type: 'confirm',
@@ -541,7 +565,20 @@
         };
         // 🔧 修复文件：不做版本判定，直接把本地和远端清单比对，
         //    缺失/损坏的文件重新下载（比如 .bat 变成 LF 导致闪退）
-        const repairFiles = async () => {
+        // 🔧 修复文件：先弹确认（会覆盖本地未推送的改动），确认后才执行
+        const repairFiles = () => {
+          if (isCheckingUpdate.value) return;
+          openModal({
+            type: 'confirm',
+            title: '🔧 修复文件',
+            message: '会从远程仓库重新下载<b>缺失或损坏</b>的文件。' +
+              '<br><br><span style="color:#e0a030;">注意：本地未推送的修改会被覆盖</span>（覆盖前会自动备份到 .update_backup）。' +
+              '<br><br>确定要修复吗？',
+            callback: () => { doRepair(); }
+          });
+        };
+
+        const doRepair = async () => {
           if (isCheckingUpdate.value) return;
           isCheckingUpdate.value = true;
           const startedAt = Date.now();
@@ -555,7 +592,7 @@
               hideActions: true,
               progress: null
             });
-            await fetch(`${API_BASE}/update/repair?t=${Date.now()}`);
+            await fetch(`${API_BASE}/update/repair?t=${Date.now()}`, { method: 'POST' });
             await sleep(300);
 
             let job = null;
@@ -578,9 +615,12 @@
               openModal({
                 type: 'confirm',
                 title: '✅ 修复完成',
-                message: '缺失或损坏的文件已经重新下载好。' +
-                  '<br><br><b>把后台这个黑色窗口关掉，重新双击桌面快捷方式就能用上新文件咯～</b>'
+                message: '缺失或损坏的文件已经重新下载好 ✨<br><br><b>正在自动重启后台服务，稍等一下页面会自己刷新…</b>',
+                loading: true,
+                hideActions: true
               });
+              await waitForServerBack();
+              setTimeout(() => window.location.reload(), 800);
             } else {
               openModal({
                 type: 'confirm',
@@ -795,7 +835,7 @@
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
           navGroupRef, handleNavWheel,
-          dynamicPlugins, checkUpdate, repairFiles
+          dynamicPlugins, checkUpdate, repairFiles, doRepair
         };
       }
     });

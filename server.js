@@ -2776,6 +2776,27 @@ function updateJobSnapshot() {
   };
 }
 
+// 💡 更新完成后自动重启后台：直接拉起一个新的 node 进程（不经过 cmd/powershell，避免引号转义）
+function scheduleSelfRestart(delayMs = 400) {
+  try {
+    const out = fs.openSync(path.join(__dirname, 'server_log.txt'), 'a');
+    const child = require('child_process').spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+      cwd: __dirname,
+      detached: true,
+      windowsHide: true,
+      stdio: ['ignore', out, out],
+      env: { ...process.env, MWS_RESTARTED: '1' }
+    });
+    child.unref();
+    console.log('[restart] 已拉起新进程 PID=' + child.pid);
+    setTimeout(() => { process.exit(0); }, Math.max(200, delayMs));
+    return true;
+  } catch (e) {
+    console.log('[restart] 自动重启失败：' + e.message);
+    return false;
+  }
+}
+
 // 按文件清单逐个拉取（不依赖 zip 归档：Gitee 的归档下载已经需要登录）
 async function applyRawUpdate(sources) {
   const FILE_LIST = 'update-files.txt';
@@ -3209,6 +3230,11 @@ async function runUpdateFlow() {
     await fs.writeJson(UPDATE_CONFIG_FILE, { sources: updated }, { spaces: 2 });
   } catch (e) { /* ignore */ }
 
+  // 💡 更新完成：自动重启后台，让新代码立刻生效
+  updateJobSet({ stage: 'restart', message: '更新完成，正在重启服务…', restarting: true });
+  updateJobLog('🔄 正在重启后台服务…');
+  scheduleSelfRestart(1500);
+
   updateJobSet({
     stage: 'done', running: false, ok: true, percent: 100,
     finishedAt: Date.now(), via: applied.via, backup: backup.dir, skipped: failures
@@ -3232,7 +3258,7 @@ app.get('/api/update/start', async (req, res) => {
 
 // 💡 修复接口：不判定版本，直接把本地和远端清单逐个比对，
 //    缺的、坏的文件重新下载（.bat 变成 LF 之类的问题就靠它修）
-app.get('/api/update/repair', async (req, res) => {
+app.post('/api/update/repair', async (req, res) => {
   if (updateJob.running) return res.json({ success: true, job: updateJobSnapshot(), already: true });
 
   updateJobReset();
@@ -3244,6 +3270,12 @@ app.get('/api/update/repair', async (req, res) => {
     updateJobSet({ running: false, ok: false, error: e.message, stage: 'error', finishedAt: Date.now() });
     updateJobLog('❌ ' + e.message);
   });
+});
+
+// 💡 手动重启后台（更新完自动调用，也可以单独点）
+app.get('/api/update/restart', (req, res) => {
+  res.json({ success: true, restarting: true });
+  setTimeout(() => scheduleSelfRestart(400), 500);
 });
 
 // 查询更新进度
@@ -3652,7 +3684,23 @@ app.post('/api/home-source', (req, res) => {
 
 
 // 启动服务
-app.listen(3001, () => {
+// 💡 端口重试：自动重启时新旧进程会短暂抢同一个端口，抢不到就等一会儿再试
+function listenWithRetry(port, retries = 60) {
+  const server = app.listen(port);
+  server.once('listening', () => { onListening(); });
+  server.once('error', (err) => {
+    if (err && err.code === 'EADDRINUSE' && retries > 0) {
+      setTimeout(() => listenWithRetry(port, retries - 1), 500);
+      return;
+    }
+    console.log('[boot] 监听失败：' + (err && err.message));
+    process.exit(1);
+  });
+}
+
+listenWithRetry(3001);
+
+function onListening() {
   const bootMs = Date.now() - BOOT_T0;
   console.log('=================================');
   console.log('SUCCESS! Server is running on port 3001');
@@ -3701,7 +3749,7 @@ app.listen(3001, () => {
     } catch (e) { /* ignore */ }
   })();
   }, 1500);
-});
+}
 // ================= 💡 兜底：缺少首页文件时自动生成 =================
 // 全新安装的目录里没有 website/docs/index.md（首页属于各人自定义，不在更新清单里），
 // 缺了它 VitePress 访问 / 会直接 404。启动时发现缺失就按空白模板补一份。
