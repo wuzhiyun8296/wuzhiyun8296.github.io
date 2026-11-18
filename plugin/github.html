@@ -236,6 +236,20 @@
         const giteeHint = ref(null);
         const pushedVersion = ref('');
         const isPushing = ref(false);
+
+        // 💡 等后端重启回来（重启期间请求会失败，一直重试到成功）
+        const waitForServerBack = async (maxMs = 60000) => {
+          await new Promise((r) => setTimeout(r, 2500));
+          const t0 = Date.now();
+          while (Date.now() - t0 < maxMs) {
+            try {
+              const r = await fetch(`${API_BASE}/update/status?t=${Date.now()}`, { cache: 'no-store' });
+              if (r.ok) return true;
+            } catch (e) { /* 还没起来 */ }
+            await new Promise((r) => setTimeout(r, 1000));
+          }
+          return false;
+        };
         const logs = ref('');
         const terminalRef = ref(null);
 
@@ -316,6 +330,14 @@
               pushedVersion.value = data.versionId || '';
               pushNote.value = '';
               publishMode.value = '';
+
+              // 💡 后端会重启：等它回来再刷新页面，避免“推送完还要手动重开”
+              if (data.restarting) {
+                logs.value += '\n[RESTART] 正在重启后台服务，稍等页面会自动刷新…\n';
+                await waitForServerBack();
+                window.location.reload();
+                return;
+              }
 
               // 通知外层主控台弹窗提醒（比 iframe 里的提示条显眼）
               if (window.parent && window.parent !== window && data.gitee) {

@@ -1964,7 +1964,11 @@ server_log.txt
       logs.push(`       ${giteeHint.repoUrl}\n`);
       logs.push(`       （仓库页 → 管理 → 仓库镜像管理 → 手动同步）\n`);
     }
-    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint, notice: noticeSaved });
+    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint, notice: noticeSaved, restarting: true });
+
+    // 💡 推送成功后自动重启后台：让刚推上去的 server.js 立刻生效
+    //    （先返回响应，再等 1.5 秒重启，避免连接被掐断）
+    setTimeout(() => scheduleSelfRestart(1500), 300);
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
