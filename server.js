@@ -1171,23 +1171,86 @@ function looksLikeHtml(file) {
 const UPDATE_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36';
 
 // 原生 https GET → Buffer（按字节取，避免把图片/ico 当文本弄坏）
-function httpsGetBuffer(url, timeoutMs = 20000) {
+function httpsGetBuffer(url, timeoutMs = 20000, opts = {}) {
+  const stallMs = opts.stallMs || 6000;        // 多久没收到数据就判定卡住
+  const minBps = opts.minBps || 8 * 1024;      // 低于这个速度（字节/秒）就换源
+  const slowAfter = opts.slowAfter || 4000;    // 连上多久之后才开始判断「太慢」
+  const redirects = opts.redirects || 0;
+
   return new Promise((resolve, reject) => {
+    let done = false;
+    const fail = (err) => {
+      if (done) return;
+      done = true;
+      try { req.destroy(); } catch (e) { /* ignore */ }
+      reject(err);
+    };
+
     const req = https.get(url, { headers: { 'User-Agent': UPDATE_UA } }, (resp) => {
       if (resp.statusCode >= 300 && resp.statusCode < 400 && resp.headers.location) {
         resp.resume();
-        return httpsGetBuffer(resp.headers.location, timeoutMs).then(resolve).catch(reject);
+        if (redirects > 4) return fail(new Error('重定向过多'));
+        done = true;
+        return httpsGetBuffer(resp.headers.location, timeoutMs, { ...opts, redirects: redirects + 1 }).then(resolve).catch(reject);
       }
-      if (resp.statusCode !== 200) { resp.resume(); return reject(new Error('HTTP ' + resp.statusCode)); }
+      if (resp.statusCode !== 200) { resp.resume(); return fail(new Error('HTTP ' + resp.statusCode)); }
+
+      const total = parseInt(resp.headers['content-length'] || '0', 10) || 0;
       const chunks = [];
-      resp.on('data', (c) => chunks.push(c));
-      resp.on('end', () => resolve(Buffer.concat(chunks)));
-      resp.on('error', reject);
+      let received = 0;
+      let startedAt = Date.now();
+      let lastDataAt = Date.now();
+      let lastReport = 0;
+
+      const watchdog = setInterval(() => {
+        const now = Date.now();
+        const stalled = now - lastDataAt;
+        if (stalled > stallMs) {
+          clearInterval(watchdog);
+          return fail(new Error(`下载卡住 ${Math.round(stalled / 1000)} 秒，换源`));
+        }
+        const elapsed = now - startedAt;
+        if (elapsed > slowAfter && received > 0) {
+          const bps = received / (elapsed / 1000);
+          if (bps < minBps) {
+            clearInterval(watchdog);
+            return fail(new Error(`速度过慢 ${Math.round(bps / 1024)} KB/s，换源`));
+          }
+        }
+      }, 800);
+
+      resp.on('data', (c) => {
+        chunks.push(c);
+        received += c.length;
+        lastDataAt = Date.now();
+        const now = Date.now();
+        if (opts.onProgress && now - lastReport > 300) {
+          lastReport = now;
+          const elapsed = Math.max(1, now - startedAt) / 1000;
+          try {
+            opts.onProgress({ received, total, speed: received / elapsed });
+          } catch (e) { /* ignore */ }
+        }
+      });
+
+      resp.on('end', () => {
+        clearInterval(watchdog);
+        if (done) return;
+        done = true;
+        if (opts.onProgress) {
+          const elapsed = Math.max(1, Date.now() - startedAt) / 1000;
+          try { opts.onProgress({ received, total, speed: received / elapsed }); } catch (e) { /* ignore */ }
+        }
+        resolve(Buffer.concat(chunks));
+      });
+      resp.on('error', (e) => { clearInterval(watchdog); fail(e); });
     });
-    req.on('error', reject);
-    req.setTimeout(timeoutMs, () => req.destroy(new Error('超时')));
+
+    req.on('error', (e) => { if (!done) { done = true; reject(e); } });
+    req.setTimeout(timeoutMs, () => fail(new Error('超时')));
   });
 }
+
 
 // 各通道的「单文件 raw 基址」
 // Gitee 的 zip 归档已经需要登录，但 raw 单文件仍然匿名可读，所以整包下载改成按文件拉取
@@ -2520,14 +2583,14 @@ app.get('/api/update/check', async (req, res) => anonymousCheckUpdate(res));
 let updateJob = {
   id: 0, running: false, stage: 'idle', source: '', percent: null,
   message: '', logs: [], startedAt: 0, finishedAt: 0, ok: false, error: '',
-  via: '', backup: '', skipped: []
+  via: '', backup: '', skipped: [], speed: 0, file: '', filePercent: null
 };
 
 function updateJobReset() {
   updateJob = {
     id: Date.now(), running: true, stage: 'start', source: '', percent: null,
     message: '准备更新…', logs: [], startedAt: Date.now(), finishedAt: 0,
-    ok: false, error: '', via: '', backup: '', skipped: []
+    ok: false, error: '', via: '', backup: '', skipped: [], speed: 0, file: '', filePercent: null
   };
 }
 function updateJobSet(patch) { Object.assign(updateJob, patch); }
@@ -2553,6 +2616,9 @@ function updateJobSnapshot() {
     via: updateJob.via,
     backup: updateJob.backup,
     skipped: updateJob.skipped,
+    speed: updateJob.speed || 0,
+    file: updateJob.file || '',
+    filePercent: updateJob.filePercent,
     finishedAt: updateJob.finishedAt
   };
 }
@@ -2593,6 +2659,7 @@ async function applyRawUpdate(sources) {
   if (!bases.includes(chosen.base)) bases.unshift(chosen.base);
 
   const total = chosen.list.length;
+  const deadBases = new Set();   // 本次更新里确定不可用的源（证书错误 / 连续失败）
   let pending = chosen.list.filter((r) => r && r.indexOf('..') === -1);
   const MAX_ROUNDS = 4;   // 首次 + 3 次重试
   updateJobLog(`✅ 通道可用（${chosen.source.repo.host}），共 ${total} 个文件，开始下载…`);
@@ -2607,17 +2674,39 @@ async function applyRawUpdate(sources) {
       const rel = pending[k];
       const relUrl = rel.split('\\').join('/');
       let ok = false;
-      for (const base of bases) {
+      for (let bi = 0; bi < bases.length; bi++) {
+        const base = bases[bi];
+        if (deadBases.has(base)) continue;
+        const hostTag = String(base).replace(/^https:\/\//, '').split('/')[0];
         try {
-          const buf = await httpsGetBuffer(`${base}/${relUrl}`, 30000);
+          updateJobSet({ file: rel, speed: 0, filePercent: 0 });
+          const buf = await httpsGetBuffer(`${base}/${relUrl}`, 30000, {
+            onProgress: (info) => {
+              updateJobSet({
+                speed: Math.round(info.speed || 0),
+                filePercent: info.total ? Math.round((info.received / info.total) * 100) : null
+              });
+            }
+          });
           if (!buf || !buf.length) throw new Error('空文件');
           await fs.outputFile(path.join(__dirname, rel), buf);
           ok = true;
           break;
-        } catch (e) { /* 换下一个源 */ }
+        } catch (e) {
+          // 💡 卡住 / 太慢 / 报错 → 记一条日志再换下一个源
+          const msg = String((e && e.message) || e);
+          if (/certificate|self.signed|CERT_|unable to verify/i.test(msg)) {
+            if (!deadBases.has(base)) {
+              deadBases.add(base);
+              updateJobLog(`⚠ ${hostTag} 证书校验失败，本次更新跳过这个源`);
+            }
+          } else {
+            updateJobLog(`⚠ ${rel} 从 ${hostTag} 失败：${msg}`);
+          }
+        }
       }
       if (!ok) still.push(rel);
-      updateJobSet({ percent: Math.round(((total - pending.length + k + 1) / total) * 100) });
+      updateJobSet({ percent: Math.round(((total - pending.length + k + 1) / total) * 100), speed: 0, filePercent: 100 });
     }
     pending = still;
   }
