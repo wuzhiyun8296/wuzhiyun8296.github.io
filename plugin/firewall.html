@@ -84,6 +84,11 @@
     .log-item .p { color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
     .log-empty { text-align: center; color: #666; padding: 30px 0; font-size: 13px; font-family: inherit; }
 
+    .err-card { border-color: #6b2b2b; }
+    .err-card .card-head { background: #2e2222; border-bottom-color: #6b2b2b; }
+    .err-card .card-head h2 { color: #ff9b9b; }
+    .err-msg { font-size: 13px; color: #ffb3b3; line-height: 1.7; word-break: break-all; }
+    .err-urls { margin-top: 10px; font-size: 11.5px; color: #777; font-family: Consolas, monospace; word-break: break-all; }
     .diag { margin-top: 12px; }
     .diag summary {
       cursor: pointer; font-size: 12.5px; color: #7fc4ee; padding: 6px 0; list-style: none;
@@ -149,6 +154,36 @@
     <div class="head">
       <h1>🛡️ 防火墙</h1>
       <p>控制谁能访问这台电脑上的写作系统。改动会在<b>重启后台</b>后生效。</p>
+    </div>
+
+    <div class="card err-card" v-if="cfgError">
+      <div class="card-head">
+        <h2>⚠️ 读取配置失败</h2>
+        <div style="display:flex;gap:8px;">
+          <button class="btn tiny" @click="loadConfig(true)">重试</button>
+          <button class="btn tiny primary" @click="restartBackendAndReload">重启后台</button>
+        </div>
+      </div>
+      <div class="card-body">
+        <div class="err-msg">{{ cfgError }}</div>
+        <div class="hint warn" style="margin-top:12px;" v-if="cfgErrorCode === 404">
+          <b>后端没有这个接口</b>，说明后台还是旧版本（防火墙插件是新加的）。<br><br>
+          按顺序试：<br>
+          1. 点右上角「重启后台」——如果只是没重启，这一步就好<br>
+          2. 还不行的话，说明 <code>server.js</code> 没更新成功：<br>
+           　打开后台顶栏「🧰 工具 → 🔧 修复文件」，重新下载一遍<br>
+          3. 修完再点「重启后台」
+        </div>
+        <div class="hint warn" style="margin-top:12px;" v-else>
+          常见原因：<br>
+          1. 后台没启动或刚重启还没起来 → 点上面的「重试」<br>
+          2. 浏览器打开的是旧地址（比如换了端口）→ 重新打开后台页面<br>
+          3. 浏览器缓存了旧页面 → Ctrl+F5 强刷
+        </div>
+        <div class="err-urls">
+          <div v-for="(u, i) in triedUrls" :key="i">尝试过：{{ u }}</div>
+        </div>
+      </div>
     </div>
 
     <div class="card">
@@ -355,11 +390,41 @@
           setTimeout(() => { toast.value.show = false; }, 2000);
         };
 
-        const loadConfig = async () => {
-          try {
-            const res = await fetch(`${API_BASE}/firewall/config?t=${Date.now()}`);
-            cfg.value = await res.json();
-          } catch (e) { showToast('读取配置失败', true); }
+        const cfgError = ref('');
+        const cfgErrorCode = ref(0);
+        const triedUrls = ref([]);
+
+        // 💡 先试常规地址，失败再试同源地址（防止用 IP / 换了端口打开时地址不对）
+        const loadConfig = async (manual) => {
+          const list = [
+            `${API_BASE}/firewall/config?t=${Date.now()}`,
+            `${location.origin}/api/firewall/config?t=${Date.now()}`
+          ];
+          triedUrls.value = [];
+          cfgError.value = '';
+          for (const url of list) {
+            triedUrls.value.push(url.replace(/\?t=\d+/, ''));
+            try {
+              const res = await fetch(url, { cache: 'no-store' });
+              if (!res.ok) {
+                cfgErrorCode.value = res.status;
+                cfgError.value = `接口返回 ${res.status} ${res.statusText}`;
+                continue;
+              }
+              const data = await res.json();
+              if (!data || typeof data !== 'object') {
+                cfgError.value = '接口返回的不是有效数据';
+                continue;
+              }
+              cfg.value = data;
+              cfgError.value = '';
+              if (manual) showToast('✅ 读取成功');
+              return;
+            } catch (e) {
+              cfgError.value = '请求失败：' + e.message;
+            }
+          }
+          showToast('读取配置失败', true);
         };
 
         const loadLan = async () => {
@@ -445,6 +510,15 @@
           }
         };
 
+        // 🔄 重启后台（用于"接口 404，需要重启才能生效"的情况）
+        const restartBackendAndReload = async () => {
+          try {
+            await fetch(`${API_BASE}/update/restart?t=${Date.now()}`, { cache: 'no-store' });
+          } catch (e) { /* 重启时连接会断，忽略 */ }
+          showToast('正在重启后台，约 5 秒后自动刷新');
+          setTimeout(() => window.location.reload(), 6000);
+        };
+
         // ↺ 恢复安全默认
         const resetSafe = async () => {
           cfg.value.localOnly = true;
@@ -492,7 +566,7 @@
           setInterval(loadLan, 8000);
         });
 
-        return { cfg, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
+        return { cfg, cfgError, cfgErrorCode, restartBackendAndReload, triedUrls, loadConfig, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
       }
     }).mount('#app');
   </script>
