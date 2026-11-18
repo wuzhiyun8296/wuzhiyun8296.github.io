@@ -1,4 +1,4 @@
-<!-- 文件路径: plugin/github.html -->
+﻿<!-- 文件路径: plugin/github.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -31,6 +31,15 @@
     .form-group input:focus { border-color: #0e639c; }
     .form-group .help-text { font-size: 12px; color: #666; margin-top: 2px; }
 
+        .note-field { margin-bottom: 14px; }
+    .note-label { display: block; font-size: 13px; color: #9cdcfe; margin-bottom: 6px; }
+    .note-field textarea {
+      width: 100%; box-sizing: border-box; padding: 10px 12px; border-radius: 6px;
+      background: #1e1e1e; border: 1px solid #444; color: #ddd; font-size: 13px;
+      line-height: 1.6; resize: vertical; font-family: inherit;
+    }
+    .note-field textarea:focus { outline: none; border-color: #0e639c; }
+    .note-count { text-align: right; font-size: 11px; color: #666; margin-top: 4px; }
     .push-form { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 15px;}
     
     .action-row { display: flex; gap: 15px; }
@@ -134,11 +143,22 @@
     </div>
 
     <div class="push-form">
+      <div class="note-field">
+        <label class="note-label">📝 更新说明（会显示在后台仪表盘的系统提示里）</label>
+        <textarea
+          v-model="pushNote"
+          rows="3"
+          maxlength="200"
+          placeholder="例如：新增世界观树分类、修复地图导入、优化导航栏。不填则使用下面的提交信息。"
+          :disabled="isPushing"
+        ></textarea>
+        <div class="note-count">{{ pushNote.length }} / 200</div>
+      </div>
       <div class="action-row">
         <input 
           type="text" 
           v-model="commitMsg" 
-          placeholder="请输入本次更新的说明（如：更新了第3章剧情）" 
+          placeholder="提交信息（Git 记录用，如：更新第3章）" 
           @keyup.enter="pushToGithub"
           :disabled="isPushing"
         />
@@ -178,6 +198,7 @@
         const config = ref({ repoUrl: '', userName: '', userEmail: '', token: '' });
         const isConfigOpen = ref(false);
         const commitMsg = ref('Update world settings from admin panel');
+        const pushNote = ref('');
         const giteeHint = ref(null);
         const pushedVersion = ref('');
         const isPushing = ref(false);
@@ -248,7 +269,7 @@
             const res = await fetch(`${API_BASE}/git/push`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify({ message: commitMsg.value })
+              body: JSON.stringify({ message: commitMsg.value, note: pushNote.value })
             });
             const data = await res.json();
             
@@ -259,6 +280,7 @@
             if (data.success) {
               giteeHint.value = data.gitee || null;
               pushedVersion.value = data.versionId || '';
+              pushNote.value = '';
 
               // 通知外层主控台弹窗提醒（比 iframe 里的提示条显眼）
               if (window.parent && window.parent !== window && data.gitee) {
@@ -280,7 +302,7 @@
 
         onMounted(loadConfig);
 
-        return { 
+        return { pushNote, 
           config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
           giteeHint, pushedVersion,
           saveConfig, pushToGithub 

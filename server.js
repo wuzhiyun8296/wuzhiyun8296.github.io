@@ -1491,8 +1491,9 @@ app.post('/api/git/config', async (req, res) => {
 });
 
 app.post('/api/git/push', async (req, res) => {
-  const { message } = req.body;
+  const { message, note } = req.body;
   if (!message) return res.status(400).json({ error: '请填写提交信息' });
+  const updateNote = String(note || message || '').trim();
   if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ error: '请先保存 GitHub 配置' });
 
   const config = await fs.readJson(GIT_CONFIG_FILE);
@@ -1678,6 +1679,23 @@ server_log.txt
 
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
 
+    // 💡 更新说明同步到仪表盘：每次推送覆盖上一条，只保留最新
+    let noticeSaved = null;
+    try {
+      const notice = {
+        text: updateNote,
+        type: 'info',
+        source: 'push',
+        version: versionInfo.id,
+        at: versionInfo.pushedAt
+      };
+      await fs.writeJson(path.join(PUBLIC_DIR, 'site-notice.json'), notice, { spaces: 2 });
+      noticeSaved = notice;
+      logs.push(`> 更新说明已同步到仪表盘\n`);
+    } catch (e) {
+      logs.push(`> 更新说明写入失败（不影响推送）: ${e.message}\n`);
+    }
+
     const giteeHint = await readGiteeHint();
 
     // 💡 说明一下更新源归属：用户推的是自己的仓库，但「检测更新」仍走程序作者的发布仓，
@@ -1699,7 +1717,7 @@ server_log.txt
       logs.push(`       ${giteeHint.repoUrl}\n`);
       logs.push(`       （仓库页 → 管理 → 仓库镜像管理 → 手动同步）\n`);
     }
-    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint });
+    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint, notice: noticeSaved });
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });

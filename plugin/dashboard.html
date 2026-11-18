@@ -29,7 +29,12 @@
     .ver-cur { color: #9fb8c9; }
     .ver-cur b { color: #e6e6e6; font-weight: 600; letter-spacing: .5px; }
     
-    /* 版权警报状态 */
+            .notice-badge {
+          display: inline-block; padding: 1px 6px; margin-right: 6px;
+          border-radius: 4px; background: #0e639c; color: #fff; font-size: 11px;
+        }
+        .notice-meta { color: #888; font-size: 12px; margin-left: 6px; }
+/* 版权警报状态 */
     .notice-board.alert { background: linear-gradient(135deg, rgba(168, 38, 38, 0.2), rgba(210, 153, 34, 0.2)); border: 1px solid #a82626; border-left: 4px solid #a82626; animation: pulseRed 2s infinite alternate; }
     .notice-board.alert h2 { color: #ef232a; font-size: 20px; margin: 0 0 5px 0; display: flex; align-items: center; gap: 10px;}
     .notice-board.alert p { color: #ddd; font-size: 14px; margin: 0; line-height: 1.5; }
@@ -100,7 +105,14 @@
         <!-- 日常进度提醒 -->
         <div v-else>
           <h2>📢 系统公告</h2>
-          <div class="notice-text">{{ sysNotice || '欢迎回来。' }}</div>
+          <div class="notice-text">
+            <template v-if="pushNotice && pushNotice.text">
+              <span class="notice-badge">更新说明</span>
+              {{ pushNotice.text }}
+              <span class="notice-meta" v-if="pushNotice.version">· v{{ pushNotice.version }}<template v-if="pushNotice.at"> · {{ formatNoticeTime(pushNotice.at) }}</template></span>
+            </template>
+            <template v-else>{{ sysNotice || '欢迎回来。' }}</template>
+          </div>
           <div class="progress-info">
             <span>🎯 版权存证节点：{{ certTarget }} 字</span>
             <span>📝 当前：{{ stats.totalWords }} 字</span>
@@ -209,6 +221,16 @@
       setup() {
         const stats = ref({ totalWords: 0, chapterCount: 0, charCount: 0, markerCount: 0 });
         const config = ref({});
+        const pushNotice = ref(null);   // 一键推送写入的更新说明（每次覆盖，只留最新）
+
+        const formatNoticeTime = (iso) => {
+          try {
+            const d = new Date(iso);
+            if (isNaN(d.getTime())) return '';
+            const p = (n) => String(n).padStart(2, '0');
+            return `${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+          } catch (e) { return ''; }
+        };
         const configLoaded = ref(false);
         // 版本信息：current 本地固定版本，latest 远端最新，hasUpdate 三者对比结果
         const version = ref({ current: '', latest: '', hasUpdate: null, error: '' });
@@ -251,6 +273,13 @@
           try {
             const resStats = await fetch(`${API_BASE}/dashboard/stats`);
             stats.value = await resStats.json();
+
+            // 更新说明（一键推送写入，每次覆盖上一条）
+            try {
+              const resNotice = await fetch(`${API_BASE}/site-notice?t=${Date.now()}`);
+              const noticeData = await resNotice.json();
+              pushNotice.value = (noticeData && noticeData.text) ? noticeData : null;
+            } catch (e) { pushNotice.value = null; }
 
             const resConf = await fetch(`${API_BASE}/protection/config?t=${Date.now()}`);
             const confData = await resConf.json();
@@ -328,7 +357,7 @@
         onMounted(fetchData);
 
         return { 
-          stats, configLoaded, certTarget, sysNotice, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
+          stats, configLoaded, certTarget, sysNotice, pushNotice, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
         version, versionChecking,
           searchQuery, searchResults, isSearching, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
         };
