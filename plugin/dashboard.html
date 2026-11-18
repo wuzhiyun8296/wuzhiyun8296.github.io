@@ -106,12 +106,12 @@
         <div v-else>
           <h2>📢 系统公告</h2>
           <div class="notice-text">
-            <template v-if="pushNotice && pushNotice.text">
-              <span class="notice-badge">更新说明</span>
-              {{ pushNotice.text }}
-              <span class="notice-meta" v-if="pushNotice.version">· v{{ pushNotice.version }}<template v-if="pushNotice.at"> · {{ formatNoticeTime(pushNotice.at) }}</template></span>
+            <template v-if="noticeText">
+              <span class="notice-badge" v-if="noticeFromUpdate">更新说明</span>
+              {{ noticeText }}
+              <span class="notice-meta" v-if="noticeMeta">{{ noticeMeta }}</span>
             </template>
-            <template v-else>{{ sysNotice || '欢迎回来。' }}</template>
+            <template v-else>欢迎回来。</template>
           </div>
           <div class="progress-info">
             <span>🎯 版权存证节点：{{ certTarget }} 字</span>
@@ -221,7 +221,28 @@
       setup() {
         const stats = ref({ totalWords: 0, chapterCount: 0, charCount: 0, markerCount: 0 });
         const config = ref({});
-        const pushNotice = ref(null);   // 一键推送写入的更新说明（每次覆盖，只留最新）
+        const pushNotice = ref(null);   // site-notice.json：本机刚推送写完的说明
+        const versionInfo = ref(null);  // version.json：随更新下发，含 note（更新说明）
+
+        // 更新说明优先级：本机推送 > 随更新下发的 version.json.note > 手写系统提示
+        const noticeText = computed(() => {
+          if (pushNotice.value && pushNotice.value.text) return pushNotice.value.text;
+          if (versionInfo.value && versionInfo.value.note) return versionInfo.value.note;
+          return '';
+        });
+        const noticeFromUpdate = computed(() => !!(
+          (pushNotice.value && pushNotice.value.text) ||
+          (versionInfo.value && versionInfo.value.note)
+        ));
+        const noticeMeta = computed(() => {
+          const src = (pushNotice.value && pushNotice.value.text) ? pushNotice.value : versionInfo.value;
+          if (!src) return '';
+          const ver = src.version || src.id || '';
+          const at = src.at || src.pushedAt || '';
+          const time = at ? formatNoticeTime(at) : '';
+          if (!ver && !time) return '';
+          return [ver ? '· v' + ver : '', time ? '· ' + time : ''].filter(Boolean).join(' ');
+        });
 
         const formatNoticeTime = (iso) => {
           try {
@@ -274,12 +295,18 @@
             const resStats = await fetch(`${API_BASE}/dashboard/stats`);
             stats.value = await resStats.json();
 
-            // 更新说明（一键推送写入，每次覆盖上一条）
+            // 更新说明①：本机刚推送写入的 site-notice.json
             try {
               const resNotice = await fetch(`${API_BASE}/site-notice?t=${Date.now()}`);
               const noticeData = await resNotice.json();
               pushNotice.value = (noticeData && noticeData.text) ? noticeData : null;
             } catch (e) { pushNotice.value = null; }
+
+            // 更新说明②：随更新包下发的 version.json（含 note），新电脑装完就能看到
+            try {
+              const resVer = await fetch(`/version.json?t=${Date.now()}`);
+              versionInfo.value = await resVer.json();
+            } catch (e) { versionInfo.value = null; }
 
             const resConf = await fetch(`${API_BASE}/protection/config?t=${Date.now()}`);
             const confData = await resConf.json();
@@ -357,7 +384,7 @@
         onMounted(fetchData);
 
         return { 
-          stats, configLoaded, certTarget, sysNotice, pushNotice, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
+          stats, configLoaded, certTarget, sysNotice, pushNotice, versionInfo, noticeText, noticeFromUpdate, noticeMeta, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
         version, versionChecking,
           searchQuery, searchResults, isSearching, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
         };

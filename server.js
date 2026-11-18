@@ -15,6 +15,7 @@
  * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
  * GNU General Public License for more details.
  */
+const BOOT_T0 = Date.now();   // 启动计时（排查无网络时变慢）
 const express = require('express');
 const fs = require('fs-extra');
 const path = require('path');
@@ -468,7 +469,8 @@ const VERSION_CACHE_MS = 5 * 60 * 1000;
 app.get('/api/version', async (req, res) => {
   try {
     const force = String(req.query.force || '') === '1';
-    if (!force && versionCache.data && (Date.now() - versionCache.at) < VERSION_CACHE_MS) {
+    const cacheTtl = versionCache.ttl || VERSION_CACHE_MS;
+    if (!force && versionCache.data && (Date.now() - versionCache.at) < cacheTtl) {
       return res.json({ ...versionCache.data, cached: true });
     }
     const local = await readLocalVersion();
@@ -486,7 +488,11 @@ app.get('/api/version', async (req, res) => {
         branch: s.branch
       };
       try {
-        const v = await fetchRemoteVersion(s.repo, s.branch);
+        // 💡 每个来源最多等 5 秒：断网时不会再一个源一个源地干等
+        const v = await Promise.race([
+          fetchRemoteVersion(s.repo, s.branch),
+          new Promise((_, reject) => setTimeout(() => reject(new Error('超时（可能是断网）')), 5000))
+        ]);
         return { ...base, ok: true, version: v.id, pushedAt: v.pushedAt || '' };
       } catch (e) {
         return { ...base, ok: false, version: '', error: e.message };
@@ -511,7 +517,9 @@ app.get('/api/version', async (req, res) => {
       error: good.length ? '' : (results[0] ? results[0].error : '没有配置更新源'),
       checkedAt: Date.now()
     };
-    versionCache = { at: Date.now(), data: data };
+    // 💡 全部来源都失败（多半是断网）时，只缓存 60 秒，避免频繁重试又长时间等待
+    const allFailed = good.length === 0;
+    versionCache = { at: Date.now(), data: data, ttl: allFailed ? 60000 : VERSION_CACHE_MS };
     res.json(data);
   } catch (e) {
     res.json({ current: '', latest: '', hasUpdate: null, error: e.message, sources: [] });
@@ -982,7 +990,7 @@ async function fetchRemoteVersion(repo, branch) {
   let lastErr = null;
   for (const u of versionRawUrls(repo, branch)) {
     try {
-      const text = await httpsGetText(u, 12000);
+      const text = await httpsGetText(u, 4000);   // 无网络时快速失败，避免页面长时间「正在检查更新」
       const v = JSON.parse(text);
       if (v && v.id) return { id: String(v.id), pushedAt: String(v.pushedAt || '') };
       throw new Error('version.json 里没有 id 字段');
@@ -1618,7 +1626,7 @@ server_log.txt
     const versionInfo = {
       id: makeVersionId(),
       pushedAt: new Date().toISOString(),
-      note: String(message || '').replace(/"/g, '').slice(0, 60)
+      note: String(updateNote || message || '').replace(/"/g, '').slice(0, 200)
     };
     try {
       await fs.writeJson(VERSION_FILE, versionInfo, { spaces: 2 });
@@ -2852,7 +2860,7 @@ app.get('/api/update/zip', async (req, res) => {
     if (updateJob.ok) {
       return res.json({
         success: true,
-        message: `更新成功（来源 ${updateJob.source}，通道 ${updateJob.via}）！私人数据已保留，请重启后台。`,
+        message: `更新完成啦（来源 ${updateJob.source}，通道 ${updateJob.via}）✨ 关掉浏览器重新进入就能看到新版本；没变化的话把后台窗口也关掉重新启动一下。你的数据都好好留着呢～`,
         source: updateJob.source,
         via: updateJob.via,
         backup: updateJob.backup,
@@ -3234,10 +3242,16 @@ app.post('/api/home-source', (req, res) => {
 
 // 启动服务
 app.listen(3001, () => {
+  const bootMs = Date.now() - BOOT_T0;
   console.log('=================================');
   console.log('SUCCESS! Server is running on port 3001');
   console.log('URL: http://localhost:3001');
+  console.log(`[boot] 端口就绪，用时 ${bootMs}ms`);
   console.log('=================================');
+
+  // 💡 下面这些是「清理/加固」性质的工作，跟对外服务无关：
+  //    放到 1.5 秒后再做，避免它们（尤其是 git 子进程）拖慢启动观感
+  setTimeout(() => {
 
   // 💡 启动时自动清理：把 .git/config 里历史遗留的明文 Token 换成干净地址
   (async () => {
@@ -3275,6 +3289,7 @@ app.listen(3001, () => {
       if (removed) console.log(`[CLEANUP] 已清理 ${removed} 个残留的 update*.zip`);
     } catch (e) { /* ignore */ }
   })();
+  }, 1500);
 });
 // ================= 💡 兜底：缺少首页文件时自动生成 =================
 // 全新安装的目录里没有 website/docs/index.md（首页属于各人自定义，不在更新清单里），
