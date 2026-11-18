@@ -17,6 +17,7 @@
  */
 const BOOT_T0 = Date.now();   // 启动计时（排查无网络时变慢）
 const express = require('express');
+const crypto = require('crypto');
 const fs = require('fs-extra');
 const path = require('path');
 const cors = require('cors');
@@ -1708,12 +1709,31 @@ server_log.txt
     try {
       const files = await collectUpdateFiles();
       await fs.writeFile(path.join(__dirname, 'update-files.txt'), files.join('\n') + '\n', 'utf-8');
+
+      // 💡 清单里带上每个文件的大小与 sha256：客户端可以先比对，
+      //    只下载真正变过的文件，省流量、也更快
+      const manifestFiles = [];
+      let manifestBytes = 0;
+      for (const rel of files) {
+        try {
+          const buf = await fs.readFile(path.join(__dirname, rel));
+          manifestBytes += buf.length;
+          manifestFiles.push({
+            path: rel,
+            size: buf.length,
+            sha256: crypto.createHash('sha256').update(buf).digest('hex')
+          });
+        } catch (e) {
+          manifestFiles.push({ path: rel, size: -1, sha256: '' });
+        }
+      }
       await fs.writeJson(path.join(__dirname, 'update-manifest.json'), {
         version: versionInfo.id,
-        count: files.length,
-        files: files
+        count: manifestFiles.length,
+        totalBytes: manifestBytes,
+        files: manifestFiles
       }, { spaces: 2 });
-      logs.push(`> 更新清单: ${files.length} 个文件\n`);
+      logs.push(`> 更新清单: ${manifestFiles.length} 个文件，共 ${(manifestBytes / 1024 / 1024).toFixed(1)} MB\n`);
 
       await runCmd('git add update-files.txt update-manifest.json');
     } catch (e) {
@@ -2590,7 +2610,7 @@ function updateJobReset() {
   updateJob = {
     id: Date.now(), running: true, stage: 'start', source: '', percent: null,
     message: '准备更新…', logs: [], startedAt: Date.now(), finishedAt: 0,
-    ok: false, error: '', via: '', backup: '', skipped: [], speed: 0, file: '', filePercent: null
+    ok: false, error: '', via: '', backup: '', skipped: [], speed: 0, file: '', filePercent: null, bytesDone: 0
   };
 }
 function updateJobSet(patch) { Object.assign(updateJob, patch); }
@@ -2617,6 +2637,10 @@ function updateJobSnapshot() {
     backup: updateJob.backup,
     skipped: updateJob.skipped,
     speed: updateJob.speed || 0,
+    avgSpeed: (updateJob.startedAt && updateJob.bytesDone)
+      ? Math.round(updateJob.bytesDone / Math.max(1, (Date.now() - updateJob.startedAt) / 1000))
+      : 0,
+    bytesDone: updateJob.bytesDone || 0,
     file: updateJob.file || '',
     filePercent: updateJob.filePercent,
     finishedAt: updateJob.finishedAt
@@ -2626,20 +2650,21 @@ function updateJobSnapshot() {
 // 按文件清单逐个拉取（不依赖 zip 归档：Gitee 的归档下载已经需要登录）
 async function applyRawUpdate(sources) {
   const FILE_LIST = 'update-files.txt';
+  const MANIFEST = 'update-manifest.json';
+
+  // ---------- 1) 先取「带哈希的清单」，只下载变过的文件 ----------
   const tried = [];
   let chosen = null;
 
   for (const s of sources) {
     for (const base of rawBaseUrls(s.repo, s.branch)) {
       try {
-        const buf = await httpsGetBuffer(`${base}/${FILE_LIST}`, 15000);
-        const text = buf.toString('utf8');
-        const list = text.split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
-        if (!list.length || list.some((x) => x.indexOf('/') === -1 && !/\.\w+$/.test(x))) {
-          throw new Error('清单格式异常');
+        const text = await httpsGetText(`${base}/${MANIFEST}`, 8000);
+        const j = JSON.parse(text);
+        if (j && Array.isArray(j.files) && j.files.length && typeof j.files[0] === 'object') {
+          chosen = { base, source: s, manifest: j };
+          break;
         }
-        chosen = { base, source: s, list };
-        break;
       } catch (e) {
         tried.push(`${base} → ${e.message}`);
       }
@@ -2647,9 +2672,26 @@ async function applyRawUpdate(sources) {
     if (chosen) break;
   }
 
-  if (!chosen) throw new Error('所有通道都取不到文件清单：' + tried.join('  |  '));
+  // ---------- 2) 老仓库没有新清单 → 退回纯文件列表（全量下载） ----------
+  if (!chosen) {
+    for (const s of sources) {
+      for (const base of rawBaseUrls(s.repo, s.branch)) {
+        try {
+          const buf = await httpsGetBuffer(`${base}/${FILE_LIST}`, 15000);
+          const list = buf.toString('utf8').split(/\r?\n/).map((x) => x.trim()).filter(Boolean);
+          if (!list.length) throw new Error('清单为空');
+          chosen = { base, source: s, list };
+          break;
+        } catch (e) {
+          tried.push(`${base} → ${e.message}`);
+        }
+      }
+      if (chosen) break;
+    }
+  }
+  if (!chosen) throw new Error('所有通道都取不到更新清单：' + tried.join('  |  '));
 
-  // 所有可用基底：主通道失败时轮换，单个文件也能换源重试
+  // 所有可用基底（换源用）
   const bases = [];
   for (const s of sources) {
     for (const b of rawBaseUrls(s.repo, s.branch)) {
@@ -2658,16 +2700,71 @@ async function applyRawUpdate(sources) {
   }
   if (!bases.includes(chosen.base)) bases.unshift(chosen.base);
 
-  const total = chosen.list.length;
-  const deadBases = new Set();   // 本次更新里确定不可用的源（证书错误 / 连续失败）
-  let pending = chosen.list.filter((r) => r && r.indexOf('..') === -1);
-  const MAX_ROUNDS = 4;   // 首次 + 3 次重试
-  updateJobLog(`✅ 通道可用（${chosen.source.repo.host}），共 ${total} 个文件，开始下载…`);
+  const deadBases = new Set();
+
+  // ---------- 3) 生成本次要下载的清单 ----------
+  let entries;
+  if (chosen.manifest) {
+    entries = chosen.manifest.files
+      .map((f) => ({
+        path: String(f.path || '').replace(/\\/g, '/'),
+        size: typeof f.size === 'number' ? f.size : -1,
+        sha256: typeof f.sha256 === 'string' ? f.sha256 : ''
+      }))
+      .filter((e) => e.path && e.path.indexOf('..') === -1);
+  } else {
+    entries = chosen.list.filter((r) => r && r.indexOf('..') === -1)
+      .map((path_) => ({ path: path_.replace(/\\/g, '/'), size: -1, sha256: '' }));
+  }
+
+  const total = entries.length;
+  updateJobSet({ stage: 'compare' });
+  updateJobLog(`清单共 ${total} 个文件，正在比对本地…`);
+
+  // ---------- 4) 比对本地哈希：没变的不下载 ----------
+  const pendingEntries = [];
+  let skipped = 0;
+  let needBytes = 0;
+  for (const e of entries) {
+    const abs = path.join(__dirname, e.path);
+    let same = false;
+    if (e.sha256) {
+      try {
+        const buf = await fs.readFile(abs);
+        if (e.size < 0 || buf.length === e.size) {
+          same = crypto.createHash('sha256').update(buf).digest('hex') === e.sha256;
+        }
+      } catch (err) {
+        same = false;
+      }
+    } else {
+      // 没有哈希（老清单）：只要本地存在就先跳过不了，按需下载
+      try { await fs.access(abs); same = false; } catch (err) { same = false; }
+    }
+    if (same) { skipped++; continue; }
+    if (e.size > 0) needBytes += e.size;
+    pendingEntries.push(e);
+  }
+
+  updateJobSet({ stage: 'download', skipped });
+  const sizeText = needBytes > 0 ? `（约 ${(needBytes / 1024 / 1024).toFixed(1)} MB）` : '';
+  updateJobLog(`✅ ${skipped} 个文件已是最新，需下载 ${pendingEntries.length} 个${sizeText}`);
+
+  if (!pendingEntries.length) {
+    updateJobLog('✨ 全部文件都是最新的，无需下载');
+    return { base: chosen.base, source: chosen.source, total: total, failed: [], skipped };
+  }
+
+  // ---------- 5) 下载（保留原有的多轮重试 / 换源 / 限速检测） ----------
+  let pending = pendingEntries.map((e) => e.path);
+  const pendingTotal = pending.length;
+  let finished = 0;
+  const MAX_ROUNDS = 4;
 
   for (let round = 1; round <= MAX_ROUNDS && pending.length; round++) {
     if (round > 1) {
       updateJobLog(`第 ${round - 1} 次重试：还有 ${pending.length} 个文件没下到…`);
-      await new Promise((r) => setTimeout(r, 800));   // 稍等再重试，避开瞬时抖动
+      await new Promise((r) => setTimeout(r, 800));
     }
     const still = [];
     for (let k = 0; k < pending.length; k++) {
@@ -2679,7 +2776,7 @@ async function applyRawUpdate(sources) {
         if (deadBases.has(base)) continue;
         const hostTag = String(base).replace(/^https:\/\//, '').split('/')[0];
         try {
-          updateJobSet({ file: rel, speed: 0, filePercent: 0 });
+          updateJobSet({ file: rel, filePercent: 0 });
           const buf = await httpsGetBuffer(`${base}/${relUrl}`, 30000, {
             onProgress: (info) => {
               updateJobSet({
@@ -2690,10 +2787,10 @@ async function applyRawUpdate(sources) {
           });
           if (!buf || !buf.length) throw new Error('空文件');
           await fs.outputFile(path.join(__dirname, rel), buf);
+          updateJobSet({ bytesDone: (updateJob.bytesDone || 0) + buf.length });
           ok = true;
           break;
         } catch (e) {
-          // 💡 卡住 / 太慢 / 报错 → 记一条日志再换下一个源
           const msg = String((e && e.message) || e);
           if (/certificate|self.signed|CERT_|unable to verify/i.test(msg)) {
             if (!deadBases.has(base)) {
@@ -2706,16 +2803,17 @@ async function applyRawUpdate(sources) {
         }
       }
       if (!ok) still.push(rel);
-      updateJobSet({ percent: Math.round(((total - pending.length + k + 1) / total) * 100), speed: 0, filePercent: 100 });
+      finished++;
+      // 💡 不清零速度：让界面一直显示最近的速度，不会「闪一下就没」
+      updateJobSet({ percent: Math.round((finished / pendingTotal) * 100), filePercent: 100 });
     }
     pending = still;
   }
 
   if (pending.length) {
-    // 💡 有文件始终下不下来：整次更新算失败（不记录版本号，让用户重试）
     throw new Error(`${pending.length} 个文件多次重试仍下载失败：${pending.slice(0, 5).join(' / ')}`);
   }
-  return { base: chosen.base, source: chosen.source, total: total, failed: [] };
+  return { base: chosen.base, source: chosen.source, total: total, failed: [], skipped };
 }
 
 // 客户端要更新的文件白名单：显式枚举目录，避免把备份、日志、私人 md 带出去

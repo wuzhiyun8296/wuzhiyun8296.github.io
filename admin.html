@@ -454,8 +454,10 @@
                 return Math.max(1, Math.round(bps / 1024)) + ' KB/s';
               };
               const sp = fmtSpeed(job.speed);
-              const speedLine = sp
-                ? `<span style="color:#4ec9b0;">↓ ${sp}</span>` +
+              const avg = fmtSpeed(job.avgSpeed);
+              const speedLine = (sp || avg)
+                ? (sp ? `<span style="color:#4ec9b0;">↓ ${sp}</span>` : '') +
+                  (avg ? `<span style="color:#888;">　平均 ${avg}</span>` : '') +
                   (job.file ? `　<span style="color:#888;">${job.file}</span>` : '') +
                   (typeof job.filePercent === 'number' ? `<span style="color:#888;"> ${job.filePercent}%</span>` : '')
                 : '';
