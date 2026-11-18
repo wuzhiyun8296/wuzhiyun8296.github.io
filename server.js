@@ -1582,7 +1582,9 @@ app.post('/api/git/config', async (req, res) => {
 app.post('/api/git/push', async (req, res) => {
   const { message, note } = req.body;
   if (!message) return res.status(400).json({ error: '请填写提交信息' });
-  const updateNote = String(note || message || '').trim();
+  // 💡 没填更新说明时的默认文案（俏皮提醒：这一版是作者自己在折腾）
+  const DEFAULT_PUSH_NOTE = '作者正在给自己的网站更新中，这一版还在测试，先别更新哦～';
+  const updateNote = String(note || '').trim() || DEFAULT_PUSH_NOTE;
   if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ error: '请先保存 GitHub 配置' });
 
   const config = await fs.readJson(GIT_CONFIG_FILE);
@@ -1707,7 +1709,7 @@ server_log.txt
     const versionInfo = {
       id: makeVersionId(),
       pushedAt: new Date().toISOString(),
-      note: String(updateNote || message || '').replace(/"/g, '').slice(0, 200)
+      note: String(updateNote || '').replace(/"/g, '').slice(0, 200)
     };
     try {
       await fs.writeJson(VERSION_FILE, versionInfo, { spaces: 2 });
