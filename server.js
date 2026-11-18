@@ -2882,15 +2882,29 @@ function updateJobSnapshot() {
 function scheduleSelfRestart(delayMs = 400) {
   try {
     const out = fs.openSync(path.join(__dirname, 'server_log.txt'), 'a');
-    const child = require('child_process').spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+
+    // 💡 Windows 下想要「悄悄重启、不弹黑框」，最可靠的是让 wscript 去启动：
+    //    wscript 本身没有控制台，VBS 用 Run(..., 0, False) 又是隐藏窗口，
+    //    新进程会拥有自己的（隐藏）控制台，旧进程退出也不会把它带走。
+    const vbs = path.join(__dirname, '__restart_launch.vbs');
+    const esc = (s) => String(s).replace(/"/g, '""');
+    const lines = [
+      'Set ws = CreateObject("WScript.Shell")',
+      'WScript.Sleep 1500',
+      'ws.CurrentDirectory = "' + esc(__dirname) + '"',
+      'ws.Run Chr(34) & "' + esc(process.execPath) + '" & Chr(34) & " " & Chr(34) & "' + esc(path.join(__dirname, 'server.js')) + '" & Chr(34), 0, False'
+    ];
+    // UTF-16LE + BOM：WSH 原生支持，路径里有中文也不会乱
+    fs.writeFileSync(vbs, '\ufeff' + lines.join('\r\n') + '\r\n', 'utf16le');
+
+    const child = require('child_process').spawn('wscript.exe', ['//nologo', vbs], {
       cwd: __dirname,
       detached: true,
       windowsHide: true,
-      stdio: ['ignore', out, out],
-      env: { ...process.env, MWS_RESTARTED: '1' }
+      stdio: 'ignore'
     });
     child.unref();
-    console.log('[restart] 已拉起新进程 PID=' + child.pid);
+    console.log('[restart] 已安排重启（wscript 隐藏启动）');
     setTimeout(() => { process.exit(0); }, Math.max(200, delayMs));
     return true;
   } catch (e) {
