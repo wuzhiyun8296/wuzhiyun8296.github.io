@@ -167,12 +167,19 @@
       <div class="card-body">
         <div class="err-msg">{{ cfgError }}</div>
         <div class="hint warn" style="margin-top:12px;" v-if="cfgErrorCode === 404">
-          <b>后端没有这个接口</b>，说明后台还是旧版本（防火墙插件是新加的）。<br><br>
-          按顺序试：<br>
-          1. 点右上角「重启后台」——如果只是没重启，这一步就好<br>
-          2. 还不行的话，说明 <code>server.js</code> 没更新成功：<br>
-           　打开后台顶栏「🧰 工具 → 🔧 修复文件」，重新下载一遍<br>
-          3. 修完再点「重启后台」
+          <b>后端没有这个接口</b>，说明现在跑的 Node 进程还是旧代码。<br><br>
+          按顺序试，一般第 1 步就好：<br>
+          <b>1. 彻底重启（不是点按钮重启）</b><br>
+          　· 关掉所有黑色命令行窗口<br>
+          　· 打开任务管理器 → 找到所有 <code>node.exe</code> → 结束任务<br>
+          　· 重新双击「一键启动.vbs」或桌面快捷方式<br>
+          <b>2. 还不行 → 修文件</b><br>
+          　· 后台顶栏「🧰 工具 → 🔧 修复文件」，重新下载一遍<br>
+          　· 修完再彻底重启一次<br>
+          <b>3. 判断到底是哪种情况</b><br>
+          　· 浏览器直接打开 <code>http://localhost:3001/api/firewall/config</code><br>
+          　· 显示 404 → 跑的是旧进程（回到第 1 步）<br>
+          　· 显示一大段 JSON → 后端是新的，只是本页缓存了，Ctrl+F5 强刷
         </div>
         <div class="hint warn" style="margin-top:12px;" v-else>
           常见原因：<br>
