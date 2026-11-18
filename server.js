@@ -39,17 +39,31 @@ process.on('unhandledRejection', (reason) => {
 const FIREWALL_CONFIG_FILE = path.join(__dirname, 'firewall-config.json');
 
 function readFirewallConfig() {
-  // 💡 默认「仅允许本机访问」：更安全，别人同 Wi-Fi 也连不上
+  // ⚠️ 安全默认：手机访问关闭（只允许本机）、跨域收紧、记录日志
+  //    只有配置文件里明确写 localOnly: false 才会对外开放
   let cfg = { localOnly: true, strictCors: true, logRequests: true };
   try {
     if (fs.existsSync(FIREWALL_CONFIG_FILE)) {
-      cfg = { ...cfg, ...JSON.parse(fs.readFileSync(FIREWALL_CONFIG_FILE, 'utf-8')) };
+      const raw = JSON.parse(fs.readFileSync(FIREWALL_CONFIG_FILE, 'utf-8'));
+      cfg = {
+        localOnly: raw.localOnly === false ? false : true,
+        strictCors: raw.strictCors === false ? false : true,
+        logRequests: raw.logRequests === false ? false : true
+      };
     }
-  } catch (e) { /* 读坏了就用默认值 */ }
+  } catch (e) {
+    /* 读坏了就用默认值（仅本机） */
+  }
   return cfg;
 }
 
 let firewallConfig = readFirewallConfig();
+// 💡 首次启动就把默认配置写下来，让"默认关闭手机访问"这件事看得见
+try {
+  if (!fs.existsSync(FIREWALL_CONFIG_FILE)) {
+    fs.writeJsonSync(FIREWALL_CONFIG_FILE, firewallConfig, { spaces: 2 });
+  }
+} catch (e) { /* 写不了也不影响运行 */ }
 
 // 最近访问记录（只放内存，最多 200 条）
 const accessLog = [];
@@ -3278,6 +3292,9 @@ function scheduleSelfRestart(delayMs = 400) {
     // UTF-16LE + BOM：WSH 原生支持，路径里有中文也不会乱
     fs.writeFileSync(vbs, '\ufeff' + lines.join('\r\n') + '\r\n', 'utf16le');
 
+    // 💡 重启前先把自己以外的旧实例干掉，杜绝「两个 node 抢 3001」
+    killStaleServerProcesses().catch(() => {});
+
     const child = require('child_process').spawn('wscript.exe', ['//nologo', vbs], {
       cwd: __dirname,
       detached: true,
@@ -3773,6 +3790,16 @@ app.post('/api/update/repair', async (req, res) => {
   });
 });
 
+// 🔪 结束残留后台进程（前端「重启后台」会先调这个）
+app.post('/api/system/kill-stale', async (req, res) => {
+  try {
+    const killed = await killStaleServerProcesses();
+    res.json({ success: true, killed });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 💡 手动重启后台（更新完自动调用，也可以单独点）
 app.get('/api/update/restart', (req, res) => {
   res.json({ success: true, restarting: true });
@@ -4186,14 +4213,102 @@ app.post('/api/home-source', (req, res) => {
 
 // 启动服务
 // 💡 端口重试：自动重启时新旧进程会短暂抢同一个端口，抢不到就等一会儿再试
+// ================= 🔪 清理残留进程 =================
+// 💡 场景：更新完文件、点「重启」却没生效 —— 因为还有一个旧的 node 进程占着端口。
+//    这里自动找出「跑着 server.js 但不是当前进程」的 node，结束掉。
+
+function listPidsOnPort(port) {
+  return new Promise((resolve) => {
+    try {
+      require('child_process').exec('netstat -ano', { windowsHide: true, maxBuffer: 1024 * 1024 * 4 }, (err, stdout) => {
+        if (err || !stdout) return resolve([]);
+        const pids = new Set();
+        for (const line of String(stdout).split('\n')) {
+          if (!line.includes(':' + port) || !/LISTENING/i.test(line)) continue;
+          const parts = line.trim().split(/\s+/);
+          const pid = parts[parts.length - 1];
+          if (/^\d+$/.test(pid) && pid !== '0') pids.add(Number(pid));
+        }
+        resolve([...pids]);
+      });
+    } catch (e) { resolve([]); }
+  });
+}
+
+function getProcessCmdline(pid) {
+  // 💡 用 wmic 取命令行最简单（没有引号转义地狱），新系统没有 wmic 时退回 PowerShell -EncodedCommand
+  return new Promise((resolve) => {
+    const cp = require('child_process');
+    const tryWmic = () => {
+      cp.exec(`wmic process where processid=${pid} get CommandLine /value`, { windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+        if (!err && stdout && /CommandLine=/i.test(stdout)) {
+          const line = String(stdout).split('\r\n').find((l) => /^CommandLine=/i.test(l.trim()));
+          return resolve(line ? line.replace(/^CommandLine=/i, '').trim() : String(stdout).trim());
+        }
+        tryPowerShell();
+      });
+    };
+    const tryPowerShell = () => {
+      try {
+        const script = `[Console]::OutputEncoding=[Text.Encoding]::UTF8; $p = Get-CimInstance Win32_Process -Filter "ProcessId=${pid}"; if ($p) { $p.CommandLine }`;
+        const b64 = Buffer.from(script, 'utf16le').toString('base64');
+        cp.exec(`powershell -NoProfile -NonInteractive -EncodedCommand ${b64}`, { windowsHide: true, maxBuffer: 1024 * 1024 }, (err, stdout) => {
+          if (err || !stdout) return resolve('');
+          resolve(String(stdout).trim());
+        });
+      } catch (e) { resolve(''); }
+    };
+    tryWmic();
+  });
+}
+
+// 结束「跑 server.js 的其它 node 进程」；返回被杀掉的 PID 列表
+async function killStaleServerProcesses() {
+  if (process.platform !== 'win32') return [];
+  const killed = [];
+  const pids = await listPidsOnPort(3001);
+  for (const pid of pids) {
+    if (pid === process.pid) continue;
+    const info = await getProcessCmdline(pid);
+    if (!info) continue;
+    const lower = info.toLowerCase();
+    if (!lower.includes('node')) continue;
+    if (!lower.includes('server.js')) continue;
+    await new Promise((resolve) => {
+      require('child_process').exec(`taskkill /F /PID ${pid}`, { windowsHide: true }, (err) => {
+        if (!err) {
+          killed.push(pid);
+          console.log(`[cleanup] 已结束残留进程 PID=${pid}`);
+        }
+        resolve();
+      });
+    });
+  }
+  if (killed.length) {
+    // 等端口真正释放，最多 3 秒
+    for (let i = 0; i < 6; i++) {
+      await new Promise((r) => setTimeout(r, 500));
+      const left = await listPidsOnPort(3001);
+      if (!left.some((x) => x !== process.pid)) break;
+    }
+  }
+  return killed;
+}
+
 function listenWithRetry(port, retries = 60) {
   // 💡 防火墙：仅本机绑 127.0.0.1；对外开放绑 '::'（双栈，IPv4 与 IPv6 都能连）
   //    校园网经常只有 IPv6，绑 0.0.0.0 的话手机就连不上
   const bindHost = firewallConfig.localOnly ? '127.0.0.1' : '::';
   const server = app.listen(port, bindHost);
   server.once('listening', () => { onListening(); });
-  server.once('error', (err) => {
+  server.once('error', async (err) => {
     if (err && err.code === 'EADDRINUSE' && retries > 0) {
+      // 💡 第一次遇到占用时先清理旧实例，避免"永远是老代码在服务"
+      if (retries === 60) {
+        console.log('[boot] 端口被占用，尝试结束残留的旧进程…');
+        const killed = await killStaleServerProcesses();
+        if (killed.length) console.log('[boot] 已清理 ' + killed.length + ' 个旧进程');
+      }
       setTimeout(() => listenWithRetry(port, retries - 1), 500);
       return;
     }

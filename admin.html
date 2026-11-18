@@ -812,6 +812,14 @@
               '<br><br>确定要重启吗？',
             callback: async () => {
               try {
+                // 💡 先清掉可能残留的旧进程，否则重启了也还是老代码在服务
+                try {
+                  await fetch(`${API_BASE}/system/kill-stale`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: '{}'
+                  });
+                } catch (e) { /* 老后端没有这个接口，忽略 */ }
                 await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
                 openModal({
                   type: 'confirm',

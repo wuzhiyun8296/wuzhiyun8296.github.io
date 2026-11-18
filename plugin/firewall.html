@@ -520,6 +520,11 @@
         // 🔄 重启后台（用于"接口 404，需要重启才能生效"的情况）
         const restartBackendAndReload = async () => {
           try {
+            await fetch(`${API_BASE}/system/kill-stale`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}'
+            });
+          } catch (e) { /* 老后端没有这个接口，忽略 */ }
+          try {
             await fetch(`${API_BASE}/update/restart?t=${Date.now()}`, { cache: 'no-store' });
           } catch (e) { /* 重启时连接会断，忽略 */ }
           showToast('正在重启后台，约 5 秒后自动刷新');

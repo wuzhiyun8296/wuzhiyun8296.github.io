@@ -6,15 +6,16 @@ import { fileURLToPath } from 'url'
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
 // 💡 读防火墙配置决定前台监听哪张网卡
+//    ⚠️ 拿不到配置时一律按「仅本机」处理：默认关闭手机访问
 function readLanHost() {
   try {
     const cfgPath = path.resolve(__dirname, '../../firewall-config.json')
-    if (!fs.existsSync(cfgPath)) return '0.0.0.0'
+    if (!fs.existsSync(cfgPath)) return '127.0.0.1'
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'))
-    // 对外开放时用 '::' 双栈，IPv6 校园网也能访问
-    return cfg.localOnly === true ? '127.0.0.1' : '::'
+    // 只有明确写了 localOnly: false 才对外开放；对外开放用 '::' 双栈
+    return cfg.localOnly === false ? '::' : '127.0.0.1'
   } catch (e) {
-    return '0.0.0.0'
+    return '127.0.0.1'
   }
 }
 
