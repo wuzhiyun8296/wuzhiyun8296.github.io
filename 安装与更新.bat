@@ -459,6 +459,11 @@ for %%N in (start.vbs start.bat loading.html icon3.ico) do (
   if not exist "!TGL!\%%N" call :FETCH "%%N" "!TGL!\%%N"
 )
 
+rem 仓库里存的是 LF，Windows 的 bat/vbs 必须是 CRLF，否则双击会一闪就退
+for %%N in (start.bat start.vbs) do (
+  if exist "!TGL!\%%N" powershell -NoProfile -ExecutionPolicy Bypass -Command "$p='!TGL!\%%N'; $b=[IO.File]::ReadAllBytes($p); $o=New-Object System.Collections.Generic.List[byte]; for($i=0;$i -lt $b.Length;$i++){ if($b[$i] -eq 10 -and ($i -eq 0 -or $b[$i-1] -ne 13)){ $o.Add(13) }; $o.Add($b[$i]) }; [IO.File]::WriteAllBytes($p,$o.ToArray())" >nul 2>nul
+)
+
 rem 启动脚本：只下载 ASCII 名的 start.vbs，再复制成「一键启动.vbs」
 if exist "!TGL!\start.vbs" (
   copy /y "!TGL!\start.vbs" "!TGL!\一键启动.vbs" >nul 2>nul

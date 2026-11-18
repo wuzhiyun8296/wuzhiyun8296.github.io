@@ -1,7 +1,7 @@
 {
-  "version": "20261118-144937",
+  "version": "20261118-145436",
   "count": 50,
-  "totalBytes": 706272,
+  "totalBytes": 707456,
   "files": [
     {
       "path": "admin.html",
@@ -115,8 +115,8 @@
     },
     {
       "path": "server.js",
-      "size": 143101,
-      "sha256": "3f6aa4b198e6ca6c83ef6e8a2da902771a0f1cd70d6c652b7b82fd25e6e1eb1b"
+      "size": 143818,
+      "sha256": "51e0e9648a917533fa1584f26da2fda65548b7ebe35c284b4b26b57319170983"
     },
     {
       "path": "start.bat",
@@ -136,7 +136,7 @@
     {
       "path": "version.json",
       "size": 170,
-      "sha256": "fdbe4a6db5afe03352ad3abd4554de98b1202cd9438637e5de5c266f36fb4b49"
+      "sha256": "7ddff819ee353ae32a69c256e2a5245a8c1d53ba03b6ef74b97862af8e6b076a"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -245,8 +245,8 @@
     },
     {
       "path": "安装与更新.bat",
-      "size": 20307,
-      "sha256": "5ad6adebffe1269051829cacbd0b319f738fbb39f0e30136e3a8581cec3f45c8",
+      "size": 20774,
+      "sha256": "d4524045c139a128b677695aa0ddb7cb26b8c41d0134e54e03472100b63bf60a",
       "optional": true
     },
     {

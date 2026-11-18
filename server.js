@@ -1266,6 +1266,22 @@ function normalizeEol(buf) {
   return out.subarray(0, n);
 }
 
+// 💡 Windows 的 .bat / .cmd / .vbs 必须是 CRLF 换行，否则 cmd 解析 label/goto 会出错，
+//    表现为「双击黑窗口一闪就没了」。仓库里存的是 LF，下载后要转回来。
+function toCrlf(buf) {
+  if (!buf || buf.length === 0) return buf;
+  const parts = [];
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0a && (i === 0 || buf[i - 1] !== 0x0d)) parts.push(0x0d);
+    parts.push(buf[i]);
+  }
+  return Buffer.from(parts);
+}
+
+function needsCrlf(rel) {
+  return /\.(bat|cmd|vbs|ps1)$/i.test(String(rel || ''));
+}
+
 function hashFile(buf) {
   return crypto.createHash('sha256').update(normalizeEol(buf)).digest('hex');
 }
@@ -2836,7 +2852,8 @@ async function applyRawUpdate(sources) {
             }
           });
           if (!buf || !buf.length) throw new Error('空文件');
-          await fs.outputFile(path.join(__dirname, rel), buf);
+          const outBuf = needsCrlf(rel) ? toCrlf(buf) : buf;
+          await fs.outputFile(path.join(__dirname, rel), outBuf);
           updateJobSet({ bytesDone: (updateJob.bytesDone || 0) + buf.length });
           ok = true;
           break;
@@ -3070,6 +3087,7 @@ async function runUpdateFlow() {
       /* 读取失败不影响判定 */
     }
   }
+  versionCache = { at: 0, data: null };   // 清缓存：下次查版本会重新读远端
   updateJobSet({ stage: 'record' });
   updateJobLog('正在记录版本信息…');
   const updated = [];
