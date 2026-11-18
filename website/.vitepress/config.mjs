@@ -5,6 +5,18 @@ import { fileURLToPath } from 'url'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
 
+// 💡 读防火墙配置决定前台监听哪张网卡
+function readLanHost() {
+  try {
+    const cfgPath = path.resolve(__dirname, '../../firewall-config.json')
+    if (!fs.existsSync(cfgPath)) return '0.0.0.0'
+    const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'))
+    return cfg.localOnly === true ? '127.0.0.1' : '0.0.0.0'
+  } catch (e) {
+    return '0.0.0.0'
+  }
+}
+
 function getSidebarItems(dir) {
   let items = []
   if (!fs.existsSync(dir)) return items
@@ -84,7 +96,11 @@ export default defineConfig({
     ['link', { rel: 'stylesheet', href: '/fonts.css' }],
     ['link', { rel: 'icon', type: 'image/png', href: '/favicon.png' }]
   ],
-  vite: { resolve: { alias: { '@theme': path.resolve(__dirname, './theme') } } },
+  vite: {
+    // 💡 前台监听地址跟随「防火墙」设置：仅本机 → 127.0.0.1，允许局域网 → 0.0.0.0
+    server: { host: readLanHost() },
+    resolve: { alias: { '@theme': path.resolve(__dirname, './theme') } }
+  },
   markdown: { config: (md) => { md.use(wikiLinkPlugin) } },
   themeConfig: {
     nav: [

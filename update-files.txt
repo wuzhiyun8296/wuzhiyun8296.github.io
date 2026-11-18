@@ -1,12 +1,14 @@
 admin.html
 icon3.ico
 loading.html
+login.html
 package.json
 plugin/audit.html
 plugin/characters.html
 plugin/dashboard.html
 plugin/epoch-map.html
 plugin/finance.html
+plugin/firewall.html
 plugin/github.html
 plugin/graph.html
 plugin/history.html

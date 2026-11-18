@@ -1,5 +1,7 @@
 node_modules/
 git-config.json
+firewall-config.json
+__restart_launch.vbs
 .git/
 website/node_modules/
 website/.vitepress/cache/

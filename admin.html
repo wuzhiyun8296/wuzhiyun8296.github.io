@@ -2,6 +2,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
   <title>世界观 - 本地编辑后台</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <script src="https://cdn.bootcdn.net/ajax/libs/marked/12.0.1/marked.min.js"></script>
@@ -64,7 +65,28 @@
     .nav-btn { padding: 0 15px; height: 100%; background: none; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; flex-shrink: 0; }
     .nav-btn:hover { color: #fff; background: #2d2d2d; }
     .nav-btn.active { color: #fff; border-bottom-color: #0e639c; background: #1e1e1e; }
-    .nav-actions { display: flex; gap: 10px; padding: 0 15px; flex-shrink: 0; background: #252526; border-left: 1px solid #333; height: 100%; align-items: center; z-index: 10; box-shadow: -10px 0 15px -5px rgba(0,0,0,0.5);}
+    .tool-menu-wrap { position: relative; }
+  .tool-menu {
+    position: absolute; top: calc(100% + 8px); right: 0; z-index: 50;
+    min-width: 250px; padding: 6px; border-radius: 10px;
+    background: #252526; border: 1px solid #3a3a3a;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, .45);
+    display: flex; flex-direction: column; gap: 2px;
+  }
+  .tool-item {
+    display: flex; align-items: flex-start; gap: 10px; width: 100%;
+    padding: 10px 12px; border: none; border-radius: 8px;
+    background: transparent; color: #ddd; cursor: pointer;
+    text-align: left; transition: background .15s;
+  }
+  .tool-item:hover:not(:disabled) { background: #2f2f2f; }
+  .tool-item:disabled { opacity: .5; cursor: not-allowed; }
+  .tool-item .ti-icon { font-size: 16px; line-height: 1.2; }
+  .tool-item .ti-text { display: flex; flex-direction: column; gap: 2px; }
+  .tool-item .ti-text b { font-size: 13px; font-weight: 600; color: #eee; }
+  .tool-item .ti-text i { font-style: normal; font-size: 11.5px; color: #888; }
+
+  .nav-actions { display: flex; gap: 10px; padding: 0 15px; flex-shrink: 0; background: #252526; border-left: 1px solid #333; height: 100%; align-items: center; z-index: 10; box-shadow: -10px 0 15px -5px rgba(0,0,0,0.5);}
     .action-btn { background: transparent; border: 1px solid #444; color: #888; padding: 6px 12px; border-radius: 4px; cursor: pointer; transition: all 0.2s; font-weight: bold; font-size: 13px; white-space: nowrap;}
     .action-btn:hover { background: #444; color: #fff; }
     .action-btn.danger { background: #a82626; border-color: #a82626; color: #fff; }
@@ -162,7 +184,136 @@
       border-radius: 6px;
       transition: width .25s ease;
     }
-  </style>
+  
+  /* ---------- 📱 手机端：导航换行显示，不用横向滑 ---------- */
+  @media (max-width: 760px) {
+    .top-nav {
+      height: auto; flex-direction: column; align-items: stretch;
+    }
+    .nav-group {
+      flex-wrap: wrap; overflow-x: visible; gap: 6px;
+      padding: 8px; height: auto;
+    }
+    .nav-group::-webkit-scrollbar { display: none; }
+    .nav-group {
+      align-items: flex-start; overflow-x: hidden;
+      gap: 4px; padding: 6px 8px 8px;
+    }
+    .top-nav { overflow-x: hidden; }
+    .nav-btn {
+      flex-shrink: 0; height: auto; line-height: 1.25;
+      padding: 7px 9px; font-size: 12.5px;
+      border-radius: 8px; background: #2a2a2a;
+      border-bottom: none; white-space: nowrap;
+    }
+    .nav-btn.active { background: #0e639c; }
+    .nav-actions {
+      height: auto; padding: 6px 8px; gap: 6px; flex-wrap: nowrap;
+      overflow-x: auto; border-left: none; border-top: 1px solid #333;
+      justify-content: flex-start; box-shadow: none;
+      scrollbar-width: none;
+    }
+    .nav-actions::-webkit-scrollbar { display: none; }
+    .nav-actions .action-btn {
+      padding: 7px 10px; font-size: 12.5px; white-space: nowrap; flex-shrink: 0;
+    }
+    .plugin-container, .plugin-container iframe { width: 100%; }
+    .main-container { flex-direction: column; }
+    #sidebar {
+      width: 100% !important; max-height: 38vh; border-right: none;
+      border-bottom: 1px solid #333;
+    }
+    .login-card { width: calc(100vw - 32px) !important; padding: 24px 20px !important; }
+    .custom-modal-box { width: calc(100vw - 32px) !important; }
+  }
+
+  /* ---------- 📱 手机端：抽屉式插件选择 ---------- */
+  /* 桌面端默认全部隐藏，只有手机端媒体查询里才显示 */
+  .m-bar, .m-mask, .m-drawer { display: none !important; }
+
+  @media (max-width: 760px) {
+    /* 隐藏原来的横向导航，改用抽屉 */
+    .top-nav { display: none; }
+
+    .m-bar {
+      display: flex !important; align-items: center; gap: 10px;
+      height: 50px; padding: 0 10px 0 6px;
+      background: #232326; border-bottom: 1px solid #333;
+      flex-shrink: 0;
+    }
+    .m-menu, .m-tool {
+      width: 40px; height: 40px; flex-shrink: 0;
+      display: flex; align-items: center; justify-content: center;
+      background: #2c2c30; border: 1px solid #3a3a3a; border-radius: 10px;
+      color: #ddd; font-size: 17px; cursor: pointer;
+      -webkit-tap-highlight-color: transparent;
+    }
+    .m-menu:active, .m-tool:active { background: #35353a; }
+    .m-title {
+      flex: 1; min-width: 0; text-align: center;
+      font-size: 14.5px; color: #eee; font-weight: 600;
+      white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+    }
+
+    .m-mask {
+      display: block !important; position: fixed; inset: 0; z-index: 90;
+      background: rgba(0, 0, 0, .55); opacity: 0; pointer-events: none;
+      transition: opacity .22s;
+    }
+    .m-mask.show { opacity: 1; pointer-events: auto; }
+
+    .m-drawer {
+      display: flex !important;
+      position: fixed; top: 0; left: 0; bottom: 0; z-index: 91;
+      width: 78vw; max-width: 300px;
+      background: #1f1f22; border-right: 1px solid #333;
+      display: flex; flex-direction: column;
+      transform: translateX(-102%); transition: transform .24s ease;
+      box-shadow: 12px 0 32px rgba(0, 0, 0, .5);
+    }
+    .m-drawer.open { transform: translateX(0); }
+
+    .m-drawer-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 16px 12px; color: #ddd; font-size: 15px; font-weight: 600;
+      border-bottom: 1px solid #2e2e2e; flex-shrink: 0;
+    }
+    .m-close {
+      width: 32px; height: 32px; border: none; border-radius: 8px;
+      background: transparent; color: #888; font-size: 16px; cursor: pointer;
+    }
+    .m-close:active { background: #2c2c30; }
+
+    .m-drawer-list {
+      flex: 1; overflow-y: auto; padding: 8px;
+      display: flex; flex-direction: column; gap: 2px;
+    }
+    .m-item {
+      display: block; width: 100%; box-sizing: border-box; text-align: left;
+      padding: 13px 14px; border: none; border-radius: 10px;
+      background: transparent; color: #ccc; font-size: 14.5px; line-height: 1.45;
+      cursor: pointer; white-space: normal; overflow: visible; text-overflow: clip;
+      word-break: break-word;
+    }
+    .m-item:active { background: #2c2c30; }
+    .m-item.active { background: #0e639c; color: #fff; font-weight: 600; }
+
+    .m-drawer-foot {
+      flex-shrink: 0; padding: 10px; border-top: 1px solid #2e2e2e;
+      display: flex; flex-wrap: wrap; gap: 8px;
+    }
+    .m-act {
+      flex: 1; min-width: 84px; padding: 10px 8px;
+      border-radius: 10px; border: 1px solid #3a3a3a;
+      background: #26262a; color: #ddd; font-size: 13px; cursor: pointer;
+    }
+    .m-act:active { background: #303036; }
+    .m-act.danger { color: #e88; border-color: #5a2a2a; background: rgba(168, 38, 38, .18); }
+
+    /* 内容区上不留多余空白 */
+    .main-container { padding: 0; }
+  }
+</style>
 </head>
 <body>
   <div id="app">
@@ -217,6 +368,42 @@
 
     <!-- ================= 主界面 ================= -->
     <div class="main-ui" :class="{ hidden: !isAuthenticated }">
+
+      <!-- 📱 手机端：一行顶栏 + 侧边抽屉 -->
+      <div class="m-bar">
+        <button class="m-menu" @click="navDrawer = true" aria-label="选择插件">☰</button>
+        <span class="m-title">{{ currentTitle }}</span>
+        <button class="m-tool" @click="toggleTools" aria-label="工具">🧰</button>
+      </div>
+
+      <div class="m-mask" :class="{ show: navDrawer }" @click="navDrawer = false"></div>
+      <aside class="m-drawer" :class="{ open: navDrawer }">
+        <div class="m-drawer-head">
+          <span>📚 插件</span>
+          <button class="m-close" @click="navDrawer = false">✕</button>
+        </div>
+        <div class="m-drawer-list">
+          <button
+            class="m-item"
+            :class="{ active: currentTab === 'dashboard' }"
+            @click="goTab('dashboard')"
+          >📊 仪表盘</button>
+          <button
+            v-for="p in dynamicPlugins"
+            :key="p.id"
+            v-show="p.id !== 'dashboard'"
+            class="m-item"
+            :class="{ active: currentTab === p.id }"
+            @click="goTab(p.id)"
+          >{{ p.icon || '🧩' }} {{ p.name }}</button>
+        </div>
+        <div class="m-drawer-foot">
+          <button class="m-act" @click="navDrawer = false; checkUpdate()" :disabled="isCheckingUpdate">🔄 检测更新</button>
+          <button class="m-act" @click="navDrawer = false; changePassword()">🔐 改密</button>
+          <button class="m-act danger" @click="navDrawer = false; logout()">退出登录</button>
+        </div>
+      </aside>
+
       <div class="top-nav">
         <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
         <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
@@ -238,7 +425,19 @@
         
         <div class="nav-actions">
           <button class="action-btn" @click="checkUpdate">🔄 检测更新</button>
-          <button class="action-btn" @click="repairFiles" :disabled="isCheckingUpdate">🔧 修复文件</button>
+          <div class="tool-menu-wrap" ref="toolRef">
+            <button class="action-btn" @click="toggleTools" :disabled="isCheckingUpdate">🧰 工具 ▾</button>
+            <div class="tool-menu" v-show="toolsOpen">
+              <button class="tool-item" @click="pickTool('repair')" :disabled="isCheckingUpdate">
+                <span class="ti-icon">🔧</span>
+                <span class="ti-text"><b>修复文件</b><i>重新下载缺失或损坏的文件</i></span>
+              </button>
+              <button class="tool-item" @click="pickTool('restart')">
+                <span class="ti-icon">♻️</span>
+                <span class="ti-text"><b>重启后台</b><i>让改过的代码立刻生效</i></span>
+              </button>
+            </div>
+          </div>
           <button class="action-btn" @click="changePassword">🔐 改密</button>
           <button class="action-btn danger" @click="logout">退出登录</button>
         </div>
@@ -285,7 +484,7 @@
         </template>
 
         <div class="plugin-container" v-else>
-          <iframe :src="`plugin/${currentTab}.html`"></iframe>
+          <iframe :src="pluginSrc"></iframe>
         </div>
       </div>
 
@@ -316,7 +515,10 @@
 
   <script>
     const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
-    const API_BASE = 'http://localhost:3001/api';
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
 
     const TreeNode = {
       name: 'TreeNode', 
@@ -581,6 +783,52 @@
         };
         // 🔧 修复文件：不做版本判定，直接把本地和远端清单比对，
         //    缺失/损坏的文件重新下载（比如 .bat 变成 LF 导致闪退）
+        // ---------- 🧰 工具菜单 ----------
+        const toolsOpen = ref(false);
+        const toolRef = ref(null);
+        const toggleTools = () => { toolsOpen.value = !toolsOpen.value; };
+        const closeTools = () => { toolsOpen.value = false; };
+
+        const pickTool = (kind) => {
+          closeTools();
+          if (kind === 'repair') return repairFiles();
+          if (kind === 'restart') return restartBackend();
+        };
+
+        // 点空白处关闭菜单
+        const onDocClick = (e) => {
+          if (!toolsOpen.value) return;
+          const el = toolRef.value;
+          if (el && !el.contains(e.target)) closeTools();
+        };
+
+        // ♻️ 重启后台
+        const restartBackend = async () => {
+          openModal({
+            type: 'confirm',
+            title: '♻️ 重启后台',
+            message: '会重启本地 Node 服务（约 3-5 秒）。<br><br>' +
+              '<span style="color:#e0a030;">重启期间页面会短暂打不开</span>，重启完成后页面会自动刷新。' +
+              '<br><br>确定要重启吗？',
+            callback: async () => {
+              try {
+                await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
+                openModal({
+                  type: 'confirm',
+                  title: '♻️ 正在重启',
+                  message: '正在重启后台服务，请稍候…',
+                  loading: true,
+                  hideActions: true
+                });
+                await waitForServerBack();
+                window.location.reload();
+              } catch (e) {
+                openModal({ type: 'confirm', title: '❌ 重启失败', message: e.message, isDanger: true });
+              }
+            }
+          });
+        };
+
         // 🔧 修复文件：先弹确认（会覆盖本地未推送的改动），确认后才执行
         const repairFiles = () => {
           if (isCheckingUpdate.value) return;
@@ -683,6 +931,32 @@
         };
 
         const currentTab = ref('dashboard');
+        const navDrawer = ref(false);
+
+        // 💡 抽屉里点插件：切过去并关掉抽屉
+        const goTab = (id) => {
+          currentTab.value = id;
+          navDrawer.value = false;
+        };
+
+        // 💡 手机端有手机版页面就用手机版，否则用原页面
+        const isPhoneView = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent || '') || window.innerWidth < 760;
+        const pluginSrc = computed(() => {
+          const id = currentTab.value;
+          if (isPhoneView) {
+            const hit = (dynamicPlugins.value || []).find((p) => p.id === id);
+            // 💡 只有真的存在 xxx.mobile.html 才跳转，否则会 404
+            if (hit && hit.mobileFile) return `plugin/${id}.mobile.html`;
+          }
+          return `plugin/${id}.html`;
+        });
+
+        // 顶栏显示当前插件名
+        const currentTitle = computed(() => {
+          if (currentTab.value === 'dashboard') return '仪表盘';
+          const hit = (dynamicPlugins.value || []).find((p) => p.id === currentTab.value);
+          return hit ? hit.name : (currentTab.value === 'article' ? '文章编辑' : currentTab.value);
+        });
         const tree = ref([]); const content = ref(''); const currentPath = ref(''); const selectedFolder = ref('');
 
         const renderedHtml = computed(() => {
@@ -831,6 +1105,18 @@
         };
 
         onMounted(() => {
+          // 💡 手机访问且未登录 → 使用专门的手机版准入页面
+          const ua = navigator.userAgent || '';
+          // ?mobile=1 可强制走手机登录页（方便在电脑上预览/测试）
+          const forceMobile = new URLSearchParams(location.search).get('mobile') === '1';
+          const isPhone = forceMobile || /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(ua) || window.innerWidth < 760;
+          const logged = sessionStorage.getItem('admin_auth') === 'true';
+          if (isPhone && !logged) {
+            location.replace('/login.html');
+            return;
+          }
+
+          document.addEventListener('click', onDocClick);
           if (sessionStorage.getItem('admin_auth') === 'true') { isAuthenticated.value = true; }
           fetchTree(); 
           window.addEventListener('keydown', handleKeydown);
@@ -847,6 +1133,7 @@
         });
         
         onUnmounted(() => {
+          document.removeEventListener('click', onDocClick);
           window.removeEventListener('keydown', handleKeydown);
           window.removeEventListener('message', handleIframeMessage);
         });
@@ -858,7 +1145,7 @@
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
           navGroupRef, handleNavWheel,
-          dynamicPlugins, checkUpdate, repairFiles, doRepair
+          dynamicPlugins, checkUpdate, repairFiles, doRepair, toolsOpen, toolRef, toggleTools, pickTool, restartBackend, navDrawer, goTab, currentTitle, pluginSrc
         };
       }
     });

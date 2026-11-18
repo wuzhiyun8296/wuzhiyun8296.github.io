@@ -1,0 +1,436 @@
+<!DOCTYPE html>
+<!-- 文件路径: plugin/firewall.html -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>防火墙</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    /* ---------- 全局暗色细滚动条 ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3c3c3c; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; background: #1e1e1e; color: #ccc;
+      font-family: 'Segoe UI', Tahoma, 'Microsoft YaHei', sans-serif;
+      overflow-y: auto;
+    }
+    html, body { overflow-x: hidden; }
+    .wrap { max-width: 880px; margin: 0 auto; padding: 28px 20px 60px; display: flex; flex-direction: column; gap: 18px; }
+    .wrap > * { flex-shrink: 0; }
+
+    .head h1 { margin: 0 0 8px; font-size: 24px; color: #fff; display: flex; align-items: center; gap: 10px; }
+    .head p { margin: 0; font-size: 13.5px; color: #8a8a8a; }
+
+    .card { background: #252526; border: 1px solid #333; border-radius: 10px; overflow: hidden; }
+    .card-head {
+      padding: 14px 18px; background: #2a2a2a; border-bottom: 1px solid #333;
+      display: flex; align-items: center; justify-content: space-between; gap: 12px;
+    }
+    .card-head h2 { margin: 0; font-size: 15px; color: #eee; font-weight: 600; }
+    .card-body { padding: 18px; }
+
+    /* ---------- 状态 ---------- */
+    .status-row { display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px dashed #333; }
+    .status-row:last-child { border-bottom: none; }
+    .status-label { width: 130px; flex-shrink: 0; font-size: 13px; color: #8a8a8a; }
+    .status-value { font-size: 13.5px; color: #ddd; font-family: Consolas, monospace; word-break: break-all; }
+    .pill {
+      display: inline-flex; align-items: center; gap: 6px; padding: 3px 10px;
+      border-radius: 999px; font-size: 12px; font-weight: 600;
+    }
+    .pill.safe { color: #4ec9b0; background: rgba(78, 201, 176, .12); border: 1px solid rgba(78, 201, 176, .35); }
+    .pill.warn { color: #d29922; background: rgba(210, 153, 34, .12); border: 1px solid rgba(210, 153, 34, .35); }
+
+    /* ---------- 开关 ---------- */
+    .switch-row {
+      display: flex; align-items: flex-start; gap: 14px;
+      padding: 16px; border-radius: 10px; background: #1e1e1e; border: 1px solid #333;
+      margin-bottom: 14px;
+    }
+    .switch-row:last-child { margin-bottom: 0; }
+    .switch-row.danger { border-color: #5a3a1e; background: rgba(210, 153, 34, .05); }
+    .switch-text { flex: 1; }
+    .switch-text b { display: block; font-size: 14px; color: #eee; margin-bottom: 4px; font-weight: 600; }
+    .switch-text span { font-size: 12.5px; color: #8a8a8a; line-height: 1.6; }
+    .toggle {
+      position: relative; width: 46px; height: 26px; border-radius: 13px; flex-shrink: 0;
+      background: #3a3a3a; border: 1px solid #444; cursor: pointer; transition: background .2s, border-color .2s;
+    }
+    .toggle::after {
+      content: ''; position: absolute; top: 2px; left: 2px; width: 20px; height: 20px;
+      border-radius: 50%; background: #999; transition: transform .2s, background .2s;
+    }
+    .toggle.on { background: rgba(46, 160, 67, .35); border-color: #2ea043; }
+    .toggle.on::after { transform: translateX(20px); background: #3fb950; }
+    .toggle.busy { opacity: .5; pointer-events: none; }
+
+    /* ---------- 日志 ---------- */
+    .log-wrap { max-height: 420px; overflow-y: auto; font-family: Consolas, monospace; font-size: 12.5px; }
+    .log-item {
+      display: grid; grid-template-columns: 80px 130px 60px 1fr; gap: 10px;
+      padding: 7px 4px; border-bottom: 1px solid #2a2a2a; color: #999;
+    }
+    .log-item .t { color: #6b7280; }
+    .log-item .ip { color: #7fc4ee; }
+    .log-item .m { color: #4ec9b0; }
+    .log-item .p { color: #ccc; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+    .log-empty { text-align: center; color: #666; padding: 30px 0; font-size: 13px; font-family: inherit; }
+
+    .lan-row { display: flex; align-items: center; gap: 12px; padding: 10px 0; border-bottom: 1px dashed #333; }
+    .lan-row:last-of-type { border-bottom: none; }
+    .lan-label { width: 130px; flex-shrink: 0; font-size: 13px; color: #8a8a8a; }
+    .lan-url { flex: 1; display: flex; align-items: center; gap: 10px; min-width: 0; }
+    .lan-url code {
+      flex: 1; font-family: Consolas, monospace; font-size: 13px; color: #7fc4ee;
+      background: #1a1a1a; border: 1px solid #333; border-radius: 6px;
+      padding: 7px 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+    }
+    .lan-url.off code { color: #666; }
+    .lan-actions { margin-top: 14px; }
+    .btn.tiny { padding: 5px 10px; font-size: 12px; }
+
+    .btn {
+      padding: 8px 16px; border-radius: 8px; border: 1px solid #444; background: #2d2d2d;
+      color: #ddd; font-size: 13px; cursor: pointer; transition: .15s;
+    }
+    .btn:hover { background: #383838; border-color: #555; }
+    .btn.primary { background: #0e639c; border-color: #0e639c; color: #fff; }
+    .btn.primary:hover { background: #1177bb; }
+    .btn.danger { color: #e06c75; border-color: #5a2a2a; background: rgba(224, 108, 117, .08); }
+    .btn.danger:hover { background: rgba(224, 108, 117, .18); }
+
+    .hint {
+      margin-top: 12px; padding: 10px 12px; border-radius: 8px; font-size: 12.5px; line-height: 1.7;
+      background: rgba(14, 99, 156, .1); border: 1px solid rgba(14, 99, 156, .3); color: #9ecbe8;
+    }
+    .hint.warn { background: rgba(210, 153, 34, .08); border-color: rgba(210, 153, 34, .3); color: #e0b464; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 30px; transform: translateX(-50%);
+      background: #2d2d2d; border: 1px solid #444; color: #eee; padding: 10px 20px;
+      border-radius: 8px; font-size: 13px; opacity: 0; pointer-events: none; transition: opacity .25s;
+      z-index: 999;
+    }
+    .toast.show { opacity: 1; }
+    .toast.error { border-color: #a82626; color: #ffb3b3; }
+  </style>
+</head>
+<body>
+  <div id="app" class="wrap">
+    <div class="head">
+      <h1>🛡️ 防火墙</h1>
+      <p>控制谁能访问这台电脑上的写作系统。改动会在<b>重启后台</b>后生效。</p>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>当前状态</h2>
+        <span class="pill" :class="cfg.localOnly ? 'safe' : 'warn'">
+          {{ cfg.localOnly ? '🔒 仅本机可访问' : '🌐 局域网可见' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="status-row">
+          <div class="status-label">监听地址</div>
+          <div class="status-value">{{ cfg.listening || '读取中…' }}</div>
+        </div>
+        <div class="status-row">
+          <div class="status-label">端口</div>
+          <div class="status-value">{{ cfg.port || 3001 }}</div>
+        </div>
+        <div class="status-row">
+          <div class="status-label">本机局域网 IP</div>
+          <div class="status-value">
+            <template v-if="cfg.lanIps && cfg.lanIps.length">
+              <span v-for="ip in cfg.lanIps" :key="ip">{{ ip }}　</span>
+            </template>
+            <template v-else>未检测到（可能没连网络）</template>
+          </div>
+        </div>
+        <div class="status-row">
+          <div class="status-label">跨域来源</div>
+          <div class="status-value">{{ cfg.strictCors ? '仅允许本机页面' : '允许任意网站（不推荐）' }}</div>
+        </div>
+        <div class="status-row">
+          <div class="status-label">访问记录</div>
+          <div class="status-value">{{ cfg.logRequests ? '已开启' : '已关闭' }}</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>📱 手机访问</h2>
+        <span class="pill" :class="lan.backendPublic && lan.frontPublic ? 'safe' : 'warn'">
+          {{ lan.backendPublic && lan.frontPublic ? '已开放' : '仅本机' }}
+        </span>
+      </div>
+      <div class="card-body">
+        <div class="lan-row">
+          <div class="lan-label">后台（写作系统）</div>
+          <div class="lan-url" :class="{ off: !lan.backendPublic }">
+            <code>{{ lan.backendUrl || '未检测到局域网 IP' }}</code>
+            <button class="btn tiny" v-if="lan.backendPublic && lan.backendUrl" @click="copy(lan.backendUrl)">复制</button>
+          </div>
+        </div>
+        <div class="lan-row">
+          <div class="lan-label">前台（小说站点）</div>
+          <div class="lan-url" :class="{ off: !lan.frontPublic }">
+            <code>{{ lan.frontUrl || '未检测到局域网 IP' }}</code>
+            <button class="btn tiny" v-if="lan.frontPublic && lan.frontUrl" @click="copy(lan.frontUrl)">复制</button>
+          </div>
+        </div>
+
+        <div class="lan-actions">
+          <button
+            v-if="lanBusy"
+            class="btn primary"
+            disabled
+          >⏳ {{ lanBusyText }}</button>
+          <button
+            v-else-if="lanOpen"
+            class="btn danger"
+            @click="setLan(false)"
+          >🔒 关闭手机访问</button>
+          <button
+            v-else
+            class="btn primary"
+            @click="setLan(true)"
+          >📱 开启手机访问</button>
+        </div>
+
+        <div class="hint">
+          💡 手机和电脑要连<b>同一个 Wi-Fi</b>。开启后会重启前后台（约 10 秒），之后用上面的网址访问。<br>
+          <span style="color:#8a8a8a;">关闭后只有这台电脑能访问，最安全。</span>
+        </div>
+        <div class="hint warn" v-if="lanBusy">
+          ⏳ 正在重启服务，请稍候…页面会自动刷新。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head"><h2>访问限制</h2></div>
+      <div class="card-body">
+        <div class="switch-row danger">
+          <div class="switch-text">
+            <b>仅允许本机访问</b>
+            <span>开启后只监听 <code>127.0.0.1</code>，同一 Wi-Fi 下的其他设备、手机都连不上这台电脑的服务。<br>代价：手机/平板访问前台会失效。</span>
+          </div>
+          <div class="toggle" :class="{ on: cfg.localOnly, busy: saving }" @click="toggle('localOnly')"></div>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-text">
+            <b>限制跨域来源</b>
+            <span>只允许来自本机页面的请求，防止你随手打开的陌生网页偷偷读取本地数据（推荐保持开启）。</span>
+          </div>
+          <div class="toggle" :class="{ on: cfg.strictCors, busy: saving }" @click="toggle('strictCors')"></div>
+        </div>
+
+        <div class="switch-row">
+          <div class="switch-text">
+            <b>记录访问日志</b>
+            <span>在内存里保留最近 200 次接口调用（IP / 时间 / 路径），重启后清空。</span>
+          </div>
+          <div class="toggle" :class="{ on: cfg.logRequests, busy: saving }" @click="toggle('logRequests')"></div>
+        </div>
+
+        <div class="hint warn" v-if="needRestart">
+          ⚠️ 设置已保存，但<b>需要重启后台</b>才会生效。
+          <button class="btn primary" style="margin-left:10px;" @click="restartBackend">立即重启后台</button>
+        </div>
+        <div class="hint" v-else>
+          💡 改完开关点一下「重启后台」即可生效。重启期间页面会短暂无响应，属于正常现象。
+        </div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="card-head">
+        <h2>访问记录</h2>
+        <button class="btn danger" @click="clearLogs">清空</button>
+      </div>
+      <div class="card-body">
+        <div class="log-wrap">
+          <div v-if="!logs.length" class="log-empty">暂无访问记录</div>
+          <div v-for="(l, i) in logs" :key="i" class="log-item">
+            <span class="t">{{ fmtTime(l.t) }}</span>
+            <span class="ip">{{ l.ip }}</span>
+            <span class="m">{{ l.method }}</span>
+            <span class="p" :title="l.path">{{ l.path }}</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="toast" :class="{ show: toast.show, error: toast.error }">{{ toast.text }}</div>
+  </div>
+
+  <script>
+    const { createApp, ref, onMounted, computed } = Vue;
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
+
+    createApp({
+      setup() {
+        const cfg = ref({});
+        const logs = ref([]);
+        const saving = ref(false);
+        const needRestart = ref(false);
+        const lan = ref({ lanIps: [], backendUrl: '', frontUrl: '', backendPublic: false, frontPublic: false });
+        const lanBusy = ref(false);
+        const lanBusyText = ref('处理中…');
+        // 前后台都对外开放才算「已开启」
+        const lanOpen = computed(() => !!(lan.value.backendPublic && lan.value.frontPublic));
+        const toast = ref({ show: false, text: '', error: false });
+
+        const showToast = (text, error = false) => {
+          toast.value = { show: true, text, error };
+          setTimeout(() => { toast.value.show = false; }, 2000);
+        };
+
+        const loadConfig = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/firewall/config?t=${Date.now()}`);
+            cfg.value = await res.json();
+          } catch (e) { showToast('读取配置失败', true); }
+        };
+
+        const loadLan = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/firewall/lan-info?t=${Date.now()}`);
+            lan.value = await res.json();
+          } catch (e) { /* 忽略 */ }
+        };
+
+        // 📱 开关手机访问（会重启前后台）
+        const setLan = async (enable) => {
+          if (lanBusy.value) return;
+          lanBusy.value = true;
+          lanBusyText.value = enable ? '正在开启手机访问…' : '正在关闭手机访问…';
+          try {
+            await fetch(`${API_BASE}/firewall/lan?t=${Date.now()}`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ enable })
+            });
+            showToast(enable ? '已开启，正在重启前后台…' : '已关闭，正在重启前后台…');
+            // 等后台重启回来
+            const t0 = Date.now();
+            await new Promise((r) => setTimeout(r, 4000));
+            while (Date.now() - t0 < 90000) {
+              try {
+                const r = await fetch(`${API_BASE}/firewall/lan-info?t=${Date.now()}`, { cache: 'no-store' });
+                if (r.ok) break;
+              } catch (e) { /* 还没起来 */ }
+              await new Promise((r) => setTimeout(r, 1500));
+            }
+            // 💡 等到前后台状态真的和「目标」一致，再放开按钮，避免来回跳
+            const deadline = Date.now() + 40000;
+            while (Date.now() < deadline) {
+              await loadLan();
+              if (enable ? lanOpen.value : !lan.value.backendPublic) break;
+              await new Promise((r) => setTimeout(r, 1500));
+            }
+            await loadConfig();
+            showToast(enable ? '✅ 手机访问已开启' : '✅ 手机访问已关闭');
+          } catch (e) {
+            showToast('操作失败：' + e.message, true);
+          } finally {
+            lanBusy.value = false;
+          }
+        };
+
+        const copy = async (text) => {
+          try {
+            await navigator.clipboard.writeText(text);
+            showToast('已复制：' + text);
+          } catch (e) { showToast('复制失败，请手动选择', true); }
+        };
+
+        const loadLogs = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/firewall/logs?t=${Date.now()}`);
+            const data = await res.json();
+            logs.value = data.logs || [];
+          } catch (e) { /* 忽略 */ }
+        };
+
+        const save = async () => {
+          saving.value = true;
+          try {
+            const res = await fetch(`${API_BASE}/firewall/config`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                localOnly: !!cfg.value.localOnly,
+                strictCors: cfg.value.strictCors !== false,
+                logRequests: cfg.value.logRequests !== false
+              })
+            });
+            const data = await res.json();
+            if (!res.ok) throw new Error(data.error || '保存失败');
+            needRestart.value = true;
+            showToast('✅ 已保存，重启后台后生效');
+          } catch (e) {
+            showToast(e.message, true);
+          } finally {
+            saving.value = false;
+          }
+        };
+
+        const toggle = async (key) => {
+          if (saving.value) return;
+          if (key === 'logRequests') cfg.value.logRequests = !cfg.value.logRequests;
+          if (key === 'localOnly') cfg.value.localOnly = !cfg.value.localOnly;
+          if (key === 'strictCors') cfg.value.strictCors = !cfg.value.strictCors;
+          await save();
+        };
+
+        const clearLogs = async () => {
+          try {
+            await fetch(`${API_BASE}/firewall/logs/clear`, { method: 'POST' });
+            logs.value = [];
+            showToast('已清空');
+          } catch (e) { showToast('清空失败', true); }
+        };
+
+        const restartBackend = async () => {
+          try {
+            await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
+            showToast('正在重启，5 秒后刷新本页');
+            setTimeout(() => window.location.reload(), 6000);
+          } catch (e) { showToast('重启请求失败', true); }
+        };
+
+        const fmtTime = (t) => {
+          const d = new Date(t);
+          const p = (n) => String(n).padStart(2, '0');
+          return `${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+        };
+
+        onMounted(() => {
+          loadConfig();
+          loadLan();
+          loadLogs();
+          setInterval(loadLogs, 5000);
+          setInterval(loadLan, 8000);
+        });
+
+        return { cfg, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

@@ -35,8 +35,60 @@ process.on('unhandledRejection', (reason) => {
   console.error('[unhandledRejection]', (reason && reason.stack) ? reason.stack : reason);
 });
 
+// ================= 🛡️ 防火墙配置 =================
+const FIREWALL_CONFIG_FILE = path.join(__dirname, 'firewall-config.json');
+
+function readFirewallConfig() {
+  // 💡 默认「仅允许本机访问」：更安全，别人同 Wi-Fi 也连不上
+  let cfg = { localOnly: true, strictCors: true, logRequests: true };
+  try {
+    if (fs.existsSync(FIREWALL_CONFIG_FILE)) {
+      cfg = { ...cfg, ...JSON.parse(fs.readFileSync(FIREWALL_CONFIG_FILE, 'utf-8')) };
+    }
+  } catch (e) { /* 读坏了就用默认值 */ }
+  return cfg;
+}
+
+let firewallConfig = readFirewallConfig();
+
+// 最近访问记录（只放内存，最多 200 条）
+const accessLog = [];
+function pushAccessLog(entry) {
+  if (!firewallConfig.logRequests) return;
+  accessLog.push(entry);
+  if (accessLog.length > 200) accessLog.splice(0, accessLog.length - 200);
+}
+
 const app = express();
-app.use(cors());
+
+// 💡 跨域：默认只允许本机来源（localhost / 127.0.0.1 的任意端口）
+app.use(cors({
+  origin(origin, cb) {
+    if (!origin) return cb(null, true);                 // curl / 直接访问没有 Origin
+    if (!firewallConfig.strictCors) return cb(null, true);
+    try {
+      const u = new URL(origin);
+      // 💡 仅本机模式：只允许本机来源；允许局域网时：同网段 IP 的来源也放行
+      const isLocal = u.hostname === 'localhost' || u.hostname === '127.0.0.1' || u.hostname === '[::1]' || u.hostname === '::1';
+      const isLan = !firewallConfig.localOnly && /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(u.hostname);
+      cb(null, isLocal || isLan);
+    } catch (e) { cb(null, false); }
+  }
+}));
+
+// 💡 访问记录：只记接口调用，静态资源不记（太吵）
+app.use((req, res, next) => {
+  if (req.path.startsWith('/api/')) {
+    const ip = (req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').toString();
+    pushAccessLog({
+      t: Date.now(),
+      ip: ip.replace('::ffff:', ''),
+      method: req.method,
+      path: req.path
+    });
+  }
+  next();
+});
 app.use(express.static(__dirname)); 
 // ⚠️ 地图/纪元快照会把整张 PNG 以 base64 塞进 JSON，
 //    默认 100kb 上限会导致保存静默失败（413），这里必须放开。
@@ -1623,8 +1675,8 @@ async function backupBeforeUpdate(items) {
   //    （想看：资源管理器 → 查看 → 勾选「隐藏的项目」）
   if (process.platform === 'win32') {
     try {
-      exec(`attrib +H "${root}"`, () => {});
-      exec(`attrib +H "${dir}"`, () => {});
+      exec(`attrib +H "${root}"`, { windowsHide: true }, () => {});
+      exec(`attrib +H "${dir}"`, { windowsHide: true }, () => {});
     } catch (e) { /* 设隐藏失败不影响使用 */ }
   }
   return { dir: path.relative(__dirname, dir), saved };
@@ -1656,7 +1708,7 @@ app.post('/api/git/push', async (req, res) => {
   if (!config.repoUrl || !config.token) return res.status(400).json({ error: '配置不完整，请检查仓库地址和 Token' });
 
   const runCmd = (cmd) => new Promise((resolve) => {
-    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+    exec(cmd, { cwd: __dirname, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
       if (error) resolve({ success: false, output: stderr || stdout || error.message });
       else resolve({ success: true, output: stdout || stderr });
     });
@@ -1775,6 +1827,8 @@ app.post('/api/git/push', async (req, res) => {
     //    只屏蔽：原始手稿(library)、敏感配置(git-config.json)、构建产物和临时文件
         const ignoreContent = `node_modules/
 git-config.json
+firewall-config.json
+__restart_launch.vbs
 .git/
 website/node_modules/
 website/.vitepress/cache/
@@ -2018,7 +2072,7 @@ app.get('/api/git/check-update', async (req, res) => {
   if (!fs.existsSync(GIT_CONFIG_FILE)) return anonymousCheckUpdate(res);
 
   const runCmd = (cmd) => new Promise((resolve) => {
-    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+    exec(cmd, { cwd: __dirname, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
       if (error) resolve({ success: false, output: stderr || stdout || error.message });
       else resolve({ success: true, output: stdout || stderr });
     });
@@ -2058,7 +2112,7 @@ app.get('/api/git/pull', async (req, res) => {
   if (!fs.existsSync(GIT_CONFIG_FILE)) return res.redirect(302, '/api/update/zip');
 
   const runCmd = (cmd) => new Promise((resolve) => {
-    exec(cmd, { cwd: __dirname, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
+    exec(cmd, { cwd: __dirname, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } }, (error, stdout, stderr) => {
       if (error) resolve({ success: false, output: stderr || stdout || error.message });
       else resolve({ success: true, output: stdout || stderr });
     });
@@ -2347,7 +2401,7 @@ app.get('/api/export/init', async (req, res) => {
     const zipPath = path.join(__dirname, zipName);
     
     await new Promise((resolve, reject) => {
-      exec(`tar --force-local -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100 }, (error) => {
+      exec(`tar --force-local -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100, windowsHide: true }, (error) => {
         if (error) reject(error);
         else resolve();
       });
@@ -2430,7 +2484,7 @@ app.get('/api/export/template', async (req, res) => {
     const zipPath = path.join(__dirname, zipName);
     
     await new Promise((resolve, reject) => {
-      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100 }, (error) => {
+      exec(`tar -a -c -f "${zipPath}" -C "${tempDir}" .`, { maxBuffer: 1024 * 1024 * 100, windowsHide: true }, (error) => {
         if (error) reject(error);
         else resolve();
       });
@@ -2465,9 +2519,217 @@ const systemPluginMap = {
   'github': { name: '一键推送', icon: '🚀' },
   'home-editor': { name: '首页设计与导出', icon: '🎨' },
   'plugin-builder': { name: '插件工厂', icon: '🏭' },
+  'firewall': { name: '防火墙', icon: '🛡️' },
   'diagnostic': { name: '环境检测', icon: '🩺' },
   'article': { name: '文章编辑', icon: '📝' }
 };
+
+// 📱 手机版判定：存在 <id>.mobile.html，或主文件里写了 <meta name="mobile" content="ready">
+function hasMobileVersion(id) {
+  return mobileInfo(id).ready;
+}
+
+// 返回 { ready, file }：file 为 true 说明有独立的 xxx.mobile.html 文件
+function mobileInfo(id) {
+  try {
+    const mobileFile = path.join(__dirname, 'plugin', `${id}.mobile.html`);
+    if (fs.existsSync(mobileFile)) return { ready: true, file: true };
+    const mainFile = path.join(__dirname, 'plugin', `${id}.html`);
+    if (!fs.existsSync(mainFile)) return { ready: false, file: false };
+    const head = fs.readFileSync(mainFile, 'utf-8').slice(0, 2000);
+    const ready = /<meta\s+name=["']mobile["']\s+content=["']ready["']/i.test(head);
+    return { ready, file: false };
+  } catch (e) {
+    return { ready: false, file: false };
+  }
+}
+
+// ================= 🛡️ 防火墙接口 =================
+// 当前监听情况 + 开关配置
+app.get('/api/firewall/config', (req, res) => {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  const lanIps = [];
+  for (const name of Object.keys(nets)) {
+    for (const info of nets[name] || []) {
+      if (info.family === 'IPv4' && !info.internal) lanIps.push(info.address);
+    }
+  }
+  res.json({
+    ...firewallConfig,
+    lanIps,
+    listening: firewallConfig.localOnly ? '127.0.0.1（仅本机）' : '0.0.0.0（局域网可见）',
+    port: 3001
+  });
+});
+
+// ================= 📱 插件手机版页面 =================
+// 读取某插件的手机版页面（没有就返回空）
+app.get('/api/plugin/mobile', async (req, res) => {
+  try {
+    const id = String(req.query.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return res.status(400).json({ error: '缺少插件 ID' });
+    const file = path.join(__dirname, 'plugin', `${id}.mobile.html`);
+    const exists = fs.existsSync(file);
+    res.json({
+      id,
+      exists,
+      content: exists ? await fs.readFile(file, 'utf-8') : '',
+      mainExists: fs.existsSync(path.join(__dirname, 'plugin', `${id}.html`))
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 保存手机版页面
+app.post('/api/plugin/mobile', async (req, res) => {
+  try {
+    const id = String(req.body && req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    const content = String(req.body && req.body.content || '');
+    if (!id) return res.status(400).json({ error: '缺少插件 ID' });
+    if (content.length < 50) return res.status(400).json({ error: '内容太短，至少要是一个完整的 HTML' });
+    if (!/<!DOCTYPE|<html/i.test(content)) return res.status(400).json({ error: '看起来不是 HTML 页面' });
+    const file = path.join(__dirname, 'plugin', `${id}.mobile.html`);
+    await fs.writeFile(file, content, 'utf-8');
+    res.json({ success: true, file: `plugin/${id}.mobile.html` });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 删除手机版页面
+app.post('/api/plugin/mobile/delete', async (req, res) => {
+  try {
+    const id = String(req.body && req.body.id || '').replace(/[^a-zA-Z0-9_-]/g, '');
+    if (!id) return res.status(400).json({ error: '缺少插件 ID' });
+    const file = path.join(__dirname, 'plugin', `${id}.mobile.html`);
+    if (fs.existsSync(file)) await fs.remove(file);
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 💡 手机访问信息：局域网地址 + 前后台是否已对外开放
+app.get('/api/firewall/lan-info', async (req, res) => {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  const lanIps = [];
+  for (const name of Object.keys(nets)) {
+    for (const info of nets[name] || []) {
+      if (info.family === 'IPv4' && !info.internal) lanIps.push(info.address);
+    }
+  }
+
+  // 探测 5173 是否已绑定到 0.0.0.0（局域网可见）
+  const frontPublic = await new Promise((resolve) => {
+    try {
+      require('child_process').exec('netstat -ano', { windowsHide: true }, (err, stdout) => {
+        if (err) return resolve(false);
+        const line = String(stdout).split('\n').find((l) => l.includes(':5173') && l.includes('LISTENING'));
+        if (!line) return resolve(false);
+        resolve(/0\.0\.0\.0:5173|\[::\]:5173/.test(line));
+      });
+    } catch (e) { resolve(false); }
+  });
+
+  const ip = lanIps[0] || '';
+  res.json({
+    lanIps,
+    backendUrl: ip ? `http://${ip}:3001` : '',
+    frontUrl: ip ? `http://${ip}:5173` : '',
+    backendPublic: !firewallConfig.localOnly,
+    frontPublic,
+    localOnly: firewallConfig.localOnly
+  });
+});
+
+// 📱 一键开启 / 关闭手机访问（会重启前后台）
+app.post('/api/firewall/lan', async (req, res) => {
+  try {
+    const enable = !!(req.body && req.body.enable);
+    firewallConfig = { ...firewallConfig, localOnly: !enable };
+    await fs.writeJson(FIREWALL_CONFIG_FILE, firewallConfig, { spaces: 2 });
+
+    // 先重启前台（让新的 host 生效），再重启后台（会断开当前连接）
+    restartFrontendDev();
+
+    res.json({ success: true, enable, restarting: true });
+
+    setTimeout(() => scheduleSelfRestart(1200), 600);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 重启前台 dev server（VitePress）：只杀监听 5173 的那个进程
+function restartFrontendDev() {
+  const { exec, spawn } = require('child_process');
+  exec('netstat -ano', { windowsHide: true }, (err, stdout) => {
+    if (err) return;
+    const pids = new Set();
+    for (const line of String(stdout).split('\n')) {
+      if (!line.includes(':5173') || !line.includes('LISTENING')) continue;
+      const parts = line.trim().split(/\s+/);
+      const pid = parts[parts.length - 1];
+      if (pid && pid !== '0') pids.add(pid);
+    }
+    const kill = () => {
+      // 💡 用 wscript 隐藏启动，避免弹出 cmd 黑框
+      const vbs = path.join(__dirname, '__start_front.vbs');
+      const lines = [
+        'Set ws = CreateObject("WScript.Shell")',
+        'ws.CurrentDirectory = "' + __dirname.replace(/"/g, '""') + '"',
+        'ws.Run "cmd /c npm run dev >> dev_log.txt 2>&1", 0, False'
+      ];
+      fs.writeFileSync(vbs, '\ufeff' + lines.join('\r\n') + '\r\n', 'utf16le');
+      const child = spawn('wscript.exe', ['//nologo', vbs], {
+        cwd: __dirname,
+        windowsHide: true,
+        detached: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      console.log('[lan] 已重启前台 dev server（隐藏窗口）');
+    };
+    if (!pids.size) return kill();
+    let left = pids.size;
+    pids.forEach((pid) => {
+      exec(`taskkill /F /PID ${pid}`, { windowsHide: true }, () => {
+        left--;
+        if (left <= 0) setTimeout(kill, 1200);
+      });
+    });
+  });
+}
+
+// 保存开关
+app.post('/api/firewall/config', async (req, res) => {
+  try {
+    const body = req.body || {};
+    const next = {
+      localOnly: !!body.localOnly,
+      strictCors: body.strictCors !== false,
+      logRequests: body.logRequests !== false
+    };
+    firewallConfig = next;
+    await fs.writeJson(FIREWALL_CONFIG_FILE, next, { spaces: 2 });
+    res.json({ success: true, needRestart: true, config: next });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 访问记录
+app.get('/api/firewall/logs', (req, res) => {
+  res.json({ logs: accessLog.slice().reverse(), count: accessLog.length });
+});
+
+app.post('/api/firewall/logs/clear', (req, res) => {
+  accessLog.length = 0;
+  res.json({ success: true });
+});
 
 // 1. 获取导航数据
 // 💡 默认导航（含作用范围 scope）：
@@ -2488,7 +2750,8 @@ function defaultNavigation() {
     { id: 'github', title: '一键推送', desc: '系统内置', icon: '🚀', link: '/github', isSystem: true, scope: 'admin' },
     { id: 'home-editor', title: '首页设计与导出', desc: '系统内置', icon: '🎨', link: '/home-editor', isSystem: true, scope: 'admin' },
     { id: 'plugin-builder', title: '插件工厂', desc: '系统内置', icon: '🏭', link: '#', isSystem: true, scope: 'admin' },
-    { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true, scope: 'site' }
+    { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true, scope: 'site' },
+    { id: 'firewall', title: '防火墙', desc: '控制谁能访问这台电脑上的服务。', icon: '🛡️', link: '/firewall', isSystem: true, scope: 'admin' }
   ];
 }
 
@@ -2534,6 +2797,17 @@ app.get('/api/navigation', async (req, res) => {
       needSave = true;
     }
   });
+  // 💡 清掉误注册进来的 xxx.mobile 条目（手机版页面不是独立插件）
+  const beforeLen = navList.length;
+  navList = navList.filter(n => !(n && typeof n.id === 'string' && n.id.endsWith('.mobile')));
+  if (navList.length !== beforeLen) needSave = true;
+
+  // 🔒 防火墙必须常驻：被删掉也要补回来
+  if (!navList.some(n => n && n.id === 'firewall')) {
+    navList.push({ id: 'firewall', title: '防火墙', desc: '控制谁能访问这台电脑上的服务。', icon: '🛡️', link: '/firewall', isSystem: true, scope: 'admin', hideBackend: false, hideFrontend: true });
+    needSave = true;
+  }
+
   // 💡 老版本留下的 navigation.json 可能缺新加的系统入口（比如「小说」）：
   //    按 id 补齐，已有的不动，用户自定义的也不动
   const haveIds = new Set(navList.map((n) => n && n.id).filter(Boolean));
@@ -2606,12 +2880,31 @@ next: false
   const builder = navList.find(n => n && n.id === 'plugin-builder');
   if (builder) {
     builder.hideBackend = false;
-  } else {
+  }
+
+  // 🔒 防火墙同样锁定：永远后端专用、不可隐藏、不上前台
+  const firewallNav = navList.find(n => n && n.id === 'firewall');
+  if (firewallNav) {
+    firewallNav.scope = 'admin';
+    firewallNav.hideBackend = false;
+    firewallNav.hideFrontend = true;
+  }
+
+  if (!builder) {
     navList.unshift({
       id: 'plugin-builder', title: '插件工厂', icon: '🏭', desc: '自定义',
       link: '#', isSystem: true, hideBackend: false, hideFrontend: true
     });
   }
+  // 💡 按 id 去重（保留第一次出现的位置），避免重复条目越积越多
+  const seen = new Set();
+  navList = navList.filter((n) => {
+    if (!n || !n.id) return false;
+    if (seen.has(n.id)) return false;
+    seen.add(n.id);
+    return true;
+  });
+
   await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
   res.json({ success: true, createdPages, missingPlugins });
 });
@@ -2626,7 +2919,9 @@ app.get('/api/plugins/list', async (req, res) => {
     const navList = fs.existsSync(NAVIGATION_FILE) ? await fs.readJson(NAVIGATION_FILE) : [];
     
     // 获取物理目录下的所有 html 文件，并加上虚拟的 article
-    const files = fs.readdirSync(pluginDir).filter(f => f.endsWith('.html'));
+    // 💡 排除 *.mobile.html：那是同一个插件的手机版页面，不是独立插件
+    const files = fs.readdirSync(pluginDir)
+      .filter(f => f.endsWith('.html') && !f.endsWith('.mobile.html'));
     let allPlugins = files.map(f => f.replace('.html', ''));
     allPlugins = [...new Set([...allPlugins, 'article', 'dashboard', 'plugin-builder'])];
 
@@ -2692,6 +2987,8 @@ app.get('/api/plugins/list', async (req, res) => {
         hideFrontend: navItem ? !!navItem.hideFrontend : true,
         hideBackend: navItem ? !!navItem.hideBackend : true,
         // 💡 这几个字段必须回传，否则插件工厂一保存就把它们重置了
+        mobileReady: mobileInfo(id).ready,
+        mobileFile: mobileInfo(id).file,
         scope: navItem ? navItem.scope : undefined,
         featured: navItem ? (navItem.featured !== false) : true,
         link: navItem ? navItem.link : undefined,
@@ -2797,7 +3094,7 @@ app.get('/api/diagnostic', async (req, res) => {
 
   try {
     const gitVersion = await new Promise((resolve, reject) => {
-      exec('git --version', (err, stdout) => err ? reject(err) : resolve(stdout.trim()));
+      exec('git --version', { windowsHide: true }, (err, stdout) => err ? reject(err) : resolve(stdout.trim()));
     });
     check('Git 命令行', 'ok', gitVersion);
   } catch (e) {
@@ -3127,7 +3424,7 @@ async function collectUpdateFiles() {
   //    server/插件/站点 + 启动脚本（start.bat / loading.html / icon3.ico）。
   //    注意：清单里只放纯 ASCII 文件名——批处理按 GBK 读清单，
   //    中文名会变乱码（「一键启动.vbs」由安装脚本用百分号编码单独下载）。
-  const roots = ['server.js', 'admin.html', 'package.json', 'version.json',
+  const roots = ['server.js', 'admin.html', 'login.html', 'package.json', 'version.json',
                  'update-config.json', 'start.vbs', 'start.bat', 'loading.html', 'icon3.ico',
                  'plugin', 'website'];
   const out = [];
@@ -3806,7 +4103,9 @@ app.post('/api/home-source', (req, res) => {
 // 启动服务
 // 💡 端口重试：自动重启时新旧进程会短暂抢同一个端口，抢不到就等一会儿再试
 function listenWithRetry(port, retries = 60) {
-  const server = app.listen(port);
+  // 💡 防火墙：只有本机可访问时绑 127.0.0.1，局域网设备连不上
+  const bindHost = firewallConfig.localOnly ? '127.0.0.1' : '0.0.0.0';
+  const server = app.listen(port, bindHost);
   server.once('listening', () => { onListening(); });
   server.once('error', (err) => {
     if (err && err.code === 'EADDRINUSE' && retries > 0) {
@@ -3878,7 +4177,7 @@ function hideUpdateBackup() {
   if (process.platform !== 'win32') return;
   try {
     const dir = path.join(__dirname, '.update_backup');
-    if (fs.existsSync(dir)) exec(`attrib +H "${dir}"`, () => {});
+    if (fs.existsSync(dir)) exec(`attrib +H "${dir}"`, { windowsHide: true }, () => {});
   } catch (e) { /* ignore */ }
 }
 

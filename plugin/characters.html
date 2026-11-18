@@ -3,6 +3,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>人物档案插件</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -75,6 +77,39 @@
     ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
     ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
     ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* ---------- 📱 手机端 ---------- */
+    @media (max-width: 760px) {
+      html, body { height: auto !important; overflow-y: auto !important; overflow-x: hidden !important; }
+      body { padding: 12px !important; }
+      .panel-inner { max-width: 100%; }
+
+      /* 表单一行一个 */
+      .form-row, .form-group { flex: 1 1 100% !important; min-width: 0 !important; width: 100%; }
+      .form-group input, .form-group textarea, .form-group select { font-size: 16px; }
+
+      /* 角色卡：竖排，避免名字被压成竖条 */
+      .data-item {
+        flex-direction: column; align-items: stretch !important;
+        gap: 12px; padding: 14px !important;
+      }
+      .data-item > div:first-child { gap: 12px !important; align-items: flex-start !important; }
+      .item-content { min-width: 0; flex: 1; }
+      .item-content h3 { flex-wrap: wrap; font-size: 15px !important; gap: 6px !important; }
+      .item-content p { white-space: normal !important; overflow: visible !important; text-overflow: clip !important; }
+      .data-item img { width: 44px !important; height: 44px !important; flex-shrink: 0; }
+
+      /* 操作按钮独占一行 */
+      .item-actions {
+        margin-left: 0 !important; width: 100%;
+        display: flex; gap: 10px; justify-content: flex-end;
+      }
+      .item-actions button { min-width: 52px; height: 40px; }
+
+      /* 底部保存按钮铺满 */
+      .data-item + div button, .panel-inner > div:last-child button { width: 100%; }
+      textarea { min-height: 90px; }
+    }
 </style>
 </head>
 <body>
@@ -169,7 +204,10 @@
 
   <script>
     const { createApp, ref, onMounted } = Vue;
-    const API_BASE = 'http://localhost:3001/api';
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
 
     createApp({
       setup() {

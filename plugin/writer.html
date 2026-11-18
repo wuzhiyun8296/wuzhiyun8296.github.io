@@ -3,6 +3,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
   <title>沉浸写书</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -124,7 +125,60 @@
     .format-btn-lg .icon { font-size: 24px; }
     .format-btn-lg .text h4 { margin: 0 0 5px 0; color: #fff; font-size: 15px; }
     .format-btn-lg .text p { margin: 0; color: #888; font-size: 12px; }
-  </style>
+  
+    /* ---------- 📱 手机端适配 ---------- */
+    @media (max-width: 760px) {
+      .global-header {
+        flex-direction: column; align-items: stretch; gap: 8px;
+        padding: 10px 12px; height: auto;
+      }
+      .breadcrumb { font-size: 13px; flex-wrap: wrap; gap: 4px; }
+      .global-header .stats { font-size: 12px !important; flex-wrap: wrap; gap: 8px; display: flex; align-items: center; }
+      .global-header .stats span[style*="margin-left"] { margin-left: 8px !important; }
+
+      .shelf-view {
+        padding: 14px 12px 40px;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .book-card { padding: 16px; }
+
+      .chapter-list { gap: 8px; }
+      .chapter-item {
+        padding: 12px 14px; flex-direction: column; align-items: flex-start; gap: 8px;
+      }
+      .chapter-actions { opacity: 1 !important; }
+
+      /* 编辑器：去掉左右 40px，正文占满宽度 */
+      .editor-container { padding: 12px 10px; }
+      .editor-view { height: auto; }
+      .rich-editor {
+        font-size: 16px !important; line-height: 1.9 !important;
+        padding: 14px 12px !important; min-height: 60vh;
+      }
+      /* 格式工具栏：横向滚动，不挤成一团 */
+      .format-toolbar {
+        flex-wrap: nowrap; overflow-x: auto; gap: 6px;
+        padding: 8px 10px; scrollbar-width: none;
+      }
+      .format-toolbar::-webkit-scrollbar { display: none; }
+      .format-btn {
+        flex-shrink: 0; padding: 8px 10px !important; font-size: 12.5px !important;
+        white-space: nowrap;
+      }
+    }
+
+    @media (max-width: 760px) {
+      /* 💡 桌面版常把 body 锁成 100vh + overflow:hidden，手机必须放开才能滑动 */
+      html, body {
+        height: auto !important; min-height: 100%;
+        overflow-y: auto !important; overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      body { display: block !important; max-width: 100%; }
+      * { max-width: 100%; }
+    }
+</style>
 </head>
 <body>
   <div id="app">
@@ -298,7 +352,10 @@
 
   <script>
     const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
-    const API_BASE = 'http://localhost:3001/api';
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
 
     createApp({
       setup() {

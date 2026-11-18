@@ -3,6 +3,7 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
   <title>创世主控台</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -123,6 +124,39 @@
     ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
     ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
     ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* ---------- 📱 手机端 ---------- */
+    @media (max-width: 820px) {
+      body { padding: 12px 12px 28px; }
+      .panel-inner { max-width: 100%; }
+      .notice-board { padding: 14px; margin-bottom: 18px; flex-direction: column; align-items: stretch; }
+      .notice-board.normal .notice-text { font-size: 14px; line-height: 1.6; }
+      .progress-info { flex-wrap: wrap; gap: 8px !important; font-size: 12px !important; }
+      .version-line { gap: 8px; font-size: 12px; }
+      .author-line { font-size: 11.5px; line-height: 1.8; }
+      .stats-grid { grid-template-columns: repeat(2, 1fr); gap: 12px; margin-bottom: 18px; }
+      .stat-card { padding: 14px !important; }
+      .stat-number { font-size: 26px !important; }
+      .bottom-grid { grid-template-columns: 1fr; gap: 14px; }
+      .card { padding: 14px !important; }
+      .search-input { font-size: 14px !important; padding: 12px 14px !important; }
+      h1, .page-title { font-size: 20px !important; }
+    }
+    @media (max-width: 480px) {
+      .stats-grid { grid-template-columns: repeat(2, 1fr); }
+      .stat-number { font-size: 22px !important; }
+    }
+
+    @media (max-width: 760px) {
+      /* 💡 桌面版常把 body 锁成 100vh + overflow:hidden，手机必须放开才能滑动 */
+      html, body {
+        height: auto !important; min-height: 100%;
+        overflow-y: auto !important; overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      body { display: block !important; max-width: 100%; }
+      * { max-width: 100%; }
+    }
 </style>
 </head>
 <body>
@@ -258,7 +292,10 @@
 
   <script>
     const { createApp, ref, onMounted, computed, watch } = Vue;
-    const API_BASE = 'http://localhost:3001/api';
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
 
     createApp({
       setup() {

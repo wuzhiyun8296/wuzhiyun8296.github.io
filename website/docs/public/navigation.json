@@ -4,13 +4,11 @@
     "title": "插件工厂",
     "icon": "🏭",
     "desc": "自定义",
-    "link": "/plugin-builder",
+    "link": "#",
     "isSystem": true,
-    "isBackendOnly": false,
-    "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "scope": "admin"
   },
   {
     "id": "graph",
@@ -230,5 +228,16 @@
     "scope": "site",
     "hideBackend": true,
     "hideFrontend": false
+  },
+  {
+    "id": "firewall",
+    "title": "防火墙",
+    "desc": "控制谁能访问这台电脑上的服务。",
+    "icon": "🛡️",
+    "link": "/firewall",
+    "isSystem": true,
+    "scope": "admin",
+    "hideBackend": false,
+    "hideFrontend": true
   }
 ]

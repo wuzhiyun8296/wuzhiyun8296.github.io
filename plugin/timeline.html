@@ -85,7 +85,10 @@
 
   <script>
     const { createApp, ref, onMounted } = Vue;
-    const API_BASE = 'http://localhost:3001/api';
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
 
     createApp({
       setup() {
