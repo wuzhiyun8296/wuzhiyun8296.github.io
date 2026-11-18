@@ -913,6 +913,18 @@ async function readUpdateConfig() {
   if (!raw.length) raw = DEFAULT_UPDATE_SOURCES.slice();
 
   const sources = [];
+
+  // 💡 国内网络优先走 Gitee：把 gitee 源排到最前面（GitHub 经常连不上/证书报错）
+  raw.sort((a, b) => {
+    const host = (s) => {
+      const u = String((s && (s.repoUrl || s.url)) || '').toLowerCase();
+      if (u.includes('gitee.com')) return 0;
+      if (u.includes('github.com')) return 2;
+      return 1;
+    };
+    return host(a) - host(b);
+  });
+
   for (const s of raw) {
     if (!s || !s.repoUrl) continue;
     const parsed = parseRepoUrl(s.repoUrl);
