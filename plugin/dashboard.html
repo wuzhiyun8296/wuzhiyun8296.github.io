@@ -322,6 +322,21 @@
             try {
               const rv = await fetch(`${API_BASE}/version?t=${Date.now()}`);
               version.value = await rv.json();
+        // 💡 远程版本没取到（多半是瞬时抖动）：2 秒后自动再试，最多两次
+        let retryN = 0;
+        const retryVersion = async () => {
+          if (version.value && version.value.latest) return;
+          if (retryN >= 2) return;
+          retryN++;
+          await new Promise((r) => setTimeout(r, 2000));
+          try {
+            const r2 = await fetch(`${API_BASE}/version?force=1&t=${Date.now()}`);
+            const d2 = await r2.json();
+            if (d2 && d2.latest) { version.value = d2; versionChecking.value = false; return; }
+          } catch (e) { /* 继续重试 */ }
+          retryVersion();
+        };
+        retryVersion();
             } catch (e) {
               version.value = { current: '', latest: '', hasUpdate: null, error: '无法连接更新源' };
             }

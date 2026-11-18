@@ -500,7 +500,26 @@ app.get('/api/version', async (req, res) => {
       }
     }));
 
-    const good = results.filter(r => r.ok);
+    let good = results.filter(r => r.ok);
+
+    // 💡 一次失败可能只是瞬时抖动（比如刚推送完、Gitee 正在更新）：
+    //    稍等一下重试一轮，尽量别让用户看到「无法获取远程版本」
+    if (!good.length) {
+      await new Promise((r) => setTimeout(r, 400));
+      const retry = await Promise.all(list.map(async (s) => {
+        const platform = s.repo.host === 'gitee.com' ? 'gitee' : 'github';
+        try {
+          const v = await fetchRemoteVersion(s.repo, s.branch);
+          return { ok: true, platform, repo: `${s.repo.owner}/${s.repo.repo}`, version: v.id };
+        } catch (e) {
+          return { ok: false, platform, repo: `${s.repo.owner}/${s.repo.repo}`, error: e.message };
+        }
+      }));
+      if (retry.some((r) => r.ok)) {
+        for (let i = 0; i < retry.length; i++) if (retry[i].ok) results[i] = retry[i];
+        good = retry.filter((r) => r.ok);
+      }
+    }
     const primary = good[0] || null;
     const latest = primary ? primary.version : '';
     const data = {
@@ -520,7 +539,7 @@ app.get('/api/version', async (req, res) => {
     };
     // 💡 全部来源都失败（多半是断网）时，只缓存 60 秒，避免频繁重试又长时间等待
     const allFailed = good.length === 0;
-    versionCache = { at: Date.now(), data: data, ttl: allFailed ? 60000 : VERSION_CACHE_MS };
+    versionCache = { at: Date.now(), data: data, ttl: allFailed ? 15000 : VERSION_CACHE_MS };
     res.json(data);
   } catch (e) {
     res.json({ current: '', latest: '', hasUpdate: null, error: e.message, sources: [] });
