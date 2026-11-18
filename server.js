@@ -1587,6 +1587,15 @@ async function backupBeforeUpdate(items) {
   while (all.length > 2) {
     await fs.remove(path.join(root, all.shift()));
   }
+
+  // 💡 Windows 下把备份目录设成隐藏：它只是保险，不该在安装目录里碍眼
+  //    （想看：资源管理器 → 查看 → 勾选「隐藏的项目」）
+  if (process.platform === 'win32') {
+    try {
+      exec(`attrib +H "${root}"`, () => {});
+      exec(`attrib +H "${dir}"`, () => {});
+    } catch (e) { /* 设隐藏失败不影响使用 */ }
+  }
   return { dir: path.relative(__dirname, dir), saved };
 }
 
