@@ -528,6 +528,9 @@
               if (!docPath.endsWith('.md')) docPath += '.md';
 
               // 💡 修复：去掉了容易引起 VSCode 语法解析冲突的 <script setup> 标签
+              // 💡 用当前访问的主机名（而不是 localhost），手机/局域网打开前台时才连得上
+              const backendOrigin = `${location.protocol}//${location.hostname}:3001`;
+
               const mdContent = `---
 title: ${f.title || f.id}
 aside: false
@@ -536,7 +539,7 @@ next: false
 ---
 
 <ClientOnly>
-  <iframe src="http://localhost:3001/plugin/${f.id}.html?view=front" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
+  <iframe src="${backendOrigin}/plugin/${f.id}.html?view=front" style="width: 100%; height: calc(100vh - 60px); border: none; border-radius: 8px;"></iframe>
 </ClientOnly>
 `;
 
