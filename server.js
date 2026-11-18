@@ -1278,6 +1278,13 @@ function toCrlf(buf) {
   return Buffer.from(parts);
 }
 
+function hasBareLf(buf) {
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0a && (i === 0 || buf[i - 1] !== 0x0d)) return true;
+  }
+  return false;
+}
+
 function needsCrlf(rel) {
   return /\.(bat|cmd|vbs|ps1)$/i.test(String(rel || ''));
 }
@@ -2835,6 +2842,9 @@ async function applyRawUpdate(sources) {
         const buf = normalizeEol(raw);
         if (e.size < 0 || buf.length === e.size) {
           same = crypto.createHash('sha256').update(buf).digest('hex') === e.sha256;
+          // 💡 比对时会忽略换行符，但 .bat/.vbs 必须是 CRLF 才能正常运行：
+          //    如果本地已经被改成 LF，就强制重新下载一次（顺手把坏掉的文件修好）
+          if (same && needsCrlf(e.path) && hasBareLf(raw)) same = false;
         }
       } catch (err) {
         same = false;
