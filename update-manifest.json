@@ -1,17 +1,17 @@
 {
-  "version": "20261118-142542",
+  "version": "20261118-142855",
   "count": 48,
-  "totalBytes": 685409,
+  "totalBytes": 680115,
   "files": [
     {
       "path": "admin.html",
-      "size": 41506,
-      "sha256": "f8a99126dcd6299d202a2c15d360980ac0c95ee4651e8597edad860a808ed67c"
+      "size": 40760,
+      "sha256": "3d4ec7330b72eef54eec5a848e6678c8e9c283ccaca579b26e5f0e2ca1b0e1fe"
     },
     {
       "path": "icon3.ico",
-      "size": 12284,
-      "sha256": "57f27d882d680c9cd2153e0252cc618cc97237f05570e8f6fe4617b04127d4a4"
+      "size": 12283,
+      "sha256": "43e0f9ecb30cd6230fdf50fbae47d691fe424197916538ab641294f56aae0662"
     },
     {
       "path": "loading.html",
@@ -35,8 +35,8 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 20990,
-      "sha256": "2ad7c3a302c6ddad1a68037328bb04b68292348e3b14ca39e078e47abe9d2d59"
+      "size": 20596,
+      "sha256": "22ec50a72d9e756282ed53c4e72f46ef96dda367477ffa60eb62f52fce9296b7"
     },
     {
       "path": "plugin/epoch-map.html",
@@ -50,8 +50,8 @@
     },
     {
       "path": "plugin/github.html",
-      "size": 14270,
-      "sha256": "17ec4e61464992616483ec7301ada2a74afcf049bd90076e04441680725ddecf"
+      "size": 13965,
+      "sha256": "53398ee3e3362c6a63fcd5bb2cb535eadbdffdfb6c026b10263e33e7800a93d7"
     },
     {
       "path": "plugin/graph.html",
@@ -115,8 +115,8 @@
     },
     {
       "path": "server.js",
-      "size": 142715,
-      "sha256": "31aa7af10b4f566b5c56ecf949fdd9f77c085e5bdfe3ee507053c3efbbc710b0"
+      "size": 139928,
+      "sha256": "871f3cfc955c0cb48800eac53352db3fc83151134f4bac76cd6c2ab55daa2b7b"
     },
     {
       "path": "start.bat",
@@ -136,7 +136,7 @@
     {
       "path": "version.json",
       "size": 124,
-      "sha256": "f6bd3592f6eb761ff96aeab34931a743bd820464db6603ccc44636b5616f860d"
+      "sha256": "078fed1e53f83ecc470057e345e738f651b2e33ec061964ae0c392b223eb3db5"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -175,8 +175,8 @@
     },
     {
       "path": "website/docs/characters.md",
-      "size": 2509,
-      "sha256": "3bec156791c8d0e598a05323c308380a7ed8c0c5d73e3829391e14bd066c27f7"
+      "size": 2403,
+      "sha256": "ce6bcfc0a61be8ca41366d1ff540f13f911b82a62e035c97632812cc1864e5ca"
     },
     {
       "path": "website/docs/components/NavCards.vue",
@@ -205,18 +205,18 @@
     },
     {
       "path": "website/docs/epoch-map.md",
-      "size": 187,
-      "sha256": "b2517e30497c57d78c5f8c002322f83cf4cc5250bb1c921becf88454ed2fc628"
+      "size": 176,
+      "sha256": "7a5e6ad2c7179418cb74dabdb618a3e81dec43adbda5986b85c0f468fe0b1123"
     },
     {
       "path": "website/docs/finance.md",
-      "size": 18721,
-      "sha256": "4fd35cf8157f8f9a95517e02c32c6cff253871311c3070e23a603cd86d1ce434"
+      "size": 18293,
+      "sha256": "c497e49802db2a567b3ee38180d889a40a49580fdd160f408cc71833f60e9ad1"
     },
     {
       "path": "website/docs/graph.md",
-      "size": 3312,
-      "sha256": "0978ee792e1b5551b04925c9bb3f18e9ecd6ea5b682ccb8b7669426f6b32de7e"
+      "size": 3208,
+      "sha256": "ead73718b0a1b0b23f89ddc1fb286fa5594e2370829e6a448b3356fd0ba87dde"
     },
     {
       "path": "website/docs/history.md",
@@ -225,8 +225,8 @@
     },
     {
       "path": "website/docs/map.md",
-      "size": 8539,
-      "sha256": "928ee11102b790fd5205c9e8a2056c4887f1970efef5723f958dc21bdc202ae2"
+      "size": 8300,
+      "sha256": "7e81cb0713a1bd35e5e7c2cdcb6b1ce40ef1d29422d37800e7627d5a475f3592"
     },
     {
       "path": "website/docs/navigation.md",
@@ -235,8 +235,8 @@
     },
     {
       "path": "website/docs/timeline.md",
-      "size": 4356,
-      "sha256": "921ce987d1118dbf8f5ff10b6297ce23568fdd6911e9f348c7099da8fe164073"
+      "size": 4183,
+      "sha256": "a74a67d7441f8d019a3324e8e459e5faac0e5030d2071ab5edfb82c6e1edfd70"
     },
     {
       "path": "website/docs/world-navigation.md",

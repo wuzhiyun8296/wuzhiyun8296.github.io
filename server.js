@@ -1253,6 +1253,23 @@ function httpsGetBuffer(url, timeoutMs = 20000, opts = {}) {
 }
 
 
+// 💡 换行符会让哈希对不上：Windows 磁盘上是 CRLF，仓库里（core.autocrlf=true）存的是 LF。
+//    所以哈希一律先统一成 LF 再算，两边才能一致，增量更新才不会反复重下同一个文件。
+function normalizeEol(buf) {
+  if (!buf || buf.indexOf(0x0d) === -1) return buf;
+  const out = Buffer.allocUnsafe(buf.length);
+  let n = 0;
+  for (let i = 0; i < buf.length; i++) {
+    if (buf[i] === 0x0d && buf[i + 1] === 0x0a) continue;
+    out[n++] = buf[i];
+  }
+  return out.subarray(0, n);
+}
+
+function hashFile(buf) {
+  return crypto.createHash('sha256').update(normalizeEol(buf)).digest('hex');
+}
+
 // 各通道的「单文件 raw 基址」
 // Gitee 的 zip 归档已经需要登录，但 raw 单文件仍然匿名可读，所以整包下载改成按文件拉取
 function rawBaseUrls(repo, branch) {
@@ -1716,7 +1733,8 @@ server_log.txt
       let manifestBytes = 0;
       for (const rel of files) {
         try {
-          const buf = await fs.readFile(path.join(__dirname, rel));
+          const raw = await fs.readFile(path.join(__dirname, rel));
+          const buf = normalizeEol(raw);   // 统一换行符后再算，跟仓库里存的一致
           manifestBytes += buf.length;
           manifestFiles.push({
             path: rel,
@@ -2730,7 +2748,8 @@ async function applyRawUpdate(sources) {
     let same = false;
     if (e.sha256) {
       try {
-        const buf = await fs.readFile(abs);
+        const raw = await fs.readFile(abs);
+        const buf = normalizeEol(raw);
         if (e.size < 0 || buf.length === e.size) {
           same = crypto.createHash('sha256').update(buf).digest('hex') === e.sha256;
         }
