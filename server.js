@@ -1582,9 +1582,9 @@ async function backupBeforeUpdate(items) {
     }
     saved.push(item);
   }
-  // 💡 只保留最近 2 份备份：够回滚用，又不会让客户端越更越占地方
+  // 💡 只保留最近 1 份备份：够回滚用，又不占地方
   const all = (await fs.readdir(root)).sort();
-  while (all.length > 2) {
+  while (all.length > 1) {
     await fs.remove(path.join(root, all.shift()));
   }
 
@@ -3701,6 +3701,15 @@ app.listen(3001, () => {
 // ================= 💡 兜底：缺少首页文件时自动生成 =================
 // 全新安装的目录里没有 website/docs/index.md（首页属于各人自定义，不在更新清单里），
 // 缺了它 VitePress 访问 / 会直接 404。启动时发现缺失就按空白模板补一份。
+// 💡 启动时把更新备份目录设成隐藏：老版本创建的备份也要隐藏掉
+function hideUpdateBackup() {
+  if (process.platform !== 'win32') return;
+  try {
+    const dir = path.join(__dirname, '.update_backup');
+    if (fs.existsSync(dir)) exec(`attrib +H "${dir}"`, () => {});
+  } catch (e) { /* ignore */ }
+}
+
 async function ensureHomeIndex() {
   const f = path.join(DOCS_DIR, 'index.md');
   try {
@@ -3711,6 +3720,7 @@ async function ensureHomeIndex() {
     console.log('[init] 生成默认首页失败：' + e.message);
   }
 }
+hideUpdateBackup();
 ensureHomeIndex();
 // 💡 启动时清理历史 bug 留下的畸形页面：website/docs/**/xxx.html.md
 //    （早期版本把 /plugin/xxx.html 当成前台路由，生成了 map.html.md 之类的文件）
