@@ -6,6 +6,18 @@
   <title>插件工厂 & 管理器</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
+    /* ---------- 全局暗色细滚动条 ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: #3c3c3c; border-radius: 8px;
+      border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
     * { box-sizing: border-box; }
     html, body { margin: 0; height: 100%; overflow: hidden; }
     body { background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; display: flex; flex-direction: column; padding: 20px; }
@@ -53,13 +65,30 @@
     .backend-tag { background: rgba(210, 153, 34, 0.2); color: #d29922; border: 1px solid rgba(210, 153, 34, 0.3); font-size: 11px; padding: 2px 6px; border-radius: 4px; font-weight: normal; flex-shrink: 0; }
     
     .plugin-id { font-size: 12px; color: #666; font-family: monospace; }
-        .scope-select { background: #2d2d2d; color: #ddd; border: 1px solid #444; border-radius: 6px; padding: 5px 8px; font-size: 12px; cursor: pointer; outline: none; }
-    .scope-select:hover { border-color: #0e639c; }
-    .scope-select:disabled { opacity: .5; cursor: not-allowed; }
-    .scope-select.scope-both { color: #4ec9b0; border-color: #2f6f5e; }
-    .scope-select.scope-site { color: #4aa3df; border-color: #2f5f7f; }
-    .scope-select.scope-admin { color: #d29922; border-color: #6f5a2f; }
-    .scope-select.scope-hidden { color: #888; }
+        /* 作用范围下拉：去掉系统原生外观，自绘箭头 */
+    .scope-select {
+      -webkit-appearance: none; appearance: none;
+      width: 100%; height: 32px;
+      padding: 0 30px 0 11px;
+      font-size: 12.5px; font-family: inherit;
+      color: #ddd; background-color: #262626;
+      border: 1px solid #3d3d3d; border-radius: 8px;
+      cursor: pointer; outline: none;
+      text-overflow: ellipsis;
+      background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' fill='none' stroke='%23888' stroke-width='1.6' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+      background-repeat: no-repeat;
+      background-position: right 10px center;
+      transition: border-color .18s, background-color .18s, box-shadow .18s;
+    }
+    .scope-select:hover:not(:disabled) { border-color: #555; background-color: #2d2d2d; }
+    .scope-select:focus-visible { border-color: #0e639c; box-shadow: 0 0 0 3px rgba(14, 99, 156, .2); }
+    .scope-select:disabled { opacity: .45; cursor: not-allowed; }
+    .scope-select option { background: #262626; color: #ddd; }
+
+    .scope-select.scope-both { color: #4ec9b0; border-color: #2f6f5e; background-color: rgba(78, 201, 176, .07); }
+    .scope-select.scope-site { color: #4aa3df; border-color: #2f5f7f; background-color: rgba(74, 163, 223, .07); }
+    .scope-select.scope-admin { color: #d29922; border-color: #6f5a2f; background-color: rgba(210, 153, 34, .07); }
+    .scope-select.scope-hidden { color: #8a8a8a; border-color: #3d3d3d; background-color: rgba(255, 255, 255, .03); }
 
     /* 推荐到前端 */
     .feat-toggle {

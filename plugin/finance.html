@@ -6,6 +6,18 @@
   <title>金融中心插件</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
+    /* ---------- 全局暗色细滚动条 ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: #3c3c3c; border-radius: 8px;
+      border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
     * { box-sizing: border-box; }
     body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; padding: 20px 40px; }
     .panel-inner { max-width: 1000px; margin: 0 auto; width: 100%; }
@@ -45,7 +57,19 @@
     .symbol-edit:focus { border-color: #0e639c; border-style: solid; background: #121212; box-shadow: 0 0 8px rgba(14, 99, 156, 0.3);}
 
     .edit-tip { color: #d29922; font-size: 13px; margin-bottom: 15px; background: rgba(210, 153, 34, 0.1); padding: 10px 15px; border-radius: 6px; border: 1px solid rgba(210, 153, 34, 0.3); display: flex; align-items: center; gap: 8px;}
-  </style>
+  
+    /* ---------- 暗色细滚动条（不然深色页面上白条很刺眼） ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: #3c3c3c; border-radius: 8px;
+      border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+</style>
 </head>
 <body>
   <div id="app">

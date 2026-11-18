@@ -7,6 +7,18 @@
   <link rel="stylesheet" href="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.css" />
   <script src="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.js"></script>
   <style>
+    /* ---------- 全局暗色细滚动条 ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: #3c3c3c; border-radius: 8px;
+      border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
     * { box-sizing: border-box; }
     body { margin: 0; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
     
