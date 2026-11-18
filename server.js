@@ -1675,7 +1675,34 @@ app.post('/api/git/push', async (req, res) => {
     if (protConfig.enableNovelSync) {
       const watermarkStr = protConfig.enableWatermark ? generateZeroWidthWatermark(`[Author:${protConfig.authorName}]`) : '';
 
+      // 💡 章节的「上一篇/下一篇」按章节顺序来：同步时把 frontmatter 写进每章开头
+      const injectChapterNav = (fileList) => {
+        for (let i = 0; i < fileList.length; i++) {
+          const cur = fileList[i];
+          const prev = fileList[i - 1];
+          const next = fileList[i + 1];
+          let body = fs.readFileSync(cur.full, 'utf-8');
+          // 去掉旧 frontmatter，避免重复叠加
+          if (body.startsWith('---')) {
+            const end = body.indexOf('\n---', 3);
+            if (end > -1) body = body.slice(body.indexOf('\n', end + 1) + 1);
+          }
+          const fm = ['---'];
+          fm.push(prev
+            ? `prev:\n  text: '${prev.title.replace(/'/g, "''")}'\n  link: '${prev.link}'`
+            : 'prev: false');
+          fm.push(next
+            ? `next:\n  text: '${next.title.replace(/'/g, "''")}'\n  link: '${next.link}'`
+            : 'next: false');
+          fm.push('---', '', '');
+          fs.writeFileSync(cur.full, fm.join('\n') + body, 'utf-8');
+        }
+      };
+
+      let navQueue = [];
       const copyNovelFiles = (srcDir, destDir, currentBookcase) => {
+        const savedQueue = navQueue;
+        navQueue = [];
         if (!fs.existsSync(srcDir)) return;
         const items = fs.readdirSync(srcDir).sort((a, b) => {
           const aStat = fs.statSync(path.join(srcDir, a));
@@ -1705,13 +1732,17 @@ app.post('/api/git/push', async (req, res) => {
             }
             fs.writeFileSync(destPath, content, 'utf-8');
             
-            currentBookcase.push({ 
-              title: item.replace('.md', ''), 
-              type: 'file', 
+            const fileEntry = {
+              title: item.replace('.md', ''),
+              type: 'file',
               link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
-            });
+            };
+            currentBookcase.push(fileEntry);
+            navQueue.push({ full: destPath, title: fileEntry.title, link: fileEntry.link });
           }
         }
+        injectChapterNav(navQueue);   // 这一层的章节互相串起来
+        navQueue = savedQueue;
       };
 
       copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
@@ -3042,6 +3073,10 @@ async function collectUpdateFiles() {
     if (p.indexOf('website/.vitepress/dist') === 0) return true;
     if (p.indexOf('website/docs/public/') === 0) return true;
     if (p.indexOf('website/docs/novel/chapters/') === 0) return true;
+    // 💡 小说「页面壳子」属于程序，要随更新下发（正文 chapters 才是个人的）
+    //    注意：目录本身也要放行，否则 walk 不会进这个目录
+    if (p === 'website/docs/novel') return false;
+    if (p === 'website/docs/novel/index.md' || p === 'website/docs/novel/NovelPage.vue') return false;
     if (p.indexOf('website/docs/assets/') === 0) return true;
     // 💡 页面 md 分两类：
     //    根级（index.md 除外）= 站点页面薄壳，新插件依赖它们，必须同步
