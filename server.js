@@ -995,20 +995,37 @@ async function fetchRemoteVersion(repo, branch) {
 
 // 推送后给前端的 Gitee 同步提示
 async function readGiteeHint() {
+  // 💡 只提示「使用者自己的」仓库，绝不能把作者自己的 Gitee 仓推给别人：
+  //    1) 用户自己的仓库就在 Gitee → 直接提示它
+  //    2) 用户仓库在 GitHub → 只有在「同名仓库」确实存在于 Gitee 源里时才提示
+  //       （作者本人的 GitHub 仓与 Gitee 镜像同名，所以他自己仍然会看到提示）
   try {
+    if (!fs.existsSync(GIT_CONFIG_FILE)) return null;
+    const own = parseRepoUrl((await fs.readJson(GIT_CONFIG_FILE)).repoUrl);
+    if (!own) return null;
+
+    if (own.host === 'gitee.com') {
+      return {
+        repoUrl: own.pageUrl,
+        settingsUrl: `${own.pageUrl}/settings`,
+        branch: 'main'
+      };
+    }
+
     const cfg = await readUpdateConfig();
-    const g = cfg.sources.find((s) => s.repo.host === 'gitee.com');
-    if (!g) return null;
+    const same = cfg.sources.find(
+      (s) => s.repo.host === 'gitee.com' && s.repo.repo.toLowerCase() === own.repo.toLowerCase()
+    );
+    if (!same) return null;
     return {
-      repoUrl: g.repo.pageUrl,
-      settingsUrl: `${g.repo.pageUrl}/settings`,
-      branch: g.branch
+      repoUrl: same.repo.pageUrl,
+      settingsUrl: `${same.repo.pageUrl}/settings`,
+      branch: same.branch
     };
   } catch (e) {
     return null;
   }
 }
-
 
 // 原则：remote 里永远只存「干净地址」，Token 只在执行命令的那一瞬间通过 HTTP 头传递，
 //       不再写进 .git/config，也不会出现在 URL / 日志里。
@@ -1662,6 +1679,20 @@ server_log.txt
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
 
     const giteeHint = await readGiteeHint();
+
+    // 💡 说明一下更新源归属：用户推的是自己的仓库，但「检测更新」仍走程序作者的发布仓，
+    //    避免有人误以为推了自己的仓库就会从自己仓库拉新版本
+    try {
+      const ownRepo = parseRepoUrl(config.repoUrl);
+      const upCfg = await readUpdateConfig();
+      const isUpstream = ownRepo && upCfg.sources.some(
+        (s) => s.repo.host === ownRepo.host && s.repo.repo.toLowerCase() === ownRepo.repo.toLowerCase()
+      );
+      if (!isUpstream) {
+        logs.push('\n[说明] 本次推送的是你自己的仓库，仅用于发布你的站点内容；\n');
+        logs.push('       「检测更新」仍从程序作者的发布仓库获取新版本，两者互不影响。\n');
+      }
+    } catch (e) { /* 说明信息失败不影响推送结果 */ }
     logs.push(`\n[SUCCESS] 代码推送成功（私人文章和设定已安全过滤）！\n`);
     if (giteeHint) {
       logs.push(`[TODO] 版本 ${versionInfo.id} 已上 GitHub，请记得同步 Gitee：\n`);
