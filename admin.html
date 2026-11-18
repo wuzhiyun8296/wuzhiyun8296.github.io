@@ -477,9 +477,9 @@
               openModal({
                 type: 'confirm',
                 title: '✅ 更新完成啦',
-                message: '新版本已经装好，文件全都替换完啦 ✨' +
-                  `<br><br><b>关掉浏览器重新进入一下，就能看到新版本咯～</b>` +
-                  `<br><span style="color:#888;">（要是没变化，把后台那个黑色窗口也关掉，重新双击「一键启动.vbs」就好）</span>${extra}`,
+                message: '新版本已经装好啦 ✨' +
+                  `<br><br><b>把后台这个黑色窗口关掉，重新双击桌面上的「幻想域设定集」快捷方式，就能用上新版本咯～</b>` +
+                  `<br><span style="color:#888;">（浏览器会自己重新打开，旧的那几个窗口直接关掉就行）</span>${extra}`,
                 callback: () => { window.location.reload(); }
               });
             } else {

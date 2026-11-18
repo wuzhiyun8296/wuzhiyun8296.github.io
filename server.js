@@ -2907,7 +2907,7 @@ async function runUpdateFlow() {
     stage: 'done', running: false, ok: true, percent: 100,
     finishedAt: Date.now(), via: applied.via, backup: backup.dir, skipped: failures
   });
-  updateJobLog(`✅ 更新完成（来源 ${applied.source.repo.host}，方式 ${applied.via}）`);
+  updateJobLog(`✅ 更新完成（来源 ${applied.source.repo.host}）—— 关掉窗口后重新双击桌面快捷方式`);
 }
 
 // 启动更新任务（立即返回，前端轮询 /api/update/status）
@@ -2949,7 +2949,7 @@ app.get('/api/update/zip', async (req, res) => {
     if (updateJob.ok) {
       return res.json({
         success: true,
-        message: `更新完成啦（来源 ${updateJob.source}，通道 ${updateJob.via}）✨ 关掉浏览器重新进入就能看到新版本；没变化的话把后台窗口也关掉重新启动一下。你的数据都好好留着呢～`,
+        message: `更新完成啦（来源 ${updateJob.source}）✨ 把后台黑色窗口关掉，重新双击桌面上的快捷方式就能用上新版本咯～你的数据都好好留着呢`,
         source: updateJob.source,
         via: updateJob.via,
         backup: updateJob.backup,
