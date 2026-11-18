@@ -77,6 +77,16 @@ function pushAccessLog(entry) {
 
 const app = express();
 
+// 🛡️ 去掉指纹 + 基础安全响应头
+app.disable('x-powered-by');
+app.use((req, res, next) => {
+  res.setHeader('X-Content-Type-Options', 'nosniff');
+  res.setHeader('Referrer-Policy', 'no-referrer');
+  // 允许同源 iframe（后台用 iframe 装插件页），禁止外部站点嵌套
+  res.setHeader('X-Frame-Options', 'SAMEORIGIN');
+  next();
+});
+
 // 💡 跨域：默认只允许本机来源（localhost / 127.0.0.1 的任意端口）
 app.use(cors({
   origin(origin, cb) {
@@ -124,6 +134,14 @@ app.use((req, res, next) => {
   }
   // 页面请求：跳转到登录页
   return res.redirect('/login.html');
+});
+
+// 🛡️ 敏感文件不通过静态服务暴露（本机也一样）
+app.use((req, res, next) => {
+  if (isBlockedStaticPath(req.path)) {
+    return res.status(404).type('text/plain').send('Not Found');
+  }
+  next();
 });
 
 app.use(express.static(__dirname)); 
@@ -248,7 +266,8 @@ app.get('/api/files', async (req, res) => {
 
 app.get('/api/file', async (req, res) => {
   try {
-    const filePath = path.join(DOCS_DIR, req.query.path);
+    const filePath = safeJoin(DOCS_DIR, req.query.path);
+    if (!filePath) return res.status(400).json({ content: '', error: '非法路径' });
     if (fs.existsSync(filePath)) {
       const content = await fs.readFile(filePath, 'utf-8');
       res.json({ content });
@@ -261,7 +280,8 @@ app.get('/api/file', async (req, res) => {
 });
 
 app.post('/api/file', async (req, res) => {
-  const filePath = path.join(DOCS_DIR, req.body.path);
+  const filePath = safeJoin(DOCS_DIR, req.body.path);
+  if (!filePath) return res.status(400).json({ success: false, error: '非法路径' });
   await fs.ensureDir(path.dirname(filePath));
   await fs.writeFile(filePath, req.body.content, 'utf-8');
   res.json({ success: true });
@@ -678,7 +698,8 @@ app.get('/api/library/tree', async (req, res) => {
 
 app.get('/api/library/file', async (req, res) => {
   try {
-    const filePath = path.join(LIBRARY_DIR, req.query.path);
+    const filePath = safeJoin(LIBRARY_DIR, req.query.path);
+    if (!filePath) return res.status(400).json({ content: '', error: '非法路径' });
     if (fs.existsSync(filePath)) {
       res.json({ content: await fs.readFile(filePath, 'utf-8') });
     } else {
@@ -691,7 +712,8 @@ app.get('/api/library/file', async (req, res) => {
 
 app.post('/api/library/file', async (req, res) => {
   try {
-    const filePath = path.join(LIBRARY_DIR, req.body.path);
+    const filePath = safeJoin(LIBRARY_DIR, req.body.path);
+    if (!filePath) return res.status(400).json({ success: false, error: '非法路径' });
     await fs.ensureDir(path.dirname(filePath));
     await fs.writeFile(filePath, req.body.content, 'utf-8');
     res.json({ success: true });
@@ -702,7 +724,8 @@ app.post('/api/library/file', async (req, res) => {
 
 app.post('/api/library/delete', async (req, res) => {
   try {
-    const targetPath = path.join(LIBRARY_DIR, req.body.path);
+    const targetPath = safeJoin(LIBRARY_DIR, req.body.path);
+    if (!targetPath) return res.status(400).json({ success: false, error: '非法路径' });
     if (!targetPath.startsWith(LIBRARY_DIR)) return res.status(403).json({ error: '非法路径' });
     if (fs.existsSync(targetPath)) {
       await fs.remove(targetPath);
@@ -2579,6 +2602,32 @@ function mobileInfo(id) {
   } catch (e) {
     return { ready: false, file: false };
   }
+}
+
+// ================= 🛡️ 路径安全 =================
+// 💡 用户传来的路径必须落在指定目录内，否则一律拒绝（防目录穿越）
+function safeJoin(baseDir, rel) {
+  const base = path.resolve(baseDir);
+  const target = path.resolve(base, String(rel == null ? '' : rel));
+  if (target === base) return null;
+  if (!target.startsWith(base + path.sep)) return null;
+  return target;
+}
+
+// 静态目录里绝对不允许直接下载的文件（不管有没有登录）
+function isBlockedStaticPath(p) {
+  const low = String(p).toLowerCase();
+  if (low === '/server.js' || low === '/package.json' || low === '/package-lock.json') return true;
+  if (low === '/git-config.json' || low === '/firewall-config.json') return true;
+  if (low === '/update-config.json' || low === '/update-manifest.json') return true;
+  if (low.startsWith('/update-')) return true;
+  if (low === '/server_log.txt' || low === '/dev_log.txt') return true;
+  if (low.startsWith('/library/')) return true;
+  if (low.startsWith('/node_modules/')) return true;
+  if (low.startsWith('/.git/') || low === '/.git') return true;
+  if (low.endsWith('.vbs') || low.endsWith('.bat') || low.endsWith('.zip')) return true;
+  if (low.startsWith('/__')) return true;
+  return false;
 }
 
 // ================= 🔐 远程访问鉴权 =================
