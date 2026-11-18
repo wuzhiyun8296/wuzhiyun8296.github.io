@@ -44,7 +44,7 @@ Copyright (C) 2026 bilibili@雾之韵8296
 ## 官方渠道
 
 - 官方仓库：<https://gitee.com/amspace/wuzhiyun8296.github.io>
-- 作者：**bilibili@雾之韵8296**
+- 作者：[bilibili@雾之韵8296](https://space.bilibili.com/662538781)
 
 本软件完全免费，任何收费渠道均非官方发布。
 

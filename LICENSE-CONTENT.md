@@ -44,4 +44,6 @@
 
 ## 五、联系方式
 
-如需授权（转载、出版、合作），请通过 B 站联系：**bilibili@雾之韵8296**
+如需授权（转载、出版、合作），请通过 B 站联系：**[bilibili@雾之韵8296](https://space.bilibili.com/662538781)**
+
+个人主页：<https://space.bilibili.com/662538781>

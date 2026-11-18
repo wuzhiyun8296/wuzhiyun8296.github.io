@@ -19,7 +19,10 @@
     p { color: #888; font-size: 15px; margin-bottom: 40px; letter-spacing: 1px; }
     
     /* ====== 2. 成功选择界面 ====== */
-    .choice-cards { display: flex; gap: 30px; }
+    .author-line { margin-top: 30px; font-size: 12.5px; color: #5f6b75; letter-spacing: .3px; }
+  .author-line a { color: #7fc4ee; text-decoration: none; border-bottom: 1px dashed #3a5f7a; }
+  .author-line a:hover { color: #a8dcff; }
+  .choice-cards { display: flex; gap: 30px; }
     .card { 
       display: flex; flex-direction: column; align-items: center; justify-content: center;
       width: 200px; height: 220px; background: #1e1e1e; border: 1px solid #333; 
@@ -81,8 +84,12 @@
       <a href="http://localhost:3001" class="card admin" target="_blank">
         <div class="icon">⚙️</div>
         <h3>创作后台</h3>
-        <p>沉浸码字、管理设定与一键推送　·　bilibili@雾之韵8296</p>
+        <p>沉浸码字、管理设定与一键推送</p>
       </a>
+    </div>
+
+    <div class="author-line">
+      作者 <a href="https://space.bilibili.com/662538781" target="_blank" rel="noopener">bilibili@雾之韵8296</a>
     </div>
   </div>
 

@@ -89,7 +89,17 @@
     /* 按钮 */
     button.btn-primary { background: #0e639c; color: white; border: none; padding: 8px 16px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; transition: background 0.2s; }
     button.btn-primary:hover { background: #1177bb; }
-  </style>
+  
+        .author-line {
+          margin-top: 10px; padding-top: 10px; border-top: 1px dashed #3a3a3a;
+          display: flex; align-items: center; gap: 6px; flex-wrap: wrap;
+          font-size: 12px; color: #6b7280;
+        }
+        .author-line a { color: #7fc4ee; text-decoration: none; border-bottom: 1px dashed #3a5f7a; }
+        .author-line a:hover { color: #a8dcff; }
+        .author-line .a-dot { color: #3a3a3a; }
+        .author-line .a-note { color: #5f6b75; }
+</style>
 </head>
 <body>
   <div id="app">
@@ -118,6 +128,15 @@
             <span>📝 当前：{{ stats.totalWords }} 字</span>
             <span style="color: #0e639c; font-weight: bold;">进度：{{ progressPercent }}%</span>
           </div>
+          <div class="author-line">
+            作者
+            <a href="https://space.bilibili.com/662538781" target="_blank" rel="noopener">bilibili@雾之韵8296</a>
+            <span class="a-dot">·</span>
+            <a href="https://gitee.com/amspace/wuzhiyun8296.github.io" target="_blank" rel="noopener">官方仓库</a>
+            <span class="a-dot">·</span>
+            <span class="a-note">本软件完全免费 · 代码 GPL-3.0 · 小说与设定保留所有权利</span>
+          </div>
+
           <div class="version-line">
             <span class="ver-chip">📦 本地 <b>{{ version.current || '未知' }}</b></span>
             <span class="ver-chip">☁️ 远程 <b>{{ version.latest || '未知' }}</b></span>

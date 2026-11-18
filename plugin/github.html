@@ -9,6 +9,8 @@
     * { box-sizing: border-box; }
     body { margin: 0; height: 100vh; background: #1e1e1e; color: #ccc; font-family: 'Segoe UI', Tahoma, sans-serif; display: flex; justify-content: center; overflow-y: auto; }
     .container { width: 100%; max-width: 900px; padding: 30px 20px; display: flex; flex-direction: column; gap: 20px; }
+    /* 💡 关键：flex 子项默认会被压扁（配置面板被挤成 0 高度，展开也看不到内容） */
+    .container > * { flex-shrink: 0; }
     
     .header { text-align: center; }
     .header h1 { color: #fff; margin: 0 0 10px 0; font-size: 24px; display: flex; align-items: center; justify-content: center; gap: 10px;}
@@ -331,22 +333,28 @@
               pushNote.value = '';
               publishMode.value = '';
 
-              // 💡 后端会重启：等它回来再刷新页面，避免“推送完还要手动重开”
+              // 💡 先通知外层主控台（必须在重启分支之前，否则会被 return 跳过）
+              if (window.parent && window.parent !== window) {
+                if (data.gitee) {
+                  window.parent.postMessage({
+                    type: 'GITEE_SYNC_HINT',
+                    version: data.versionId || '',
+                    repoUrl: data.gitee.repoUrl || '',
+                    settingsUrl: data.gitee.settingsUrl || ''
+                  }, '*');
+                }
+                window.parent.postMessage({
+                  type: 'PUSH_DONE',
+                  version: data.versionId || ''
+                }, '*');
+              }
+
+              // 💡 后端会重启：等它回来再刷新本插件页（父页面不刷新，弹窗还在）
               if (data.restarting) {
-                logs.value += '\n[RESTART] 正在重启后台服务，稍等页面会自动刷新…\n';
+                logs.value += '\n[RESTART] 推送完成，正在重启后台服务…\n';
                 await waitForServerBack();
                 window.location.reload();
                 return;
-              }
-
-              // 通知外层主控台弹窗提醒（比 iframe 里的提示条显眼）
-              if (window.parent && window.parent !== window && data.gitee) {
-                window.parent.postMessage({
-                  type: 'GITEE_SYNC_HINT',
-                  version: data.versionId || '',
-                  repoUrl: data.gitee.repoUrl || '',
-                  settingsUrl: data.gitee.settingsUrl || ''
-                }, '*');
               }
             }
             

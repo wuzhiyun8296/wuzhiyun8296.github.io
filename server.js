@@ -1,6 +1,6 @@
 /*
  * 幻想域设定集（my-world-system）
- * Copyright (C) 2026 bilibili@雾之韵8296
+ * Copyright (C) 2026 bilibili@雾之韵8296 (https://space.bilibili.com/662538781)
  * SPDX-License-Identifier: GPL-3.0-only
  *
  * 本程序是自由软件：你可以依据 GNU 通用公共许可证（GPL-3.0）的条款
