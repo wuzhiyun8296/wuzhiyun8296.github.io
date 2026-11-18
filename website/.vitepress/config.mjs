@@ -46,41 +46,14 @@ function generateSidebar() {
   dirs.forEach(dir => {
     const items = getSidebarItems(path.join(docsDir, dir))
     if (items.length > 0) {
-      // 💡 collapsed: false = 默认展开，但点标题可以收起/展开
-      sidebar.push({ text: dir, items, collapsed: false })
+      // 💡 collapsed: true = 默认收起，点标题展开
+      sidebar.push({ text: dir, items, collapsed: true })
     }
   })
   return sidebar
 }
 
-// 💡 小说章节的「上一篇/下一篇」按书柜顺序走，不要用全站侧边栏的顺序
-//    （否则看小说时会跳到「00-世界总览」这种设定页）
-function buildNovelNav() {
-  const p = path.resolve(__dirname, '../docs/public/novel-bookcase.json')
-  const map = {}
-  if (!fs.existsSync(p)) return map
-  let bc = []
-  try { bc = JSON.parse(fs.readFileSync(p, 'utf-8')) } catch (e) { return map }
-  const walk = (nodes) => {
-    for (const n of nodes || []) {
-      if (!n) continue
-      if (n.type === 'folder' && Array.isArray(n.children)) walk(n.children)
-    }
-  }
-  for (const book of bc) {
-    if (!book || book.type !== 'folder' || !Array.isArray(book.children)) continue
-    const files = book.children.filter((c) => c && c.type === 'file' && c.link)
-    files.forEach((f, i) => {
-      map[f.link] = {
-        prev: files[i - 1] ? { text: files[i - 1].title, link: files[i - 1].link } : false,
-        next: files[i + 1] ? { text: files[i + 1].title, link: files[i + 1].link } : false
-      }
-    })
-  }
-  return map
-}
-
-const NOVEL_NAV = buildNovelNav()
+// 小说章节的前后篇由章节文件的 frontmatter 决定（推送时自动写入）
 
 const wikiLinkPlugin = (md) => {
   md.inline.ruler.before('link', 'wikilink', (state, silent) => {
@@ -118,6 +91,7 @@ export default defineConfig({
       { text: '首页', link: '/' },
       { text: '世界观', link: '/world-navigation' },
       { text: '工具库', link: '/navigation' },
+      { text: '小说', link: '/novel/' },
       { text: '金融', link: '/finance' },
       { text: '编年史', link: '/timeline' }
     ],

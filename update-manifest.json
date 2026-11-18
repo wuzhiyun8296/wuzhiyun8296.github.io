@@ -1,7 +1,7 @@
 {
-  "version": "20261118-161942",
-  "count": 50,
-  "totalBytes": 723657,
+  "version": "20261118-164614",
+  "count": 52,
+  "totalBytes": 736414,
   "files": [
     {
       "path": "admin.html",
@@ -90,8 +90,8 @@
     },
     {
       "path": "plugin/plugin-builder.html",
-      "size": 28729,
-      "sha256": "3c74b94b458588ff08a6f1ccf5da1cb101e66c20cb5e745f8466f421863bf8d4"
+      "size": 31300,
+      "sha256": "bd99326f1cd89eb44f1abcb0fe44e8df5c77843c9468360467cdc61995158dfe"
     },
     {
       "path": "plugin/protection.html",
@@ -115,8 +115,8 @@
     },
     {
       "path": "server.js",
-      "size": 153790,
-      "sha256": "119465e4a21d5d1015255ebd986b550166aa82c5aa6255a81a4eabe56daab0be"
+      "size": 156012,
+      "sha256": "50e9e6e36eff4c625b0369a97723c1e6cd1ed80aee24bbfe44b1e840981cf9e3"
     },
     {
       "path": "start.bat",
@@ -135,13 +135,13 @@
     },
     {
       "path": "version.json",
-      "size": 279,
-      "sha256": "04414faaf02315d706427c1617900c882c0761cb05cd82f5531cca82cf646830"
+      "size": 125,
+      "sha256": "fa223d6ee7a170c6e933e3518e7854c7862f47732de218fc61db5354aedf104d"
     },
     {
       "path": "website/.vitepress/config.mjs",
-      "size": 4561,
-      "sha256": "141e2858a8e455da38a87341a67c1865ce07538ba621ce4e2a7f3fee233b41a8"
+      "size": 3584,
+      "sha256": "7272732f8a5094dd64f69fc41d69f8cc23ed90c6cd40c3f647e8684b6f48f8d8"
     },
     {
       "path": "website/.vitepress/theme/Layout.vue",
@@ -165,13 +165,13 @@
     },
     {
       "path": "website/.vitepress/theme/custom.css",
-      "size": 2010,
-      "sha256": "f2d825ef7a5dc66d8fe413a67bd14ec493ddc7c545a2d000db73a0978f4d0a72"
+      "size": 2659,
+      "sha256": "e22d52e30ca71ab0f273dfaba6d01991270fc179e8f0b5c00de279f827b4a9c9"
     },
     {
       "path": "website/.vitepress/theme/index.js",
-      "size": 287,
-      "sha256": "493bc9346ea1d3524c8478958da48a09e3cd20891ee4ccaeb80f9418a27a88cb"
+      "size": 389,
+      "sha256": "24d37a1415da98e0159159923cc7459b30a65ba18e94874b19a7f1b74616337b"
     },
     {
       "path": "website/docs/characters.md",
@@ -180,8 +180,8 @@
     },
     {
       "path": "website/docs/components/NavCards.vue",
-      "size": 2833,
-      "sha256": "7c543e902ecf75f6475fe3cbd27b21fadbf8cd79c4a4b7fcd0510b9a60e96c33"
+      "size": 2977,
+      "sha256": "615034f2ceff3c9205eafe7168920c3e5c3fc67cfabb6abfc914c3a0875d413f"
     },
     {
       "path": "website/docs/components/TreeNode.vue",
@@ -232,6 +232,16 @@
       "path": "website/docs/navigation.md",
       "size": 240,
       "sha256": "4a5fec4af7618d4a25a21116bd2a76e0d038d0632c507dec0a242345fd15cebb"
+    },
+    {
+      "path": "website/docs/novel/NovelPage.vue",
+      "size": 8047,
+      "sha256": "1e095029956154ccdb8c64487a00cf11079241ca6f572430f9d037a951edba3a"
+    },
+    {
+      "path": "website/docs/novel/index.md",
+      "size": 153,
+      "sha256": "965698d81248c3e91394a0dc233fb9f17e343c87b138f9b8a63b23a1c5916870"
     },
     {
       "path": "website/docs/timeline.md",

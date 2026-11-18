@@ -34,11 +34,11 @@
     .right-panel { flex: 1.2; background: #252526; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column; min-height: 0; }
     .panel-header { padding: 15px 20px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 8px 8px 0 0; }
     .panel-header h3 { margin: 0; color: #fff; font-size: 15px; }
-    .list-header { display: grid; grid-template-columns: 30px 2fr 130px 90px; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; font-weight: bold; }
-    .list-header div:nth-child(3), .list-header div:nth-child(4) { text-align: center; }
+    .list-header { display: grid; grid-template-columns: 30px 2fr 120px 100px 60px; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; font-weight: bold; }
+    .list-header div:nth-child(3), .list-header div:nth-child(4), .list-header div:nth-child(5) { text-align: center; }
     .list-header div:last-child { text-align: center; }
     .plugin-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
-    .plugin-item { display: grid; grid-template-columns: 30px 2fr 130px 90px; align-items: center; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px 20px; transition: border-color 0.2s, background-color 0.2s; cursor: grab; }
+    .plugin-item { display: grid; grid-template-columns: 30px 2fr 120px 100px 60px; align-items: center; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px 20px; transition: border-color 0.2s, background-color 0.2s; cursor: grab; }
     .plugin-item:active { cursor: grabbing; }
     .plugin-item:hover { border-color: #555; background: #2a2a2a; }
     .plugin-item.dragging { opacity: 0.3; }
@@ -60,6 +60,20 @@
     .scope-select.scope-site { color: #4aa3df; border-color: #2f5f7f; }
     .scope-select.scope-admin { color: #d29922; border-color: #6f5a2f; }
     .scope-select.scope-hidden { color: #888; }
+
+    /* 推荐到前端 */
+    .feat-toggle {
+      display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+      justify-self: center; padding: 5px 9px; border-radius: 6px; font-size: 12px;
+      cursor: pointer; border: 1px solid #444; background: #2d2d2d; color: #888;
+      user-select: none; white-space: nowrap; transition: all .15s;
+    }
+    .feat-toggle:hover { border-color: #0e639c; }
+    .feat-toggle.on { color: #4ec9b0; border-color: #2f6f5e; background: rgba(78, 201, 176, .08); }
+    .feat-toggle.off { color: #777; }
+    .feat-toggle.blocked { opacity: .45; cursor: not-allowed; }
+    .feat-toggle input { accent-color: #4ec9b0; cursor: pointer; margin: 0; }
+    .feat-toggle.blocked input { cursor: not-allowed; }
     .status-btn { display: flex; align-items: center; justify-content: center; gap: 4px; background: transparent; border: 1px solid #444; color: #888; padding: 6px 10px; border-radius: 4px; cursor: pointer; font-size: 13px; transition: 0.2s; margin: 0 auto; width: 80px; }
     .status-btn:hover { background: #333; color: #fff; }
     .status-btn.active { color: #2ea043; border-color: #2ea043; background: rgba(46, 160, 67, 0.1); }
@@ -171,6 +185,7 @@
           <div></div>
           <div>插件名称</div>
           <div>作用范围</div>
+          <div>推荐到前端</div>
           <div>操作</div>
         </div>
         
@@ -216,6 +231,21 @@
                 <option value="admin">🛠️ 后端专用</option>
                 <option value="hidden">🚫 都隐藏</option>
               </select>
+
+              <!-- 💡 推荐到前端：只影响网站「工具库」里的卡片，不影响后台菜单 -->
+              <label
+                class="feat-toggle"
+                :class="{ on: isFeatured(p), off: !isFeatured(p), blocked: !canFeature(p) }"
+                :title="canFeature(p) ? '勾选后，这个工具的卡片会出现在网站前台「工具库」页' : '这个插件不向前台展示，无需设置'"
+              >
+                <input
+                  type="checkbox"
+                  :checked="isFeatured(p)"
+                  :disabled="!canFeature(p)"
+                  @change="setFeatured(p, $event.target.checked)"
+                />
+                <span>{{ isFeatured(p) ? '推荐' : '隐藏' }}</span>
+              </label>
 
               <div class="action-group">
                 <button class="btn-icon danger" :class="{ 'disabled': p.isSystem }" :title="p.isSystem ? '系统内置核心功能不可删除' : '彻底删除该插件'" @click="deletePlugin(p)">🗑️</button>
@@ -413,31 +443,56 @@ next: false
           if (hf) return 'admin';
           return 'both';
         };
+        // 💡 是否「推荐到前端」：默认 true（老数据没有这个字段也算推荐）
+        const isFeatured = (p) => p.featured !== false;
+        const canFeature = (p) => {
+          if (p.id === 'plugin-builder') return false;
+          const sc = scopeOf(p);
+          return sc === 'both' || sc === 'site';
+        };
+
+        // 把当前插件列表转换成 navigation.json 的内容
+        const buildNavList = () => plugins.value.map(x => ({
+          id: x.id, title: x.name, icon: x.icon, desc: x.desc || '自定义',
+          // 💡 前台链接必须是路由（/xxx），不能是插件文件（.html），
+          //    否则前台点进去 404，还会生成 map.html.md 这种页面
+          link: (function () {
+            let l = String(x.link || '').trim();
+            if (!l || l === '#' || l === '' || /\.html?$/i.test(l) || /^\/plugin\//i.test(l)) l = '/' + x.id;
+            return l;
+          })(),
+          isSystem: !!x.isSystem, isBackendOnly: !!x.isBackendOnly,
+          scope: scopeOf(x),
+          hideBackend: !!x.hideBackend, hideFrontend: !!x.hideFrontend,
+          featured: isFeatured(x)
+        }));
+
+        const saveNav = async () => {
+          await fetch(`${API_BASE}/navigation`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(buildNavList())
+          });
+        };
+
         const setScope = async (p, scope) => {
           p.scope = scope;
           p.hideBackend = (scope === 'site' || scope === 'hidden');
           p.hideFrontend = (scope === 'admin' || scope === 'hidden');
           if (p.id === 'plugin-builder') p.hideBackend = false;
           try {
-            const list = plugins.value.map(x => ({
-              id: x.id, title: x.name, icon: x.icon, desc: x.desc || '自定义',
-              // 💡 前台链接必须是路由（/xxx），不能是插件文件（.html），
-              //    否则前台点进去 404，还会生成 map.html.md 这种页面
-              link: (function () {
-                let l = String(x.link || '').trim();
-                if (!l || l === '#' || l === '' || /\.html?$/i.test(l) || /^\/plugin\//i.test(l)) l = '/' + x.id;
-                return l;
-              })(),
-              isSystem: !!x.isSystem, isBackendOnly: !!x.isBackendOnly,
-              scope: scopeOf(x),
-              hideBackend: !!x.hideBackend, hideFrontend: !!x.hideFrontend
-            }));
-            await fetch(`${API_BASE}/navigation`, {
-              method: 'POST',
-              headers: { 'Content-Type': 'application/json' },
-              body: JSON.stringify(list)
-            });
+            await saveNav();
             showToast('✅ 已设为「' + ({both:'共用',site:'前台专用',admin:'后端专用',hidden:'都隐藏'}[scope] || scope) + '」');
+          } catch (e) { showToast('保存失败', true); }
+        };
+
+        // 💡 推荐到前端：只决定「工具库」里是否出现这张卡片
+        const setFeatured = async (p, val) => {
+          if (!canFeature(p)) { p.featured = false; return; }
+          p.featured = !!val;
+          try {
+            await saveNav();
+            showToast(val ? '✅ 已推荐到前台工具库' : '已从前台工具库移除');
           } catch (e) { showToast('保存失败', true); }
         };
 
@@ -481,7 +536,7 @@ next: false
 
         onMounted(fetchPlugins);
 
-        return { scopeOf, setScope, pluginForm, plugins, loading, copyPrompt, savePlugin, fetchPlugins, toggleStatus, deletePlugin, modal, closeModal, handleConfirm, dragIndex, dragOverIndex, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, onBackendOnlyChange };
+        return { scopeOf, setScope, isFeatured, canFeature, setFeatured, pluginForm, plugins, loading, copyPrompt, savePlugin, fetchPlugins, toggleStatus, deletePlugin, modal, closeModal, handleConfirm, dragIndex, dragOverIndex, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, onBackendOnlyChange };
       }
     }).mount('#app');
   </script>

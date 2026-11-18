@@ -81,3 +81,35 @@ html.sidebar-hidden .VPContent {
     display: none;
   }
 }
+
+/* 小说章节：标题下的「第 X 章 / 共 N 章」 */
+.vp-doc .ch-meta {
+  margin: -6px 0 30px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid var(--vp-c-divider);
+  color: var(--vp-c-text-3);
+  font-size: 13px;
+  letter-spacing: .06em;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.vp-doc .ch-meta::before {
+  content: "";
+  display: inline-block;
+  width: 22px;
+  height: 2px;
+  border-radius: 2px;
+  background: var(--vp-c-brand-1);
+  opacity: .8;
+}
+
+
+/* 小说章节：标题居中 */
+.novel-chapter .vp-doc h1 {
+  text-align: center;
+}
+.novel-chapter .vp-doc .ch-meta {
+  justify-content: center;
+  text-align: center;
+}

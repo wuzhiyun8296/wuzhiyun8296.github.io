@@ -44,5 +44,7 @@ website/docs/graph.md
 website/docs/history.md
 website/docs/map.md
 website/docs/navigation.md
+website/docs/novel/NovelPage.vue
+website/docs/novel/index.md
 website/docs/timeline.md
 website/docs/world-navigation.md

@@ -38,6 +38,8 @@ onMounted(async () => {
       if (!n) return false
       if (n.hideFrontend) return false
       if (n.scope === 'admin' || n.scope === 'hidden') return false
+      // 💡 后台「插件工厂」里没勾「推荐到前端」的，前台工具库不展示
+      if (n.featured === false) return false
       const link = String(n.link || '').trim()
       return link !== '' && link !== '#'
     }

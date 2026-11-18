@@ -1687,6 +1687,18 @@ app.post('/api/git/push', async (req, res) => {
             const end = body.indexOf('\n---', 3);
             if (end > -1) body = body.slice(body.indexOf('\n', end + 1) + 1);
           }
+          // 💡 顶部要有标题 + 「第 X 章 / 共 N 章」，否则读者进来只看到一堆段落
+          body = body.replace(/^\s+/, '');
+          if (!/^#\s/.test(body)) {
+            body = '# ' + cur.title + '\n\n' + body.replace(/^\n+/, '');
+          }
+          // 去掉上一次注入的计数行，保证可重复执行
+          body = body.replace(/^<p class="ch-meta">[\s\S]*?<\/p>\n*/m, '');
+          const metaLine = `<p class="ch-meta">第 ${i + 1} 章 / 共 ${fileList.length} 章</p>`;
+          const h1End = body.indexOf('\n');
+          body = h1End > -1
+            ? body.slice(0, h1End + 1) + '\n' + metaLine + '\n' + body.slice(h1End + 1)
+            : body + '\n\n' + metaLine + '\n';
           const fm = ['---'];
           fm.push(prev
             ? `prev:\n  text: '${prev.title.replace(/'/g, "''")}'\n  link: '${prev.link}'`
@@ -1694,6 +1706,7 @@ app.post('/api/git/push', async (req, res) => {
           fm.push(next
             ? `next:\n  text: '${next.title.replace(/'/g, "''")}'\n  link: '${next.link}'`
             : 'next: false');
+          fm.push('pageClass: novel-chapter');
           fm.push('---', '', '');
           fs.writeFileSync(cur.full, fm.join('\n') + body, 'utf-8');
         }
@@ -2517,6 +2530,15 @@ app.get('/api/navigation', async (req, res) => {
       needSave = true;
     }
   });
+  // 💡 老版本留下的 navigation.json 可能缺新加的系统入口（比如「小说」）：
+  //    按 id 补齐，已有的不动，用户自定义的也不动
+  const haveIds = new Set(navList.map((n) => n && n.id).filter(Boolean));
+  for (const d of defaultNavigation()) {
+    if (!haveIds.has(d.id)) {
+      navList.push(d);
+      needSave = true;
+    }
+  }
   if (normalizeNavScopes(navList)) needSave = true;
   if (needSave) await fs.writeJson(NAVIGATION_FILE, navList, { spaces: 2 });
   
@@ -2665,9 +2687,35 @@ app.get('/api/plugins/list', async (req, res) => {
         // 如果不在 navList 里，说明还没被注册进导航，默认处于隐藏状态
         hideFrontend: navItem ? !!navItem.hideFrontend : true,
         hideBackend: navItem ? !!navItem.hideBackend : true,
+        // 💡 这几个字段必须回传，否则插件工厂一保存就把它们重置了
+        scope: navItem ? navItem.scope : undefined,
+        featured: navItem ? (navItem.featured !== false) : true,
+        link: navItem ? navItem.link : undefined,
+        desc: navItem ? navItem.desc : undefined,
         navIdx: navIdx >= 0 ? navIdx : 9999 // 未注册的排在最后
       };
     });
+
+    // 💡 有些导航项不是插件文件（比如「小说书架」指向站内页面）：
+    //    必须一起列出来，否则在插件工厂里保存一次就会被从 navigation.json 里抹掉
+    const pluginIdSet = new Set(allPlugins);
+    for (const n of navList) {
+      if (!n || !n.id || pluginIdSet.has(n.id)) continue;
+      plugins.push({
+        id: n.id,
+        name: n.title || n.id,
+        icon: n.icon || '📄',
+        isSystem: !!n.isSystem,
+        hideFrontend: !!n.hideFrontend,
+        hideBackend: !!n.hideBackend,
+        scope: n.scope,
+        featured: n.featured !== false,
+        link: n.link,
+        desc: n.desc,
+        isNavOnly: true,
+        navIdx: navList.findIndex((x) => x && x.id === n.id)
+      });
+    }
     
     // 按照 navIdx 排序，这样后台右侧列表的顺序就完美对齐了顶部导航
     plugins.sort((a, b) => a.navIdx - b.navIdx);
