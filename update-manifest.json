@@ -1,7 +1,7 @@
 {
-  "version": "20261118-142405",
+  "version": "20261118-142542",
   "count": 48,
-  "totalBytes": 685483,
+  "totalBytes": 685409,
   "files": [
     {
       "path": "admin.html",
@@ -135,8 +135,8 @@
     },
     {
       "path": "version.json",
-      "size": 198,
-      "sha256": "50d6265c8da78cf608e8b4140da3b776080bb849e68fdcf7222c9d5d8efc5ef4"
+      "size": 124,
+      "sha256": "f6bd3592f6eb761ff96aeab34931a743bd820464db6603ccc44636b5616f860d"
     },
     {
       "path": "website/.vitepress/config.mjs",
