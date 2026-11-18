@@ -11,7 +11,7 @@
     "start": "node server.js"
   },
   "keywords": ["worldbuilding", "vitepress", "writing", "fantasy"],
-  "author": "wuzhiyun8296",
+  "author": "bilibili@雾之韵8296",
   "license": "GPL-3.0-only",
   "dependencies": {
     "cors": "^2.8.6",
