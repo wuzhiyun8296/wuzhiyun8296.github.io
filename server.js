@@ -2563,6 +2563,71 @@ app.get('/api/firewall/config', (req, res) => {
   });
 });
 
+// ================= 🌐 局域网地址探测 =================
+// 💡 校园网/公司网常见情况：只有 IPv6、或者 IPv4 还没认证（169.254 开头的临时地址）
+function collectLanInfo() {
+  const os = require('os');
+  const nets = os.networkInterfaces();
+  const all = [];
+  for (const name of Object.keys(nets)) {
+    for (const info of nets[name] || []) {
+      const family = info.family === 4 ? 'IPv4' : (info.family === 6 ? 'IPv6' : info.family);
+      all.push({ name, address: info.address, family, internal: !!info.internal });
+    }
+  }
+
+  const isLinkLocal = (a) => a.startsWith('169.254.');
+  const isLoopback = (a) => a.startsWith('127.') || a === '::1';
+  const isPrivate = (a) => /^(10\.|192\.168\.|172\.(1[6-9]|2\d|3[01])\.)/.test(a);
+
+  const v4 = all.filter((x) => x.family === 'IPv4' && !x.internal && !isLoopback(x.address));
+
+  // 排序：普通私有网段优先，169.254 临时地址排最后
+  const ranked = [
+    ...v4.filter((x) => isPrivate(x.address)),
+    ...v4.filter((x) => !isPrivate(x.address) && !isLinkLocal(x.address)),
+    ...v4.filter((x) => isLinkLocal(x.address))
+  ];
+
+  const lanIps = [...new Set(ranked.map((x) => x.address))];
+  const linkLocalOnly = lanIps.length > 0 && lanIps.every((a) => isLinkLocal(a));
+
+  // 💡 全局 IPv6（fe80 链路本地地址手机用不了，排除）
+  const ipv6Global = all
+    .filter((x) => x.family === 'IPv6' && !x.internal && !x.address.startsWith('fe80') && x.address !== '::1')
+    .map((x) => x.address);
+
+  return {
+    all,
+    lanIps,
+    ipv6Global: [...new Set(ipv6Global)],
+    interfaces: all.filter((x) => !x.internal),
+    linkLocalOnly
+  };
+}
+
+// 用 UDP 连一下外网地址，问系统「你会从哪个网卡出去」——不会真的发包
+function probePrimaryIp() {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (!done) { done = true; resolve(v || ''); } };
+    try {
+      const dgram = require('dgram');
+      const sock = dgram.createSocket('udp4');
+      sock.on('error', () => { try { sock.close(); } catch (e) {} finish(''); });
+      try {
+        sock.connect(80, '8.8.8.8', () => {
+          let addr = '';
+          try { addr = sock.address().address || ''; } catch (e) {}
+          try { sock.close(); } catch (e) {}
+          finish(addr);
+        });
+      } catch (e) { finish(''); }
+      setTimeout(() => { try { sock.close(); } catch (e) {} finish(''); }, 1500);
+    } catch (e) { finish(''); }
+  });
+}
+
 // ================= 📱 插件手机版页面 =================
 // 读取某插件的手机版页面（没有就返回空）
 app.get('/api/plugin/mobile', async (req, res) => {
@@ -2613,13 +2678,13 @@ app.post('/api/plugin/mobile/delete', async (req, res) => {
 
 // 💡 手机访问信息：局域网地址 + 前后台是否已对外开放
 app.get('/api/firewall/lan-info', async (req, res) => {
-  const os = require('os');
-  const nets = os.networkInterfaces();
-  const lanIps = [];
-  for (const name of Object.keys(nets)) {
-    for (const info of nets[name] || []) {
-      if (info.family === 'IPv4' && !info.internal) lanIps.push(info.address);
-    }
+  const info = collectLanInfo();
+  let lanIps = info.lanIps;
+
+  // 💡 网卡列表里找不到可用地址时，用 UDP 探测兜底
+  if (!lanIps.length) {
+    const probed = await probePrimaryIp();
+    if (probed && !probed.startsWith('127.')) lanIps = [probed];
   }
 
   // 探测 5173 是否已绑定到 0.0.0.0（局域网可见）
@@ -2635,10 +2700,29 @@ app.get('/api/firewall/lan-info', async (req, res) => {
   });
 
   const ip = lanIps[0] || '';
+  const ip6 = (info.ipv6Global || [])[0] || '';
+
+  // 有 IPv4 用 IPv4；只有 IPv6 就用 IPv6（地址要加方括号）
+  const host = ip || (ip6 ? `[${ip6}]` : '');
+  const usingV6 = !ip && !!ip6;
+
+  let hint = '';
+  if (!ip && !ip6) {
+    hint = '没检测到可用的局域网地址。校园网常见原因：需要先登录认证、或者网线/Wi-Fi 没连上。';
+  } else if (info.linkLocalOnly || ip.startsWith('169.254.')) {
+    hint = '当前只有 169.254 开头的临时地址，说明这台电脑还没真正入网（校园网要先登录认证）。';
+  } else if (usingV6) {
+    hint = '当前只有 IPv6 地址。手机也必须连同一个 IPv6 网络才能访问（有些手机热点/移动网络不支持）。';
+  }
+
   res.json({
     lanIps,
-    backendUrl: ip ? `http://${ip}:3001` : '',
-    frontUrl: ip ? `http://${ip}:5173` : '',
+    ipv6Global: info.ipv6Global || [],
+    interfaces: info.interfaces,
+    usingV6,
+    hint,
+    backendUrl: host ? `http://${host}:3001` : '',
+    frontUrl: host ? `http://${host}:5173` : '',
     backendPublic: !firewallConfig.localOnly,
     frontPublic,
     localOnly: firewallConfig.localOnly
@@ -4103,8 +4187,9 @@ app.post('/api/home-source', (req, res) => {
 // 启动服务
 // 💡 端口重试：自动重启时新旧进程会短暂抢同一个端口，抢不到就等一会儿再试
 function listenWithRetry(port, retries = 60) {
-  // 💡 防火墙：只有本机可访问时绑 127.0.0.1，局域网设备连不上
-  const bindHost = firewallConfig.localOnly ? '127.0.0.1' : '0.0.0.0';
+  // 💡 防火墙：仅本机绑 127.0.0.1；对外开放绑 '::'（双栈，IPv4 与 IPv6 都能连）
+  //    校园网经常只有 IPv6，绑 0.0.0.0 的话手机就连不上
+  const bindHost = firewallConfig.localOnly ? '127.0.0.1' : '::';
   const server = app.listen(port, bindHost);
   server.once('listening', () => { onListening(); });
   server.once('error', (err) => {

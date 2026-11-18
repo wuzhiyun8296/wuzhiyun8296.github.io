@@ -11,7 +11,8 @@ function readLanHost() {
     const cfgPath = path.resolve(__dirname, '../../firewall-config.json')
     if (!fs.existsSync(cfgPath)) return '0.0.0.0'
     const cfg = JSON.parse(fs.readFileSync(cfgPath, 'utf-8'))
-    return cfg.localOnly === true ? '127.0.0.1' : '0.0.0.0'
+    // 对外开放时用 '::' 双栈，IPv6 校园网也能访问
+    return cfg.localOnly === true ? '127.0.0.1' : '::'
   } catch (e) {
     return '0.0.0.0'
   }

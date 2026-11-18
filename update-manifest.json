@@ -1,7 +1,7 @@
 {
-  "version": "20261118-212025",
+  "version": "20261118-212931",
   "count": 54,
-  "totalBytes": 840979,
+  "totalBytes": 846863,
   "files": [
     {
       "path": "admin.html",
@@ -55,8 +55,8 @@
     },
     {
       "path": "plugin/firewall.html",
-      "size": 19101,
-      "sha256": "d5149ca333cda0b8562afe4ebfbbcbd8a9524db701d3653b29b0fefabb0902aa"
+      "size": 21831,
+      "sha256": "aa807138b95dbf4cf5d006edb1b11300fd94a9a77039d95e16805136249483d2"
     },
     {
       "path": "plugin/github.html",
@@ -125,8 +125,8 @@
     },
     {
       "path": "server.js",
-      "size": 168615,
-      "sha256": "92661a99391512d9c0354307e12dad73f409e311531c11412fe11519bc430af0"
+      "size": 172052,
+      "sha256": "207ffdbf4bc9f3de5ba0dd94ae93d4a110eee65c8fe7cac466186ad4a36ae455"
     },
     {
       "path": "start.bat",
@@ -145,13 +145,13 @@
     },
     {
       "path": "version.json",
-      "size": 476,
-      "sha256": "9d32c1bd2a34aaac1e828f3aab9e0488d95cdaa2818bee955052d1f11505d59f"
+      "size": 131,
+      "sha256": "04f125769e905d745c4c5af7c90ac273e94b1a6ae2bcfc388aa8ac346b7332c2"
     },
     {
       "path": "website/.vitepress/config.mjs",
-      "size": 4121,
-      "sha256": "9d7ab214933499ece87e958037b89ff7c4e5eb81b5e083c316459bee6df2d906"
+      "size": 4183,
+      "sha256": "d4939e948e0513961492d50f3653d1246b4ec5cea0c1d29b4f5ddae8a6a21f12"
     },
     {
       "path": "website/.vitepress/theme/Layout.vue",
