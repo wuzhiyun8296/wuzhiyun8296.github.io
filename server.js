@@ -2712,8 +2712,17 @@ const ANNOUNCE_FILE = path.join(__dirname, 'announcement.json');
 const ANNOUNCE_CACHE_MS = 30 * 1000;
 let announceCache = { at: 0, data: null, source: 'none' };
 
+// 没有任何公告时的默认内容（新装用户第一次打开就能看到一句欢迎）
+const DEFAULT_ANNOUNCEMENT = {
+  id: 'welcome',
+  title: '👋 欢迎使用幻想域写作系统',
+  body: '有问题请及时在 B 站私信哦～～',
+  level: 'info',
+  at: ''
+};
+
 function emptyAnnouncement() {
-  return { id: '', title: '', body: '', level: 'info', at: '' };
+  return { ...DEFAULT_ANNOUNCEMENT };
 }
 
 async function readLocalAnnouncement() {
@@ -2791,6 +2800,12 @@ async function getAnnouncement(force) {
   } else if (local && ts(local) > ts(remote)) {
     pick = local;
     source = 'local';
+  }
+
+  // 💡 两边都没有 → 用默认欢迎公告，别让仪表盘空着
+  if (!pick) {
+    pick = emptyAnnouncement();
+    source = 'default';
   }
 
   // 标题和正文一样时，正文留空，避免仪表盘显示两遍
