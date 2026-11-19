@@ -629,13 +629,26 @@ app.get('/api/version', async (req, res) => {
         good = retry.filter((r) => r.ok);
       }
     }
-    const primary = good[0] || null;
+    // 💡 取「所有成功来源里最新的那个版本号」，而不是第一个成功的。
+    //    原因：Gitee 镜像常常滞后于 GitHub，先问到的 Gitee 会把新版本盖住。
+    const byVersion = good.slice().sort((a, b) => String(b.version).localeCompare(String(a.version)));
+    const primary = byVersion[0] || null;
     const latest = primary ? primary.version : '';
+
+    // 版本号形如 20261119-223352，可直接按字符串比较
+    const cmp = (a, b) => String(a).localeCompare(String(b));
+    let relation = null;   // 'newer' | 'same' | 'localNewer'
+    if (latest && local.id) {
+      const c = cmp(latest, local.id);
+      relation = c > 0 ? 'newer' : (c < 0 ? 'localNewer' : 'same');
+    }
+
     const data = {
       current: local.id || '',
       latest: latest,
-      hasUpdate: latest ? latest !== local.id : null,
-      // 主用来源（第一个读成功的仓库）
+      relation,
+      hasUpdate: relation === 'newer' ? true : (relation === 'same' ? false : null),
+      // 主用来源（版本最新的仓库）
       source: primary ? `${primary.platform}/${primary.repo}` : '',
       platform: primary ? primary.platform : '',
       platformLabel: primary ? primary.label : '',
@@ -2150,7 +2163,7 @@ server_log.txt
 
     // 💡 推送成功后自动重启后台：让刚推上去的 server.js 立刻生效
     //    （先返回响应，再等 1.5 秒重启，避免连接被掐断）
-    setTimeout(() => scheduleSelfRestart(1500), 300);
+    setTimeout(() => scheduleSelfRestart(1500, '一键推送完成'), 300);
   } catch (error) {
     logs.push(`[ERROR] 执行异常: ${error.message}\n`);
     res.json({ success: false, log: logs.join('\n') });
@@ -3170,7 +3183,7 @@ app.post('/api/firewall/lan', async (req, res) => {
 
     res.json({ success: true, enable, restarting: true });
 
-    setTimeout(() => scheduleSelfRestart(1200), 600);
+    setTimeout(() => scheduleSelfRestart(1200, '切换手机访问'), 600);
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3689,7 +3702,7 @@ function updateJobSnapshot() {
 }
 
 // 💡 更新完成后自动重启后台：直接拉起一个新的 node 进程（不经过 cmd/powershell，避免引号转义）
-function scheduleSelfRestart(delayMs = 400) {
+function scheduleSelfRestart(delayMs = 400, reason = '') {
   // 💡 这里刻意不再碰 server_log.txt：
   //    以前开头会 openSync 日志文件，一旦它被别的进程独占（EBUSY），
   //    整个重启直接失败，用户看到的就是「点重启没反应」。
@@ -3726,7 +3739,7 @@ function scheduleSelfRestart(delayMs = 400) {
     });
     child.unref();
     spawned = true;
-    console.log('[restart] 已安排重启（外部脚本 ' + path.basename(vbs) + '）');
+    console.log('[restart] 已安排重启（外部脚本 ' + path.basename(vbs) + '）' + (reason ? '，原因：' + reason : ''));
   } catch (e) {
     errMsg = e.message;
     console.log('[restart] wscript 方式失败：' + e.message + '，改用直接拉起');
@@ -4198,7 +4211,7 @@ async function runUpdateFlow() {
   // 💡 更新完成：自动重启后台，让新代码立刻生效
   updateJobSet({ stage: 'restart', message: '更新完成，正在重启服务…', restarting: true });
   updateJobLog('🔄 正在重启后台服务…');
-  scheduleSelfRestart(1500);
+  scheduleSelfRestart(1500, '更新完成');
 
   updateJobSet({
     stage: 'done', running: false, ok: true, percent: 100,
@@ -4248,8 +4261,18 @@ app.post('/api/system/kill-stale', async (req, res) => {
 });
 
 // 💡 手动重启后台（更新完自动调用，也可以单独点）
+// 💡 手动重启后台（更新完自动调用，也可以单独点）
+//    必须带 manual=1：防止刷新页面、误点链接、别的网页 no-cors 请求把服务重启掉
 app.get('/api/update/restart', (req, res) => {
-  const ok = scheduleSelfRestart(400);
+  if (String(req.query.manual || '') !== '1') {
+    return res.status(400).json({
+      success: false,
+      restarting: false,
+      error: '重启需要手动确认（缺少 manual=1 参数）'
+    });
+  }
+  console.log('[restart] 来源：用户手动点击');
+  const ok = scheduleSelfRestart(400, '手动重启');
   if (!ok) {
     return res.status(500).json({
       success: false,

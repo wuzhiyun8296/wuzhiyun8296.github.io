@@ -589,7 +589,7 @@
             });
           } catch (e) { /* 老后端没有这个接口，忽略 */ }
           try {
-            const res = await fetch(`${API_BASE}/update/restart?t=${Date.now()}`, { cache: 'no-store' });
+            const res = await fetch(`${API_BASE}/update/restart?manual=1&t=${Date.now()}`, { cache: 'no-store' });
             let data = {};
             try { data = await res.json(); } catch (e) { /* 旧后端可能没返回体 */ }
             if (!res.ok || data.success === false) {
@@ -631,7 +631,7 @@
 
         const restartBackend = async () => {
           try {
-            await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
+            await fetch(`${API_BASE}/update/restart?manual=1&t=${Date.now()}`);
             showToast('正在重启，5 秒后刷新本页');
             setTimeout(() => window.location.reload(), 6000);
           } catch (e) { showToast('重启请求失败', true); }

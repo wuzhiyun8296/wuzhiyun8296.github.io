@@ -71,6 +71,8 @@
     .ver-new { color: #f0b429; font-weight: 600; }
     .ver-ok { color: #2ea043; font-weight: 600; }
     .ver-unknown { color: #a06a6a; }
+    /* 🚀 本地比远端还新（刚推送 / 镜像未同步） */
+    .ver-local-new { color: #7fc4ee; font-weight: 600; }
     .ver-cur { color: #9fb8c9; }
     .ver-cur b { color: #e6e6e6; font-weight: 600; letter-spacing: .5px; }
     
@@ -256,6 +258,11 @@
               <i v-if="version.repo" class="ver-repo">{{ version.repo }}</i>
             </span>
             <span v-if="versionChecking" class="ver-checking">🔍 正在检查更新…</span>
+            <span v-else-if="version.relation === 'newer'" class="ver-new">🆕 有新版本可用</span>
+            <span v-else-if="version.relation === 'localNewer'" class="ver-local-new" title="你本地这份比发布仓还新：可能是刚推送、镜像还没同步，或者发布仓还没更新">
+              🚀 本地版本过新
+            </span>
+            <span v-else-if="version.relation === 'same'" class="ver-ok">✅ 当前为最新版</span>
             <span v-else-if="version.hasUpdate === true" class="ver-new">🆕 有新版本可用</span>
             <span v-else-if="version.hasUpdate === false" class="ver-ok">✅ 当前为最新版</span>
             <span v-else class="ver-unknown" :title="version.error || ''">⚠️ 无法获取远程版本</span>
