@@ -1,4 +1,4 @@
-﻿<!-- 文件路径: plugin/dashboard.html -->
+<!-- 文件路径: plugin/dashboard.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -31,8 +31,28 @@
     .notice-board.normal h2 { color: #fff; font-size: 16px; margin: 0 0 8px 0; }
     .notice-board.normal .notice-text { color: #d29922; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
     .notice-board.normal .progress-info { color: #888; font-size: 13px; display: flex; align-items: center; gap: 15px; }
-    .lan-tip {
-      display: flex; align-items: flex-start; gap: 8px;
+    /* 📣 独立公告块 */
+    .announce {
+      margin: 0 0 14px; padding: 12px 14px; border-radius: 10px;
+      background: rgba(14, 99, 156, .10);
+      border: 1px solid rgba(14, 99, 156, .35);
+      cursor: pointer; transition: background .2s, border-color .2s;
+    }
+    .announce.fresh {
+      background: rgba(210, 153, 34, .10);
+      border-color: rgba(210, 153, 34, .45);
+    }
+    .ann-head { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; flex-wrap: wrap; }
+    .ann-title { font-size: 14px; font-weight: 700; color: #fff; }
+    .ann-new {
+      font-size: 10px; font-weight: 700; letter-spacing: .5px;
+      padding: 1px 6px; border-radius: 999px;
+      color: #1e1e1e; background: #d29922;
+    }
+    .ann-time { font-size: 11px; color: #7a7a7a; margin-left: auto; }
+    .ann-body { font-size: 13px; line-height: 1.75; color: #c9c9c9; white-space: pre-wrap; }
+
+    .lan-tip {      display: flex; align-items: flex-start; gap: 8px;
       margin-top: 12px; padding: 10px 12px; border-radius: 8px;
       background: rgba(210, 153, 34, .08);
       border: 1px solid rgba(210, 153, 34, .3);
@@ -185,6 +205,17 @@
         <!-- 日常进度提醒 -->
         <div v-else>
           <h2>📢 系统公告</h2>
+
+          <!-- 📣 独立公告：每次刷新都会去仓库拉最新，和版本号无关 -->
+          <div class="announce" v-if="ann.title || ann.body" :class="{ fresh: annIsNew }" @click="markAnnRead">
+            <div class="ann-head">
+              <span class="ann-title">{{ ann.title || '公告' }}</span>
+              <span class="ann-new" v-if="annIsNew">NEW</span>
+              <span class="ann-time" v-if="ann.at">{{ fmtDate(ann.at) }}</span>
+            </div>
+            <div class="ann-body">{{ ann.body }}</div>
+          </div>
+
           <div class="notice-text">
             <template v-if="noticeText">
               <span class="notice-badge" v-if="noticeFromUpdate">更新说明</span>
@@ -359,8 +390,40 @@
         const lanBackendUrl = ref('');
 
         // 📱 后端每次启动后都会重新读防火墙配置，这里跟着刷新
-        const loadLanState = async () => {
+        // 📣 独立公告：每次打开/刷新都拉最新（带缓存），与版本号完全无关
+        const ann = ref({ id: '', title: '', body: '', level: 'info', at: '' });
+        const annIsNew = ref(false);
+        const ANN_SEEN_KEY = 'mw_ann_seen';
+
+        const fmtDate = (iso) => {
+          if (!iso) return '';
+          const d = new Date(iso);
+          if (isNaN(d.getTime())) return '';
+          const p = (n) => String(n).padStart(2, '0');
+          return `${d.getMonth() + 1}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`;
+        };
+
+        const loadAnnouncement = async (force) => {
           try {
+            const url = `${API_BASE}/announcement?t=${Date.now()}${force ? '&force=1' : ''}`;
+            const res = await fetch(url, { cache: 'no-store' });
+            if (!res.ok) return;
+            const d = await res.json();
+            const a = d.announcement || {};
+            ann.value = a;
+            const seen = localStorage.getItem(ANN_SEEN_KEY) || '';
+            annIsNew.value = !!a.id && a.id !== seen;
+          } catch (e) { /* 离线时静默 */ }
+        };
+
+        const markAnnRead = () => {
+          if (ann.value.id) {
+            localStorage.setItem(ANN_SEEN_KEY, ann.value.id);
+            annIsNew.value = false;
+          }
+        };
+
+        const loadLanState = async () => {          try {
             const res = await fetch(`${API_BASE}/firewall/lan-info?t=${Date.now()}`, { cache: 'no-store' });
             if (!res.ok) return;
             const data = await res.json();
@@ -514,11 +577,15 @@
         onMounted(() => {
           fetchData();
           loadLanState();
+          // 📣 每次打开仪表盘都检查一次公告（独立于更新）
+          loadAnnouncement();
           // 从防火墙页切回来时也能拿到最新状态
           window.addEventListener('focus', loadLanState);
+          window.addEventListener('focus', () => loadAnnouncement(true));
         });
 
         return { 
+          ann, annIsNew, fmtDate, markAnnRead, loadAnnouncement,
           stats, configLoaded, certTarget, sysNotice, pushNotice, versionInfo, noticeText, noticeFromUpdate, noticeMeta, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
         version, versionChecking,
           searchQuery, searchResults, isSearching, inboxList, newInbox, addInbox, removeInbox, downloadBackup 

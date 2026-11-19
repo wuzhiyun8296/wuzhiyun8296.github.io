@@ -1,4 +1,4 @@
-﻿<!-- 文件路径: plugin/github.html -->
+<!-- 文件路径: plugin/github.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -258,10 +258,16 @@
           <button type="button" class="preset-btn" :class="{ on: publishMode === 'test' }" @click="usePreset('test')" :disabled="isPushing">
             🧪 更新测试中（发新版本）
           </button>
+          <button type="button" class="preset-btn announce-btn" @click="publishAnnouncement" :disabled="isPushing || !pushNote.trim()">
+            📢 只发公告（不发版本，立即刷新）
+          </button>
         </div>
         <div class="preset-hint" v-if="publishMode">
           <template v-if="publishMode === 'self'">本次推送<b>不会</b>生成新版本号，别人的客户端不会提示更新</template>
           <template v-else>本次推送<b>会</b>生成新版本号，别人点检测更新就能看到（说明里已提醒先别更新）</template>
+        </div>
+        <div class="preset-hint" style="color:#7fc4ee;">
+          📢 只发公告：只更新「系统公告」，<b>不动版本号、不重建更新清单</b>，别人下次打开后台就能看到。
         </div>
       </div>
       <div class="action-row">
@@ -391,6 +397,46 @@
           }
         };
 
+        // 📢 只发公告：不动版本号、不重建清单，推送一个 announcement.json
+        const publishAnnouncement = async () => {
+          const text = pushNote.value.trim();
+          if (!text) { logs.value += '\n[ERROR] 公告内容不能为空\n'; return; }
+          if (!config.value.repoUrl || !config.value.token) {
+            isConfigOpen.value = true;
+            logs.value += `\n[ERROR] 请先在配置面板填写仓库地址和 Token！\n`;
+            return;
+          }
+          if (isPushing.value) return;
+          isPushing.value = true;
+          logs.value += `\n[INFO] 开始发布公告…\n`;
+          try {
+            const firstLine = text.split('\n')[0].trim();
+            const res = await fetch(`${API_BASE}/git/push`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                mode: 'announcement',
+                title: firstLine.length > 30 ? firstLine.slice(0, 30) : firstLine,
+                note: text,
+                level: 'info'
+              })
+            });
+            const data = await res.json();
+            logs.value += (data.log || '') + '\n';
+            if (data.success) {
+              logs.value += `[DONE] 公告已发布：${data.announcement.title || data.announcement.id}\n`;
+              window.parent?.postMessage({ type: 'PUSH_DONE' }, '*');
+            } else {
+              logs.value += `[ERROR] 发布失败\n`;
+            }
+          } catch (e) {
+            logs.value += `[ERROR] ${e.message}\n`;
+          } finally {
+            isPushing.value = false;
+            if (terminalRef.value) terminalRef.value.scrollTop = terminalRef.value.scrollHeight;
+          }
+        };
+
         const pushToGithub = async () => {
           if (!config.value.repoUrl || !config.value.token) {
             isConfigOpen.value = true;
@@ -460,7 +506,7 @@
 
         onMounted(loadConfig);
 
-        return { pushNote, publishMode, usePreset, 
+        return { pushNote, publishMode, usePreset, publishAnnouncement,
           config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
           giteeHint, pushedVersion,
           saveConfig, pushToGithub 

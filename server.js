@@ -1756,7 +1756,45 @@ app.post('/api/git/config', async (req, res) => {
 });
 
 app.post('/api/git/push', async (req, res) => {
-  const { message, note, bumpVersion } = req.body;
+  const { message, note, bumpVersion, mode } = req.body;
+
+  // ================= 📢 只发公告（不动版本号、不重建清单） =================
+  if (mode === 'announcement') {
+    try {
+      if (!fs.existsSync(GIT_CONFIG_FILE)) return res.status(400).json({ error: '请先保存仓库配置' });
+      const cfg = await fs.readJson(GIT_CONFIG_FILE);
+      if (!cfg.repoUrl || !cfg.token) return res.status(400).json({ error: '配置不完整，请检查仓库地址与 Token' });
+
+      const announcement = await publishAnnouncement({
+        title: String(req.body.title || '').trim(),
+        body: String(req.body.note || '').trim(),
+        level: req.body.level
+      });
+      if (!announcement.title && !announcement.body) {
+        return res.status(400).json({ error: '公告内容不能为空' });
+      }
+
+      const logs = ['[INFO] 发布公告（不发布新版本）\n'];
+      const run = (cmd) => new Promise((resolve) => {
+        exec(cmd, { cwd: __dirname, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } },
+          (error, stdout, stderr) => resolve({ success: !error, output: error ? (stderr || stdout || error.message) : (stdout || stderr) }));
+      });
+
+      await run('git add announcement.json website/docs/public/site-notice.json');
+      const msg = ('announcement: ' + (announcement.title || announcement.id)).replace(/"/g, '\\"');
+      const commit = await run('git commit -m "' + msg + '"');
+      logs.push(commit.success ? '> git commit: 成功\n' : '> git commit: 跳过(无修改)\n');
+
+      const push = await run('git push');
+      logs.push(push.success ? '> git push: 成功\n' : ('> git push 失败: ' + push.output + '\n'));
+      if (!push.success) return res.json({ success: false, mode: 'announcement', log: logs.join('\n') });
+
+      return res.json({ success: true, mode: 'announcement', announcement, log: logs.join('\n') });
+    } catch (e) {
+      return res.status(500).json({ error: e.message });
+    }
+  }
+
   const shouldBumpVersion = bumpVersion !== false;   // 默认发布新版本号
   if (!message) return res.status(400).json({ error: '请填写提交信息' });
   // 💡 没填更新说明时的默认文案（俏皮提醒：这一版是作者自己在折腾）
@@ -2606,7 +2644,87 @@ function mobileInfo(id) {
   }
 }
 
-// ================= 🛡️ 路径安全 =================
+// ================= 📢 公告（与版本号解耦） =================
+// 💡 公告单独走一个文件，客户端每次刷新直接拉仓库里的 announcement.json，
+//    不需要发新版本、不需要走更新清单。
+const ANNOUNCE_FILE = path.join(__dirname, 'announcement.json');
+const ANNOUNCE_CACHE_MS = 3 * 60 * 1000;
+let announceCache = { at: 0, data: null, source: 'none' };
+
+function emptyAnnouncement() {
+  return { id: '', title: '', body: '', level: 'info', at: '' };
+}
+
+async function readLocalAnnouncement() {
+  try {
+    if (fs.existsSync(ANNOUNCE_FILE)) {
+      const d = await fs.readJson(ANNOUNCE_FILE);
+      return { ...emptyAnnouncement(), ...d };
+    }
+  } catch (e) { /* 忽略 */ }
+  return null;
+}
+
+// 从更新源仓库直接拉 announcement.json（失败就返回 null）
+async function fetchRemoteAnnouncement() {
+  let cfg;
+  try { cfg = await readUpdateConfig(); } catch (e) { return null; }
+  for (const s of (cfg.sources || [])) {
+    for (const base of rawBaseUrls(s.repo, s.branch || 'main')) {
+      try {
+        const text = await httpsGetText(base + '/announcement.json', 4000);
+        const d = JSON.parse(text);
+        if (!d || !d.id) continue;
+        return { ...emptyAnnouncement(), ...d, source: 'remote' };
+      } catch (e) { /* 换下一个源 */ }
+    }
+  }
+  return null;
+}
+
+async function getAnnouncement(force) {
+  const now = Date.now();
+  if (!force && announceCache.data && (now - announceCache.at) < ANNOUNCE_CACHE_MS) {
+    return announceCache;
+  }
+  const remote = await fetchRemoteAnnouncement();
+  if (remote) {
+    announceCache = { at: now, data: remote, source: 'remote' };
+    return announceCache;
+  }
+  const local = await readLocalAnnouncement();
+  announceCache = { at: now, data: local, source: local ? 'local' : 'none' };
+  return announceCache;
+}
+
+// 发布公告：只写文件，不动版本号
+async function publishAnnouncement({ title, body, level, at }) {
+  const now = new Date();
+  const pad = (n) => String(n).padStart(2, '0');
+  const stamp = `${now.getFullYear()}${pad(now.getMonth() + 1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}`;
+  const announcement = {
+    id: stamp,
+    title: String(title || '').trim(),
+    body: String(body || '').trim(),
+    level: ['info', 'warn', 'alert'].includes(level) ? level : 'info',
+    at: at || now.toISOString()
+  };
+  await fs.writeJson(ANNOUNCE_FILE, announcement, { spaces: 2 });
+  // 兼容旧仪表盘：同步一份到 site-notice.json
+  try {
+    await fs.writeJson(path.join(PUBLIC_DIR, 'site-notice.json'), {
+      text: announcement.title || announcement.body,
+      type: announcement.level,
+      source: 'announcement',
+      version: '',
+      at: announcement.at
+    }, { spaces: 2 });
+  } catch (e) { /* 忽略 */ }
+  announceCache = { at: Date.now(), data: { ...announcement, source: 'local' }, source: 'local' };
+  return announcement;
+}
+
+// ================= 🛡️ 路径安全 ================
 // 💡 用户传来的路径必须落在指定目录内，否则一律拒绝（防目录穿越）
 function safeJoin(baseDir, rel) {
   const base = path.resolve(baseDir);
@@ -2865,6 +2983,37 @@ app.post('/api/plugin/mobile/delete', async (req, res) => {
     const file = path.join(__dirname, 'plugin', `${id}.mobile.html`);
     if (fs.existsSync(file)) await fs.remove(file);
     res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 📢 取公告：远端优先（3 分钟缓存），失败回退本地
+app.get('/api/announcement', async (req, res) => {
+  try {
+    const force = req.query && req.query.force === '1';
+    const r = await getAnnouncement(force);
+    res.json({
+      success: true,
+      source: r.source,
+      checkedAt: r.at,
+      announcement: r.data || emptyAnnouncement()
+    });
+  } catch (e) {
+    res.status(500).json({ error: e.message, announcement: emptyAnnouncement() });
+  }
+});
+
+// 📢 本机发布公告（改本地文件，随后由推送页发出去）
+app.post('/api/announcement', async (req, res) => {
+  try {
+    if (!firewallConfig.localOnly && !isAuthed(req)) return res.status(401).json({ error: '请先登录' });
+    const a = await publishAnnouncement({
+      title: req.body && req.body.title,
+      body: req.body && req.body.body,
+      level: req.body && req.body.level
+    });
+    res.json({ success: true, announcement: a });
   } catch (e) {
     res.status(500).json({ error: e.message });
   }
@@ -3473,7 +3622,14 @@ function updateJobSnapshot() {
 // 💡 更新完成后自动重启后台：直接拉起一个新的 node 进程（不经过 cmd/powershell，避免引号转义）
 function scheduleSelfRestart(delayMs = 400) {
   try {
-    const out = fs.openSync(path.join(__dirname, 'server_log.txt'), 'a');
+    // 💡 日志文件偶尔会被别的进程锁住（EBUSY），锁住时改用系统临时目录，
+    //    否则整个重启会直接失败，用户会看到「点了重启没反应」。
+    try {
+      const probe = fs.openSync(path.join(__dirname, 'server_log.txt'), 'a');
+      try { fs.closeSync(probe); } catch (e2) { /* 忽略 */ }
+    } catch (e) {
+      console.log('[restart] server_log.txt 被占用，改用临时目录写日志');
+    }
 
     // 💡 Windows 下想要「悄悄重启、不弹黑框」，最可靠的是让 wscript 去启动：
     //    wscript 本身没有控制台，VBS 用 Run(..., 0, False) 又是隐藏窗口，
