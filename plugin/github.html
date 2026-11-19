@@ -504,16 +504,21 @@
             if (data.log) logs.value += data.log;
             else if (data.error) logs.value += `[ERROR] ${data.error}\n`;
 
-            // 💡 推送成功 → 显示 Gitee 同步提醒
+            // 💡 推送成功 → 只有「没配 Gitee / 同步失败」才提醒手动同步
             if (data.success) {
-              giteeHint.value = data.gitee || null;
+              giteeHint.value = data.giteeSynced ? null : (data.gitee || null);
               pushedVersion.value = data.versionId || '';
               pushNote.value = '';
               publishMode.value = '';
 
               // 💡 先通知外层主控台（必须在重启分支之前，否则会被 return 跳过）
               if (window.parent && window.parent !== window) {
-                if (data.gitee) {
+                if (data.giteeSynced) {
+                  window.parent.postMessage({
+                    type: 'GITEE_SYNCED',
+                    version: data.versionId || ''
+                  }, '*');
+                } else if (data.gitee) {
                   window.parent.postMessage({
                     type: 'GITEE_SYNC_HINT',
                     version: data.versionId || '',

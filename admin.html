@@ -1141,6 +1141,13 @@
             loadDynamicPlugins();
           }
           // 💡 一键推送成功后，用弹窗提醒去同步 Gitee
+          //    （已经自动同步过就只提示一句，不再催手动同步）
+          if (e.data.type === 'GITEE_SYNCED') {
+            if (typeof showToast === 'function') {
+              showToast('✅ 已发布并同步到 Gitee' + (e.data.version ? '（' + e.data.version + '）' : ''));
+            }
+            loadDynamicPlugins();
+          }
           if (e.data.type === 'GITEE_SYNC_HINT') {
             const d = e.data;
             openModal({

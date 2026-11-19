@@ -2157,7 +2157,8 @@ server_log.txt
       logs.push(`> 更新说明写入失败（不影响推送）: ${e.message}\n`);
     }
 
-    const giteeHint = await readGiteeHint();
+    // 🐜 已经自动同步过 Gitee 就不再弹「去手动同步」的提醒
+    const giteeHint = giteePush.ok ? null : await readGiteeHint();
 
     // 💡 说明一下更新源归属：用户推的是自己的仓库，但「检测更新」仍走程序作者的发布仓，
     //    避免有人误以为推了自己的仓库就会从自己仓库拉新版本
