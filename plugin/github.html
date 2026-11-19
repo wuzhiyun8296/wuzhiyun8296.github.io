@@ -67,6 +67,10 @@
     .push-form { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 20px; display: flex; flex-direction: column; gap: 15px;}
     
     /* ---------- 推送栏 ---------- */
+    /* 🐜 Gitee 同步区块：和 GitHub 配置视觉上分开 */
+    .gitee-block { margin-top: 14px; padding-top: 14px; border-top: 1px dashed #3a3a3a; }
+    .gitee-block label { color: #7fc4ee; }
+
     .action-row {
       display: flex; align-items: flex-end; gap: 12px;
       padding-top: 4px;
@@ -247,6 +251,28 @@
             (勾选 repo 和 workflow 权限即可)
           </div>
         </div>
+
+        <!-- 🐜 Gitee 同步（可选）：推完 GitHub 再推一份，公告/版本在校园网才读得到 -->
+        <div class="form-group full-width gitee-block">
+          <label>Gitee 仓库地址（可选）</label>
+          <input type="text" v-model="config.giteeRepoUrl" placeholder="如: https://gitee.com/用户名/仓库名" />
+          <div class="help-text">
+            填了就在推完 GitHub 后同步推一份到 Gitee；留空则只推 GitHub。
+            校园网访问 GitHub 经常被拦，客户端读公告和版本号实际走的是 Gitee。
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Gitee 用户名</label>
+          <input type="text" v-model="config.giteeUser" placeholder="如: amspace" />
+        </div>
+        <div class="form-group">
+          <label>Gitee 私人令牌</label>
+          <input type="password" v-model="config.giteeToken" placeholder="在 Gitee 设置 → 私人令牌 生成" />
+          <div class="help-text">
+            <a href="https://gitee.com/profile/personal_access_tokens" target="_blank" style="color: #0e639c;">去 Gitee 生成令牌</a>
+            (勾选 projects 权限)
+          </div>
+        </div>
       </div>
     </div>
 
@@ -324,7 +350,10 @@
 
     createApp({
       setup() {
-        const config = ref({ repoUrl: '', userName: '', userEmail: '', token: '' });
+        const config = ref({
+          repoUrl: '', userName: '', userEmail: '', token: '',
+          giteeRepoUrl: '', giteeUser: '', giteeToken: ''
+        });
         const isConfigOpen = ref(false);
         const commitMsg = ref('Update world settings from admin panel');
         const pushNote = ref('');

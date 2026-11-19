@@ -1837,7 +1837,13 @@ app.post('/api/git/push', async (req, res) => {
       logs.push(push.success ? '> git push: 成功\n' : ('> git push 失败:\n' + redactSecrets(push.output, [safeToken]) + '\n'));
       if (!push.success) return res.json({ success: false, mode: 'announcement', log: logs.join('\n') });
 
-      return res.json({ success: true, mode: 'announcement', announcement, log: logs.join('\n') });
+      // 🐜 同步推一份到 Gitee（没配置就跳过）
+      const g = await pushToGitee(run, cfg);
+      if (!g.skipped) {
+        logs.push(g.ok ? '> 同步到 Gitee: 成功\n' : ('> 同步到 Gitee: 失败\n' + g.output + '\n'));
+      }
+
+      return res.json({ success: true, mode: 'announcement', announcement, log: logs.join('\n'), giteeSynced: g.skipped ? null : g.ok });
     } catch (e) {
       return res.status(500).json({ error: e.message });
     }
@@ -2128,6 +2134,12 @@ server_log.txt
 
     if (!res3.success) return res.json({ success: false, log: logs.join('\n') });
 
+    // 🐜 同步推一份到 Gitee（没配置就跳过；失败不影响本次发布）
+    const giteePush = await pushToGitee(runCmd, config);
+    if (!giteePush.skipped) {
+      logs.push(giteePush.ok ? '> 同步到 Gitee: 成功\n' : ('> 同步到 Gitee: 失败\n' + giteePush.output + '\n'));
+    }
+
     // 💡 更新说明同步到仪表盘：每次推送覆盖上一条，只保留最新
     let noticeSaved = null;
     try {
@@ -2166,7 +2178,7 @@ server_log.txt
       logs.push(`       ${giteeHint.repoUrl}\n`);
       logs.push(`       （仓库页 → 管理 → 仓库镜像管理 → 手动同步）\n`);
     }
-    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint, notice: noticeSaved, restarting: true });
+    res.json({ success: true, log: logs.join('\n'), versionId: versionInfo.id, gitee: giteeHint, giteeSynced: giteePush.skipped ? null : giteePush.ok, notice: noticeSaved, restarting: true });
 
     // 💡 推送成功后自动重启后台：让刚推上去的 server.js 立刻生效
     //    （先返回响应，再等 1.5 秒重启，避免连接被掐断）
@@ -2815,6 +2827,38 @@ async function publishAnnouncement({ title, body, level, at }) {
 
 // ================= 🛡️ 路径安全 ================
 // 💡 用户传来的路径必须落在指定目录内，否则一律拒绝（防目录穿越）
+// ================= 🐜 双仓库推送（GitHub + Gitee） =================
+// 💡 为什么推两份：GitHub 在校园网常被 TLS 拦截，客户端读公告/版本号实际只能走 Gitee；
+//    只推 GitHub 时 Gitee 靠镜像同步，会滞后，导致「刚发布却看不到」。
+async function pushToGitee(runCmd, cfg, branch = 'main') {
+  const url = String(cfg.giteeRepoUrl || '').trim();
+  const token = String(cfg.giteeToken || '').trim();
+  const user = String(cfg.giteeUser || '').trim();
+  if (!url || !token) return { skipped: true, ok: false, output: '' };
+
+  const clean = cleanGitUrl(url);
+  if (!clean) return { skipped: true, ok: false, output: 'Gitee 仓库地址无效' };
+
+  const pair = user ? `${user}:${token}` : `x-access-token:${token}`;
+  const b64 = Buffer.from(pair, 'utf8').toString('base64');
+  const authArg = ` -c credential.helper= -c http.extraheader="Authorization: Basic ${b64}"`;
+
+  let res = await runCmd(`git${authArg} push "${clean}" ${branch} -f`);
+
+  if (!res.success) {
+    const bareUrl = clean.replace(/^https?:\/\//i, '').replace(/^[^@\/]+@/, '');
+    const credPart = user
+      ? `${encodeURIComponent(user)}:${encodeURIComponent(token)}`
+      : token;
+    const tmpUrl = `https://${credPart}@${bareUrl}`;
+    const retry = await runCmd(`git -c credential.helper= push "${tmpUrl}" ${branch} -f`);
+    if (retry.success) res = retry;
+    else res.output = res.output + '\n' + retry.output;
+  }
+
+  return { skipped: false, ok: res.success, output: redactSecrets(res.output, [token]) };
+}
+
 function safeJoin(baseDir, rel) {
   const base = path.resolve(baseDir);
   const target = path.resolve(base, String(rel == null ? '' : rel));
