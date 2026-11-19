@@ -3969,6 +3969,7 @@ async function collectUpdateFiles() {
   //    中文名会变乱码（「一键启动.vbs」由安装脚本用百分号编码单独下载）。
   const roots = ['server.js', 'admin.html', 'login.html', 'package.json', 'version.json',
                  'update-config.json', 'start.vbs', 'start.bat', 'loading.html', 'icon3.ico',
+                 'announcement.json',
                  'plugin', 'website'];
   const out = [];
 

@@ -406,14 +406,22 @@
         const loadAnnouncement = async (force) => {
           try {
             const url = `${API_BASE}/announcement?t=${Date.now()}${force ? '&force=1' : ''}`;
-            const res = await fetch(url, { cache: 'no-store' });
+            // 💡 4 秒拿不到就放弃：断网或墙着的时候别让仪表盘一直转
+            const ctrl = new AbortController();
+            const timer = setTimeout(() => ctrl.abort(), 4000);
+            let res;
+            try {
+              res = await fetch(url, { cache: 'no-store', signal: ctrl.signal });
+            } finally {
+              clearTimeout(timer);
+            }
             if (!res.ok) return;
             const d = await res.json();
             const a = d.announcement || {};
             ann.value = a;
             const seen = localStorage.getItem(ANN_SEEN_KEY) || '';
             annIsNew.value = !!a.id && a.id !== seen;
-          } catch (e) { /* 离线时静默 */ }
+          } catch (e) { /* 离线/超时静默 */ }
         };
 
         const markAnnRead = () => {
