@@ -213,7 +213,7 @@
               <span class="ann-new" v-if="annIsNew">NEW</span>
               <span class="ann-time" v-if="ann.at">{{ fmtDate(ann.at) }}</span>
             </div>
-            <div class="ann-body">{{ ann.body }}</div>
+            <div class="ann-body" v-if="ann.body && ann.body !== ann.title">{{ ann.body }}</div>
           </div>
 
           <div class="notice-text">

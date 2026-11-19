@@ -2733,13 +2733,39 @@ async function getAnnouncement(force) {
   if (!force && announceCache.data && (now - announceCache.at) < ANNOUNCE_CACHE_MS) {
     return announceCache;
   }
+
+  // 💡 两边都读，谁的时间更新就用谁。
+  //    只看远端会踩两个坑：CDN（jsDelivr）缓存旧公告、或者 push 还没成功时远端落后。
   const remote = await fetchRemoteAnnouncement();
-  if (remote) {
-    announceCache = { at: now, data: remote, source: 'remote' };
-    return announceCache;
-  }
   const local = await readLocalAnnouncement();
-  announceCache = { at: now, data: local, source: local ? 'local' : 'none' };
+
+  const ts = (a) => {
+    const t = a && a.at ? Date.parse(a.at) : NaN;
+    if (!Number.isNaN(t)) return t;
+    const m = a && a.id ? /^(\d{8})-(\d{4})$/.exec(a.id) : null;   // 20261119-2217
+    if (m) {
+      const d = m[1], hm = m[2];
+      return Date.parse(`${d.slice(0,4)}-${d.slice(4,6)}-${d.slice(6,8)}T${hm.slice(0,2)}:${hm.slice(2,4)}:00+08:00`) || 0;
+    }
+    return 0;
+  };
+
+  let pick = remote;
+  let source = 'remote';
+  if (!remote) {
+    pick = local;
+    source = local ? 'local' : 'none';
+  } else if (local && ts(local) > ts(remote)) {
+    pick = local;
+    source = 'local';
+  }
+
+  // 标题和正文一样时，正文留空，避免仪表盘显示两遍
+  if (pick && pick.body && pick.title && pick.body.trim() === pick.title.trim()) {
+    pick = { ...pick, body: '' };
+  }
+
+  announceCache = { at: now, data: pick, source };
   return announceCache;
 }
 
@@ -2755,6 +2781,10 @@ async function publishAnnouncement({ title, body, level, at }) {
     level: ['info', 'warn', 'alert'].includes(level) ? level : 'info',
     at: at || now.toISOString()
   };
+  // 💡 只有一行时，标题和正文会是同一句，正文留空避免显示两遍
+  if (announcement.body && announcement.body === announcement.title) {
+    announcement.body = '';
+  }
   await fs.writeJson(ANNOUNCE_FILE, announcement, { spaces: 2 });
   // ⚠️ 不要写 site-notice.json：
   //    那个文件是「版本更新说明」，属于发版通道；公告写进去会被仪表盘当成更新说明，

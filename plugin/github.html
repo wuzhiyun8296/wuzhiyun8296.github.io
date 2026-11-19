@@ -417,14 +417,17 @@
           isPushing.value = true;
           logs.value += `\n[INFO] 开始发布公告…\n`;
           try {
-            const firstLine = text.split('\n')[0].trim();
+            // 💡 第一行当标题，剩下的当正文——避免标题和正文重复显示同一句话
+            const lines = text.split('\n').map((s) => s.trim()).filter(Boolean);
+            const title = (lines[0] || '').slice(0, 40);
+            const body = lines.slice(1).join('\n').trim();
             const res = await fetch(`${API_BASE}/git/push`, {
               method: 'POST',
               headers: { 'Content-Type': 'application/json' },
               body: JSON.stringify({
                 mode: 'announcement',
-                title: firstLine.length > 30 ? firstLine.slice(0, 30) : firstLine,
-                note: text,
+                title,
+                note: body,
                 level: 'info'
               })
             });
