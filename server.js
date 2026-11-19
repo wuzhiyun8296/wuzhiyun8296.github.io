@@ -144,7 +144,14 @@ app.use((req, res, next) => {
   next();
 });
 
-app.use(express.static(__dirname)); 
+app.use(express.static(__dirname, {
+  // 💡 HTML/JS 一律不缓存：更新后刷新就能用上新代码，不会被浏览器旧缓存坑
+  setHeaders(res, filePath) {
+    if (/\.(html|js|mjs|css)$/i.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    }
+  }
+})); 
 // ⚠️ 地图/纪元快照会把整张 PNG 以 base64 塞进 JSON，
 //    默认 100kb 上限会导致保存静默失败（413），这里必须放开。
 app.use(express.json({ limit: '100mb' }));
@@ -4264,11 +4271,16 @@ app.post('/api/system/kill-stale', async (req, res) => {
 // 💡 手动重启后台（更新完自动调用，也可以单独点）
 //    必须带 manual=1：防止刷新页面、误点链接、别的网页 no-cors 请求把服务重启掉
 app.get('/api/update/restart', (req, res) => {
-  if (String(req.query.manual || '') !== '1') {
-    return res.status(400).json({
+  // 💡 只挡「别的网站偷偷发起的请求」，不挡自己的页面：
+  //    浏览器会给跨站请求带上 sec-fetch-site: cross-site；
+  //    老页面（缓存里没有 manual=1）仍然能正常重启。
+  const site = String(req.headers['sec-fetch-site'] || '');
+  const manual = String(req.query.manual || '') === '1';
+  if (!manual && site === 'cross-site') {
+    return res.status(403).json({
       success: false,
       restarting: false,
-      error: '重启需要手动确认（缺少 manual=1 参数）'
+      error: '拒绝来自其他网站的跨站重启请求'
     });
   }
   console.log('[restart] 来源：用户手动点击');
