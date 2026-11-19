@@ -2696,7 +2696,7 @@ function mobileInfo(id) {
 // 💡 公告单独走一个文件，客户端每次刷新直接拉仓库里的 announcement.json，
 //    不需要发新版本、不需要走更新清单。
 const ANNOUNCE_FILE = path.join(__dirname, 'announcement.json');
-const ANNOUNCE_CACHE_MS = 3 * 60 * 1000;
+const ANNOUNCE_CACHE_MS = 30 * 1000;
 let announceCache = { at: 0, data: null, source: 'none' };
 
 function emptyAnnouncement() {

@@ -1,7 +1,7 @@
 {
-  "version": "20261119-224441",
+  "version": "20261119-224838",
   "count": 56,
-  "totalBytes": 892887,
+  "totalBytes": 893019,
   "files": [
     {
       "path": "admin.html",
@@ -10,8 +10,8 @@
     },
     {
       "path": "announcement.json",
-      "size": 124,
-      "sha256": "bb60b6143c1572c7bfd7cf212874447e9dc351ffe907701a2021a44f3ba33c8f"
+      "size": 125,
+      "sha256": "f71e22ed8ab5b64aa3bb5ac12d285d97da62ae369617265bf8afbbb3a73d0c42"
     },
     {
       "path": "icon3.ico",
@@ -45,8 +45,8 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 31163,
-      "sha256": "fa3f2b1a080dac879228f872b059ac506364f606c27c7d2b53ffd6b33813b4d9"
+      "size": 31189,
+      "sha256": "37576be112706cbc99612ce6fd0bfab8ce05363255fab291cb8862acc4dddb67"
     },
     {
       "path": "plugin/epoch-map.html",
@@ -135,8 +135,8 @@
     },
     {
       "path": "server.js",
-      "size": 197499,
-      "sha256": "e4be6f35e035755f51a5041b98d3a23eb083518d6d6a65fcc60a6918a65bbe0e"
+      "size": 197495,
+      "sha256": "d08afd39d3e9870cedbabf08a0086114a368cb40e7512fecf3471b651e2b8c40"
     },
     {
       "path": "start.bat",
@@ -155,8 +155,8 @@
     },
     {
       "path": "version.json",
-      "size": 170,
-      "sha256": "f4b53d6417168189b8fa97c27c3422d8707c711eecc238d2dc333b80f4a05c70"
+      "size": 279,
+      "sha256": "d2f63ae410eb957ff753b5864acf773bce40d9eb8fbdd09e126cb7632b9c9536"
     },
     {
       "path": "website/.vitepress/config.mjs",

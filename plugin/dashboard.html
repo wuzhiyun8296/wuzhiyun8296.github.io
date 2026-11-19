@@ -592,8 +592,8 @@
         onMounted(() => {
           fetchData();
           loadLanState();
-          // 📣 每次打开仪表盘都检查一次公告（独立于更新）
-          loadAnnouncement();
+          // 📣 每次打开/刷新仪表盘都强制拉一次最新公告（不吃 3 分钟缓存）
+          loadAnnouncement(true);
           // 从防火墙页切回来时也能拿到最新状态
           window.addEventListener('focus', loadLanState);
           window.addEventListener('focus', () => loadAnnouncement(true));
