@@ -125,3 +125,23 @@ html.sidebar-hidden .VPContent {
 }
 ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
 ::-webkit-scrollbar-corner { background: transparent; }
+
+
+/* ---------- 📖 小说正文：首行缩进两格 ---------- */
+/* Markdown 渲染会吃掉行首的全角空格，所以用 CSS 缩进；正文外面还包了一层 div，用后代选择器 */
+.novel-chapter .vp-doc p {
+  text-indent: 2em;
+  margin: 1.05em 0;
+  line-height: 2;
+}
+/* 章节计数行、列表、引用不缩进 */
+.novel-chapter .vp-doc p.ch-meta {
+  text-indent: 0;
+  text-align: center;
+  margin: 0.5em 0 1.6em;
+}
+.novel-chapter .vp-doc blockquote p,
+.novel-chapter .vp-doc li p,
+.novel-chapter .vp-doc table p {
+  text-indent: 0;
+}

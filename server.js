@@ -1804,6 +1804,8 @@ app.post('/api/git/push', async (req, res) => {
           if (!/^#\s/.test(body)) {
             body = '# ' + cur.title + '\n\n' + body.replace(/^\n+/, '');
           }
+          // 💡 行首的全角空格交给 CSS 的 text-indent 处理，源文件里去掉，避免叠成四格
+          body = body.split('\n').map((line) => line.replace(/^[\u3000\u00a0\s]+/, '')).join('\n');
           // 去掉上一次注入的计数行，保证可重复执行
           body = body.replace(/^<p class="ch-meta">[\s\S]*?<\/p>\n*/m, '');
           const metaLine = `<p class="ch-meta">第 ${i + 1} 章 / 共 ${fileList.length} 章</p>`;
