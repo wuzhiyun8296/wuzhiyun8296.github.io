@@ -2839,24 +2839,41 @@ async function pushToGitee(runCmd, cfg, branch = 'main') {
   const clean = cleanGitUrl(url);
   if (!clean) return { skipped: true, ok: false, output: 'Gitee 仓库地址无效' };
 
-  const pair = user ? `${user}:${token}` : `x-access-token:${token}`;
-  const b64 = Buffer.from(pair, 'utf8').toString('base64');
-  const authArg = ` -c credential.helper= -c http.extraheader="Authorization: Basic ${b64}"`;
+  // 💡 用户名必须是「令牌所属账号」，且该账号对仓库有推送权限。
+  //    常见错误：填了昵称/别的账号 → 403 "The token username invalid"。
+  //    这里依次尝试：用户填的 → 仓库地址里的 owner。
+  const ownerMatch = /\/([^\/]+)\/[^\/]+\.git$/i.exec(clean);
+  const owner = ownerMatch ? ownerMatch[1] : '';
+  const candidates = [user, owner].filter((v, i, arr) => v && arr.indexOf(v) === i);
 
-  let res = await runCmd(`git${authArg} push "${clean}" ${branch} -f`);
+  let last = null;
+  for (const name of candidates) {
+    const pair = `${name}:${token}`;
+    const b64 = Buffer.from(pair, 'utf8').toString('base64');
+    const authArg = ` -c credential.helper= -c http.extraheader="Authorization: Basic ${b64}"`;
+    let res = await runCmd(`git${authArg} push "${clean}" ${branch} -f`);
 
-  if (!res.success) {
-    const bareUrl = clean.replace(/^https?:\/\//i, '').replace(/^[^@\/]+@/, '');
-    const credPart = user
-      ? `${encodeURIComponent(user)}:${encodeURIComponent(token)}`
-      : token;
-    const tmpUrl = `https://${credPart}@${bareUrl}`;
-    const retry = await runCmd(`git -c credential.helper= push "${tmpUrl}" ${branch} -f`);
-    if (retry.success) res = retry;
-    else res.output = res.output + '\n' + retry.output;
+    if (!res.success) {
+      const bareUrl = clean.replace(/^https?:\/\//i, '').replace(/^[^@\/]+@/, '');
+      const tmpUrl = `https://${encodeURIComponent(name)}:${encodeURIComponent(token)}@${bareUrl}`;
+      const retry = await runCmd(`git -c credential.helper= push "${tmpUrl}" ${branch} -f`);
+      if (retry.success) res = retry;
+      else res.output = res.output + '\n' + retry.output;
+    }
+
+    if (res.success) {
+      return { skipped: false, ok: true, output: redactSecrets(res.output, [token]), usedUser: name };
+    }
+    last = res;
   }
 
-  return { skipped: false, ok: res.success, output: redactSecrets(res.output, [token]) };
+  const hint = '（Gitee 认证失败：用户名要是令牌所属账号，且对该仓库有推送权限）';
+  return {
+    skipped: false,
+    ok: false,
+    output: redactSecrets((last ? last.output : '') + '\n' + hint, [token]),
+    usedUser: candidates[candidates.length - 1] || ''
+  };
 }
 
 function safeJoin(baseDir, rel) {
