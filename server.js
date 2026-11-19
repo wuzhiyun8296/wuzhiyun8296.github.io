@@ -1765,14 +1765,18 @@ app.post('/api/git/push', async (req, res) => {
       const cfg = await fs.readJson(GIT_CONFIG_FILE);
       if (!cfg.repoUrl || !cfg.token) return res.status(400).json({ error: '配置不完整，请检查仓库地址与 Token' });
 
-      const announcement = await publishAnnouncement({
-        title: String(req.body.title || '').trim(),
-        body: String(req.body.note || '').trim(),
-        level: req.body.level
-      });
-      if (!announcement.title && !announcement.body) {
+      // ⚠️ 先校验再写文件：否则空公告会把 announcement.json 覆盖成空内容
+      const wantTitle = String(req.body.title || '').trim();
+      const wantBody = String(req.body.note || '').trim();
+      if (!wantTitle && !wantBody) {
         return res.status(400).json({ error: '公告内容不能为空' });
       }
+
+      const announcement = await publishAnnouncement({
+        title: wantTitle,
+        body: wantBody,
+        level: req.body.level
+      });
 
       const logs = ['[INFO] 发布公告（不发布新版本）\n'];
       const safeToken = String(cfg.token || '').trim();
@@ -1789,7 +1793,7 @@ app.post('/api/git/push', async (req, res) => {
       await run(`git config user.name "${(cfg.userName || 'Admin').trim()}"`);
       await run(`git config user.email "${(cfg.userEmail || 'admin@local').trim()}"`);
 
-      await run('git add announcement.json website/docs/public/site-notice.json');
+      await run('git add announcement.json');
       const msg = ('announcement: ' + (announcement.title || announcement.id)).replace(/"/g, '\\"');
       const commit = await run('git commit -m "' + msg + '"');
       logs.push(commit.success ? '> git commit: 成功\n' : '> git commit: 跳过(无修改)\n');
@@ -2752,16 +2756,9 @@ async function publishAnnouncement({ title, body, level, at }) {
     at: at || now.toISOString()
   };
   await fs.writeJson(ANNOUNCE_FILE, announcement, { spaces: 2 });
-  // 兼容旧仪表盘：同步一份到 site-notice.json
-  try {
-    await fs.writeJson(path.join(PUBLIC_DIR, 'site-notice.json'), {
-      text: announcement.title || announcement.body,
-      type: announcement.level,
-      source: 'announcement',
-      version: '',
-      at: announcement.at
-    }, { spaces: 2 });
-  } catch (e) { /* 忽略 */ }
+  // ⚠️ 不要写 site-notice.json：
+  //    那个文件是「版本更新说明」，属于发版通道；公告写进去会被仪表盘当成更新说明，
+  //    出现「更新说明 = 公告内容」的重复显示。
   announceCache = { at: Date.now(), data: { ...announcement, source: 'local' }, source: 'local' };
   return announcement;
 }
