@@ -1775,18 +1775,42 @@ app.post('/api/git/push', async (req, res) => {
       }
 
       const logs = ['[INFO] 发布公告（不发布新版本）\n'];
+      const safeToken = String(cfg.token || '').trim();
       const run = (cmd) => new Promise((resolve) => {
         exec(cmd, { cwd: __dirname, windowsHide: true, env: { ...process.env, GIT_TERMINAL_PROMPT: '0' } },
           (error, stdout, stderr) => resolve({ success: !error, output: error ? (stderr || stdout || error.message) : (stdout || stderr) }));
       });
+
+      // 💡 关键：和「一键推送」用同一套认证。
+      //    origin 只存干净地址，Token 通过一次性 Authorization 头传，不落盘。
+      //    之前这里直接 git push，没有凭据 → GitHub 报「需要 Personal Access Token」。
+      const authArg = basicAuthHeaderArg(safeToken, cfg.userName);
+      await sanitizeOriginRemote(run, cfg.repoUrl);
+      await run(`git config user.name "${(cfg.userName || 'Admin').trim()}"`);
+      await run(`git config user.email "${(cfg.userEmail || 'admin@local').trim()}"`);
 
       await run('git add announcement.json website/docs/public/site-notice.json');
       const msg = ('announcement: ' + (announcement.title || announcement.id)).replace(/"/g, '\\"');
       const commit = await run('git commit -m "' + msg + '"');
       logs.push(commit.success ? '> git commit: 成功\n' : '> git commit: 跳过(无修改)\n');
 
-      const push = await run('git push');
-      logs.push(push.success ? '> git push: 成功\n' : ('> git push 失败: ' + push.output + '\n'));
+      let push = await run(`git${authArg} push origin main`);
+
+      // 兜底：某些 Git 版本不认 http.extraheader，用一次性带 token 的地址重试
+      if (!push.success) {
+        logs.push('> 常规认证失败，改用备用认证方式重试…\n');
+        const bareUrl = String(cfg.repoUrl || '').trim()
+          .replace(/^https?:\/\//i, '').replace(/^[^@\/]+@/, '').replace(/\.git$/i, '');
+        const credPart = String(cfg.userName || '').trim()
+          ? `${encodeURIComponent(String(cfg.userName).trim())}:${encodeURIComponent(safeToken)}`
+          : safeToken;
+        const tmpUrl = `https://${credPart}@${bareUrl}.git`;
+        const retry = await run(`git -c credential.helper= push "${tmpUrl}" main`);
+        if (retry.success) push = retry;
+        else push.output = push.output + '\n' + retry.output;
+      }
+
+      logs.push(push.success ? '> git push: 成功\n' : ('> git push 失败:\n' + redactSecrets(push.output, [safeToken]) + '\n'));
       if (!push.success) return res.json({ success: false, mode: 'announcement', log: logs.join('\n') });
 
       return res.json({ success: true, mode: 'announcement', announcement, log: logs.join('\n') });
