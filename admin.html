@@ -820,7 +820,21 @@
                     body: '{}'
                   });
                 } catch (e) { /* 老后端没有这个接口，忽略 */ }
-                await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
+
+                // 💡 重启失败一定要让用户看到原因，不能静默失败
+                const res = await fetch(`${API_BASE}/update/restart?t=${Date.now()}`);
+                let data = {};
+                try { data = await res.json(); } catch (e) { /* 旧后端可能返回空 */ }
+                if (!res.ok || data.success === false) {
+                  openModal({
+                    type: 'confirm',
+                    title: '❌ 重启失败',
+                    message: (data.error || '后台没能重新拉起来。') +
+                      '<br><br>手动处理：<br>1. 关掉所有黑色命令行窗口<br>2. 任务管理器结束所有 <b>node.exe</b><br>3. 重新双击「一键启动.vbs」',
+                    isDanger: true
+                  });
+                  return;
+                }
                 openModal({
                   type: 'confirm',
                   title: '♻️ 正在重启',

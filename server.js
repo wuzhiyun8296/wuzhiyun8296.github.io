@@ -2665,12 +2665,30 @@ async function readLocalAnnouncement() {
   return null;
 }
 
-// 从更新源仓库直接拉 announcement.json（失败就返回 null）
+// 从仓库直接拉 announcement.json（优先用你自己推送的仓库，其次更新源）
 async function fetchRemoteAnnouncement() {
-  let cfg;
-  try { cfg = await readUpdateConfig(); } catch (e) { return null; }
-  for (const s of (cfg.sources || [])) {
-    for (const base of rawBaseUrls(s.repo, s.branch || 'main')) {
+  const candidates = [];
+
+  // ① 你自己配置的仓库（就是「一键推送」用的那个）
+  try {
+    if (fs.existsSync(GIT_CONFIG_FILE)) {
+      const own = parseRepoUrl((await fs.readJson(GIT_CONFIG_FILE)).repoUrl);
+      if (own) candidates.push({ repo: own, branch: 'main' });
+    }
+  } catch (e) { /* 忽略 */ }
+
+  // ② 保底：更新源里的仓库
+  try {
+    const cfg = await readUpdateConfig();
+    for (const s of (cfg.sources || [])) {
+      if (!s || !s.repo) continue;
+      const dup = candidates.some((c) => c.repo.host === s.repo.host && c.repo.repo.toLowerCase() === s.repo.repo.toLowerCase());
+      if (!dup) candidates.push({ repo: s.repo, branch: s.branch || 'main' });
+    }
+  } catch (e) { /* 忽略 */ }
+
+  for (const c of candidates) {
+    for (const base of rawBaseUrls(c.repo, c.branch)) {
       try {
         const text = await httpsGetText(base + '/announcement.json', 4000);
         const d = JSON.parse(text);
@@ -3621,16 +3639,13 @@ function updateJobSnapshot() {
 
 // 💡 更新完成后自动重启后台：直接拉起一个新的 node 进程（不经过 cmd/powershell，避免引号转义）
 function scheduleSelfRestart(delayMs = 400) {
-  try {
-    // 💡 日志文件偶尔会被别的进程锁住（EBUSY），锁住时改用系统临时目录，
-    //    否则整个重启会直接失败，用户会看到「点了重启没反应」。
-    try {
-      const probe = fs.openSync(path.join(__dirname, 'server_log.txt'), 'a');
-      try { fs.closeSync(probe); } catch (e2) { /* 忽略 */ }
-    } catch (e) {
-      console.log('[restart] server_log.txt 被占用，改用临时目录写日志');
-    }
+  // 💡 这里刻意不再碰 server_log.txt：
+  //    以前开头会 openSync 日志文件，一旦它被别的进程独占（EBUSY），
+  //    整个重启直接失败，用户看到的就是「点重启没反应」。
+  let spawned = false;
+  let errMsg = '';
 
+  try {
     // 💡 Windows 下想要「悄悄重启、不弹黑框」，最可靠的是让 wscript 去启动：
     //    wscript 本身没有控制台，VBS 用 Run(..., 0, False) 又是隐藏窗口，
     //    新进程会拥有自己的（隐藏）控制台，旧进程退出也不会把它带走。
@@ -3655,13 +3670,36 @@ function scheduleSelfRestart(delayMs = 400) {
       stdio: 'ignore'
     });
     child.unref();
+    spawned = true;
     console.log('[restart] 已安排重启（wscript 隐藏启动）');
-    setTimeout(() => { process.exit(0); }, Math.max(200, delayMs));
-    return true;
   } catch (e) {
-    console.log('[restart] 自动重启失败：' + e.message);
-    return false;
+    errMsg = e.message;
+    console.log('[restart] wscript 方式失败：' + e.message + '，改用直接拉起');
   }
+
+  // 💡 兜底：wscript 不可用（策略限制等）时，直接起 node
+  if (!spawned) {
+    try {
+      const child = require('child_process').spawn(process.execPath, [path.join(__dirname, 'server.js')], {
+        cwd: __dirname,
+        detached: true,
+        windowsHide: true,
+        stdio: 'ignore'
+      });
+      child.unref();
+      spawned = true;
+      console.log('[restart] 已用 node 直接拉起（兜底方式）');
+    } catch (e2) {
+      errMsg = errMsg || e2.message;
+      console.log('[restart] 自动重启失败：' + errMsg);
+    }
+  }
+
+  // 没成功就别退出：保住当前服务，让用户看到错误提示，而不是整个后台消失
+  if (!spawned) return false;
+
+  setTimeout(() => { process.exit(0); }, Math.max(200, delayMs));
+  return true;
 }
 
 // 按文件清单逐个拉取（不依赖 zip 归档：Gitee 的归档下载已经需要登录）
@@ -4155,8 +4193,15 @@ app.post('/api/system/kill-stale', async (req, res) => {
 
 // 💡 手动重启后台（更新完自动调用，也可以单独点）
 app.get('/api/update/restart', (req, res) => {
+  const ok = scheduleSelfRestart(400);
+  if (!ok) {
+    return res.status(500).json({
+      success: false,
+      restarting: false,
+      error: '自动重启失败：无法拉起新进程。请手动结束所有 node.exe 后重新双击「一键启动.vbs」。'
+    });
+  }
   res.json({ success: true, restarting: true });
-  setTimeout(() => scheduleSelfRestart(400), 500);
 });
 
 // 查询更新进度

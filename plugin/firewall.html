@@ -589,8 +589,17 @@
             });
           } catch (e) { /* 老后端没有这个接口，忽略 */ }
           try {
-            await fetch(`${API_BASE}/update/restart?t=${Date.now()}`, { cache: 'no-store' });
-          } catch (e) { /* 重启时连接会断，忽略 */ }
+            const res = await fetch(`${API_BASE}/update/restart?t=${Date.now()}`, { cache: 'no-store' });
+            let data = {};
+            try { data = await res.json(); } catch (e) { /* 旧后端可能没返回体 */ }
+            if (!res.ok || data.success === false) {
+              showToast(data.error || '重启失败，请手动结束 node.exe 后重新启动', true);
+              return;
+            }
+          } catch (e) {
+            showToast('重启请求失败：' + e.message, true);
+            return;
+          }
           showToast('正在重启后台，约 5 秒后自动刷新');
           setTimeout(() => window.location.reload(), 6000);
         };

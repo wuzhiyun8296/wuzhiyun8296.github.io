@@ -86,7 +86,7 @@
     }
     .action-row input:disabled { opacity: .6; cursor: not-allowed; }
 
-    .btn-save, .btn-push {
+    .btn-save, .btn-push, .btn-announce {
       height: 42px; border: none; border-radius: 8px; cursor: pointer;
       font-weight: 600; font-size: 14px; white-space: nowrap;
       display: inline-flex; align-items: center; justify-content: center; gap: 6px;
@@ -98,6 +98,16 @@
     }
     .btn-save:hover { background: rgba(14, 99, 156, .32); color: #fff; }
     .btn-save:active { transform: translateY(1px); }
+
+    /* 📢 发布公告：比推送弱一档，避免误点 */
+    .btn-announce {
+      padding: 0 20px; color: #f0d9a8;
+      background: rgba(210, 153, 34, .12);
+      border: 1px solid rgba(210, 153, 34, .55);
+    }
+    .btn-announce:hover:not(:disabled) { background: rgba(210, 153, 34, .24); color: #fff; }
+    .btn-announce:active:not(:disabled) { transform: translateY(1px); }
+    .btn-announce:disabled { opacity: .45; cursor: not-allowed; }
 
     .btn-push {
       padding: 0 26px; color: #fff;
@@ -192,7 +202,7 @@
       }
       .commit-field { flex: 1 1 100%; }
       .action-row input { font-size: 16px; padding: 12px 14px; }
-      .btn-save, .btn-push {
+      .btn-save, .btn-push, .btn-announce {
         flex: 1 1 calc(50% - 5px); min-height: 46px; font-size: 14px;
       }
 
@@ -258,16 +268,10 @@
           <button type="button" class="preset-btn" :class="{ on: publishMode === 'test' }" @click="usePreset('test')" :disabled="isPushing">
             🧪 更新测试中（发新版本）
           </button>
-          <button type="button" class="preset-btn announce-btn" @click="publishAnnouncement" :disabled="isPushing || !pushNote.trim()">
-            📢 只发公告（不发版本，立即刷新）
-          </button>
         </div>
         <div class="preset-hint" v-if="publishMode">
           <template v-if="publishMode === 'self'">本次推送<b>不会</b>生成新版本号，别人的客户端不会提示更新</template>
           <template v-else>本次推送<b>会</b>生成新版本号，别人点检测更新就能看到（说明里已提醒先别更新）</template>
-        </div>
-        <div class="preset-hint" style="color:#7fc4ee;">
-          📢 只发公告：只更新「系统公告」，<b>不动版本号、不重建更新清单</b>，别人下次打开后台就能看到。
         </div>
       </div>
       <div class="action-row">
@@ -282,6 +286,9 @@
           />
         </label>
         <button class="btn-save" @click="saveConfig">💾 保存配置</button>
+        <button class="btn-announce" @click="publishAnnouncement" :disabled="isPushing || !pushNote.trim()">
+          📢 发布公告
+        </button>
         <button class="btn-push" @click="pushToGithub" :disabled="isPushing || !commitMsg.trim()">
           <span v-if="isPushing" class="spinner">⏳</span>
           <span v-else>🚀</span>
