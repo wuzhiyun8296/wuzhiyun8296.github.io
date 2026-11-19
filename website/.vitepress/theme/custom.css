@@ -134,6 +134,13 @@ html.sidebar-hidden .VPContent {
   margin: 1.05em 0;
   line-height: 2;
 }
+
+/* 🔤 阅读字体：由后台「沉浸码字」的字体选择决定（--novel-font 由 theme/index.js 注入） */
+.novel-chapter .vp-doc,
+.novel-chapter .vp-doc p,
+.novel-chapter .vp-doc li {
+  font-family: var(--novel-font, inherit);
+}
 /* 章节计数行、列表、引用不缩进 */
 .novel-chapter .vp-doc p.ch-meta {
   text-indent: 0;

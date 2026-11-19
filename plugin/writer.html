@@ -88,6 +88,17 @@
     }
     .rich-editor::-webkit-scrollbar { width: 8px; }
     .rich-editor::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+    /* 🔤 常用字体选择器 */
+    .font-picker {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #888; cursor: pointer;
+    }
+    .font-picker select {
+      background: #262626; color: #ddd; border: 1px solid #3a3a3a;
+      border-radius: 6px; padding: 3px 8px; font-size: 12px; outline: none; cursor: pointer;
+    }
+    .font-picker select:hover { border-color: #555; }
     .rich-editor:empty:before { content: attr(placeholder); color: #555; pointer-events: none; display: block; line-height: 1.5; }
 
     /* 进度条 */
@@ -272,6 +283,13 @@
           </div>
           
           <div class="format-tools-right">
+            <!-- 🔤 常用字体：只保留 5 种，选了会同步到前台阅读页 -->
+            <label class="font-picker" title="选择正文显示字体，前台阅读页也会跟着变">
+              🅰
+              <select :value="readingFont" @change="changeReadingFont($event.target.value)">
+                <option v-for="f in fontPresets" :key="f.key" :value="f.key">{{ f.label }}</option>
+              </select>
+            </label>
             <span title="打字时按回车会自动空两格">💡 回车自动缩进</span>
             <span title="复制的内容会保留段落并自动缩进">📋 粘贴自动排版</span>
             <span title="保存后 VitePress 网页会自动更新">🌐 同步至网站</span>
@@ -637,7 +655,54 @@
             if (viewMode.value === 'editor' && currentPath.value && content.value) saveFile(true);
           }, 60000);
           window.addEventListener('keydown', handleGlobalKeydown);
+          // 🔤 读取已保存的阅读字体
+          loadReadingFont();
         });
+
+        // 🔤 常用字体：本地立即生效，同时写进前台配置，阅读页跟着变
+        const readingFont = ref(localStorage.getItem('mw_writer_font') || 'default');
+        const fontPresets = ref([
+          { key: 'default', label: '系统默认', css: '' },
+          { key: 'songti', label: '宋体', css: '"Source Han Serif SC", "Noto Serif SC", SimSun, "Songti SC", serif' },
+          { key: 'heiti', label: '黑体', css: '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif' },
+          { key: 'kaiti', label: '楷体', css: 'KaiTi, "Kaiti SC", STKaiti, "楷体", serif' },
+          { key: 'fangsong', label: '仿宋', css: 'FangSong, "FangSong_GB2312", STFangsong, "仿宋", serif' }
+        ]);
+
+        const applyReadingFont = (key) => {
+          const hit = fontPresets.value.find((f) => f.key === key) || fontPresets.value[0];
+          const el = document.getElementById('novel-editor');
+          if (el) el.style.fontFamily = hit.css || '';
+          document.documentElement.style.setProperty('--novel-font', hit.css || '');
+        };
+
+        const changeReadingFont = async (key) => {
+          readingFont.value = key;
+          localStorage.setItem('mw_writer_font', key);
+          applyReadingFont(key);
+          try {
+            await fetch(`${API_BASE}/reading-font`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key })
+            });
+          } catch (e) { /* 离线时只影响本机预览 */ }
+        };
+
+        const loadReadingFont = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/reading-font?t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) return;
+            const d = await res.json();
+            if (Array.isArray(d.presets) && d.presets.length) fontPresets.value = d.presets;
+            // 以服务端为准（多设备之间保持一致）
+            if (d.key) {
+              readingFont.value = d.key;
+              localStorage.setItem('mw_writer_font', d.key);
+            }
+          } catch (e) { /* 忽略 */ }
+          applyReadingFont(readingFont.value);
+        };
 
         onUnmounted(() => {
           if (autoSaveTimer) clearInterval(autoSaveTimer);
@@ -649,6 +714,7 @@
           goToShelf, openBook, goToChapters, createBook, renameBook, openExportModal, doExport, 
           createChapter, renameChapter, openChapter, deleteChapter,
           onRichInput, saveFile, toggleFocus, handleRichKeyDown, handlePaste, formatDoc, autoIndent,
+          readingFont, fontPresets, changeReadingFont,
           modal, closeModal, confirmModal, exportModal
         };
       }

@@ -3185,6 +3185,45 @@ app.post('/api/announcement', async (req, res) => {
   }
 });
 
+// ================= 🔤 阅读字体 =================
+// 💡 只提供 5 种常见中文字体：都不需要下载，用系统已装的字体名，前端靠 CSS 变量生效。
+const READING_FONT_FILE = path.join(PUBLIC_DIR, 'reading-font.json');
+const READING_FONTS = {
+  default:  { label: '系统默认', css: '' },
+  songti:   { label: '宋体', css: '"Source Han Serif SC", "Noto Serif SC", SimSun, "Songti SC", serif' },
+  heiti:    { label: '黑体', css: '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif' },
+  kaiti:    { label: '楷体', css: 'KaiTi, "Kaiti SC", STKaiti, "楷体", serif' },
+  fangsong: { label: '仿宋', css: 'FangSong, "FangSong_GB2312", STFangsong, "仿宋", serif' }
+};
+
+app.get('/api/reading-font', async (req, res) => {
+  let key = 'default';
+  try {
+    if (fs.existsSync(READING_FONT_FILE)) {
+      const d = await fs.readJson(READING_FONT_FILE);
+      if (d && d.key && READING_FONTS[d.key]) key = d.key;
+    }
+  } catch (e) { /* 忽略 */ }
+  res.json({
+    success: true,
+    key,
+    css: READING_FONTS[key].css,
+    presets: Object.keys(READING_FONTS).map((k) => ({ key: k, label: READING_FONTS[k].label, css: READING_FONTS[k].css }))
+  });
+});
+
+app.post('/api/reading-font', async (req, res) => {
+  try {
+    if (!firewallConfig.localOnly && !isAuthed(req)) return res.status(401).json({ error: '请先登录' });
+    const key = String((req.body && req.body.key) || 'default');
+    if (!READING_FONTS[key]) return res.status(400).json({ error: '不支持的字体' });
+    await fs.writeJson(READING_FONT_FILE, { key }, { spaces: 2 });
+    res.json({ success: true, key, css: READING_FONTS[key].css });
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // 💡 手机访问信息：局域网地址 + 前后台是否已对外开放
 app.get('/api/firewall/lan-info', async (req, res) => {
   const info = collectLanInfo();
