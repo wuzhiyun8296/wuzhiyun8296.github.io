@@ -3697,19 +3697,23 @@ function scheduleSelfRestart(delayMs = 400) {
   let errMsg = '';
 
   try {
-    // 💡 Windows 下想要「悄悄重启、不弹黑框」，最可靠的是让 wscript 去启动：
-    //    wscript 本身没有控制台，VBS 用 Run(..., 0, False) 又是隐藏窗口，
-    //    新进程会拥有自己的（隐藏）控制台，旧进程退出也不会把它带走。
-    const vbs = path.join(__dirname, '__restart_launch.vbs');
-    const esc = (s) => String(s).replace(/"/g, '""');
-    const lines = [
-      'Set ws = CreateObject("WScript.Shell")',
-      'WScript.Sleep 1500',
-      'ws.CurrentDirectory = "' + esc(__dirname) + '"',
-      'ws.Run Chr(34) & "' + esc(process.execPath) + '" & Chr(34) & " " & Chr(34) & "' + esc(path.join(__dirname, 'server.js')) + '" & Chr(34), 0, False'
-    ];
-    // UTF-16LE + BOM：WSH 原生支持，路径里有中文也不会乱
-    fs.writeFileSync(vbs, '\ufeff' + lines.join('\r\n') + '\r\n', 'utf16le');
+    // 💡 优先用仓库里的「外部重启脚本」：单一实现，双击也能用，
+    //    服务自己重启时只是调用它，不再现场拼 VBS。
+    const external = path.join(__dirname, 'restart.vbs');
+    const vbs = fs.existsSync(external) ? external : path.join(__dirname, '__restart_launch.vbs');
+
+    if (!fs.existsSync(external)) {
+      // 兼容老版本：没有外部脚本时才现场生成（内容与 restart.vbs 等价）
+      const esc = (s) => String(s).replace(/"/g, '""');
+      const lines = [
+        'Set ws = CreateObject("WScript.Shell")',
+        'WScript.Sleep 1500',
+        'ws.CurrentDirectory = "' + esc(__dirname) + '"',
+        'ws.Run "cmd /c for /f ""tokens=5"" %a in (\'netstat -aon ^| findstr :3001 ^| findstr LISTENING\') do taskkill /F /PID %a", 0, True',
+        'ws.Run "cmd /c node server.js >> server_log.txt 2>&1", 0, False'
+      ];
+      fs.writeFileSync(vbs, '\ufeff' + lines.join('\r\n') + '\r\n', 'utf16le');
+    }
 
     // 💡 重启前先把自己以外的旧实例干掉，杜绝「两个 node 抢 3001」
     killStaleServerProcesses().catch(() => {});
@@ -3722,7 +3726,7 @@ function scheduleSelfRestart(delayMs = 400) {
     });
     child.unref();
     spawned = true;
-    console.log('[restart] 已安排重启（wscript 隐藏启动）');
+    console.log('[restart] 已安排重启（外部脚本 ' + path.basename(vbs) + '）');
   } catch (e) {
     errMsg = e.message;
     console.log('[restart] wscript 方式失败：' + e.message + '，改用直接拉起');
@@ -3968,7 +3972,7 @@ async function collectUpdateFiles() {
   //    注意：清单里只放纯 ASCII 文件名——批处理按 GBK 读清单，
   //    中文名会变乱码（「一键启动.vbs」由安装脚本用百分号编码单独下载）。
   const roots = ['server.js', 'admin.html', 'login.html', 'package.json', 'version.json',
-                 'update-config.json', 'start.vbs', 'start.bat', 'loading.html', 'icon3.ico',
+                 'update-config.json', 'start.vbs', 'start.bat', 'restart.vbs', 'loading.html', 'icon3.ico',
                  'announcement.json',
                  'plugin', 'website'];
   const out = [];
@@ -4254,6 +4258,17 @@ app.get('/api/update/restart', (req, res) => {
     });
   }
   res.json({ success: true, restarting: true });
+});
+
+// 🩺 自检：客户端/前端用它判断「服务到底有没有真的重启过」
+app.get('/api/ping', (req, res) => {
+  res.json({
+    success: true,
+    pid: process.pid,
+    startedAt: BOOT_T0,
+    uptimeSec: Math.round((Date.now() - BOOT_T0) / 1000),
+    version: (() => { try { return JSON.parse(fs.readFileSync(VERSION_FILE, 'utf-8')).id || ''; } catch (e) { return ''; } })()
+  });
 });
 
 // 查询更新进度

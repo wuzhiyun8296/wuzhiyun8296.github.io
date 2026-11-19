@@ -1,4 +1,5 @@
 admin.html
+announcement.json
 icon3.ico
 loading.html
 login.html
@@ -22,6 +23,7 @@ plugin/protection.html
 plugin/timeline.html
 plugin/world-tree.html
 plugin/writer.html
+restart.vbs
 server.js
 start.bat
 start.vbs
