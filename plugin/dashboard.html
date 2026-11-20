@@ -126,7 +126,8 @@
 
     /* 🎓 新人引导 */
     .onboard-mask {
-      position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 9000;
+      position: fixed; inset: 0; background: rgba(0,0,0,.88); z-index: 99999;
+      backdrop-filter: blur(3px);
       display: flex; align-items: center; justify-content: center; padding: 20px;
     }
     .onboard-box {
@@ -236,7 +237,7 @@
     <div class="panel-inner">
       
       <!-- 💡 智能公告板 -->
-      <div class="notice-board" :class="isCopyrightAlert ? 'alert' : 'normal'" v-if="configLoaded">
+      <div class="notice-board" :class="isCopyrightAlert ? 'alert' : 'normal'" v-if="configLoaded && !showOnboarding">
         <!-- 版权到期强力提醒 -->
         <div v-if="isCopyrightAlert">
           <h2>🚨 版权存证预警！</h2>

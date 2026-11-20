@@ -1,7 +1,7 @@
 {
-  "version": "20261120-232046",
+  "version": "20261120-232354",
   "count": 60,
-  "totalBytes": 1029910,
+  "totalBytes": 1029964,
   "files": [
     {
       "path": "admin.html",
@@ -55,8 +55,8 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 39705,
-      "sha256": "557caab83c4fa46214c153fbe5f129386896fe8bdad615f2a5220b0af90c41c6"
+      "size": 39759,
+      "sha256": "ff685dd1eb82686a81e8971fc7bb0943e1ae845ed8f0945b3c054edf1a219089"
     },
     {
       "path": "plugin/epoch-map.html",
@@ -171,7 +171,7 @@
     {
       "path": "version.json",
       "size": 279,
-      "sha256": "ff87238426e0fa1e4601d51cd06b9e206c273c25e2deb0cc6249342aaff1dc19"
+      "sha256": "5d50884f963733274cf87ceb3569c3158472a70c5f60fb3d7fffea1b911e8856"
     },
     {
       "path": "website/.vitepress/config.mjs",
