@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>历史模拟插件</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -150,6 +152,20 @@
     ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
     ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
     ::-webkit-scrollbar-corner { background: transparent; }
+
+    /* ---------- 📱 手机适配 ---------- */
+    @media (max-width: 760px) {
+      body { padding: 8px !important; overflow-x: hidden; }
+      h2, h3 { font-size: 15px !important; }
+      .btn, button { min-height: 40px; }
+      input, textarea, select { font-size: 15px !important; }
+      /* 画布类：等比缩到屏幕宽，允许上下滚动 */
+      canvas, svg { max-width: 100% !important; height: auto !important; }
+      .canvas-wrap, .map-wrap, #map, #canvas { overflow: auto !important; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .toolbar, .chips, .actions, .controls { flex-wrap: wrap; }
+      .modal-box { width: 92vw !important; max-width: 92vw !important; }
+    }
 </style>
 </head>
 <body>

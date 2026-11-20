@@ -277,6 +277,18 @@
           </div>
         </div>
 
+        <div class="pw-row">
+          <div class="lan-label">访客码（只读）</div>
+          <div class="pw-input">
+            <input
+              type="text"
+              v-model="guestCode"
+              placeholder="留空 = 不开放访客。填了别人用这个码登录只能看、不能改"
+            />
+            <button class="btn tiny" @click="saveGuestCode" :disabled="pwSaving">保存</button>
+          </div>
+        </div>
+
         <div class="lan-actions">
           <button
             v-if="lanBusy"
@@ -496,6 +508,33 @@
           }
         };
 
+        // 👀 访客只读码
+        const guestCode = ref('');
+        const loadGuestCode = async () => {
+          try {
+            const res = await fetch(`/api/firewall/config?t=${Date.now()}`);
+            const d = await res.json();
+            guestCode.value = (d && d.guestCode) || '';
+          } catch (e) {}
+        };
+        const saveGuestCode = async () => {
+          pwSaving.value = true;
+          try {
+            const res = await fetch('/api/firewall/config', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ guestCode: guestCode.value.trim() })
+            });
+            const d = await res.json().catch(() => ({}));
+            if (!res.ok) throw new Error(d.error || '保存失败');
+            showToast(guestCode.value.trim() ? '✅ 访客码已设置（只读）' : '✅ 已关闭访客访问');
+          } catch (e) {
+            showToast(e.message, true);
+          } finally {
+            pwSaving.value = false;
+          }
+        };
+
         // 📱 开关手机访问（会重启前后台）
         const setLan = async (enable) => {
           if (lanBusy.value) return;
@@ -645,6 +684,7 @@
 
         onMounted(() => {
           loadConfig();
+          loadGuestCode();
           loadAuthStatus();
           loadLan();
           loadLogs();
@@ -652,7 +692,7 @@
           setInterval(loadLan, 8000);
         });
 
-        return { cfg, remotePw, hasPassword, pwSaving, savePassword, cfgError, cfgErrorCode, restartBackendAndReload, triedUrls, loadConfig, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
+        return { cfg, remotePw, hasPassword, pwSaving, savePassword, guestCode, saveGuestCode, cfgError, cfgErrorCode, restartBackendAndReload, triedUrls, loadConfig, logs, saving, needRestart, toast, toggle, clearLogs, restartBackend, fmtTime, lan, lanBusy, lanBusyText, lanOpen, setLan, copy, resetSafe };
       }
     }).mount('#app');
   </script>

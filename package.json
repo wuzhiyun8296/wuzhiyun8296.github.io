@@ -4,6 +4,7 @@
   "description": "Fantasy World Building Static Site",
   "main": "server.js",
   "scripts": {
+    "test": "node --test tests/api.test.js",
     "admin": "node server.js",
     "dev": "vitepress dev website",
     "build": "vitepress build website",

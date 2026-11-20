@@ -73,6 +73,12 @@
       <button class="btn" @click="restoreBackup(b)">恢复到这份</button>
     </div>
     <div class="hint">恢复前会自动再备份一次当前状态，恢复错了也能退回去。</div>
+    <div class="row" style="margin-top:6px;">
+      <div class="grow" style="font-size:12.5px;color:#8a929c;">最多保留几份快照</div>
+      <input v-model.number="keepCount" type="number" min="3" max="50"
+             style="width:80px;background:#14171b;border:1px solid #343a42;border-radius:8px;padding:6px 8px;color:#dfe4ea;outline:none;">
+      <button class="btn" @click="saveKeep" :disabled="busy">保存</button>
+    </div>
   </div>
 
   <!-- 回收站 -->
@@ -170,6 +176,28 @@ createApp({
       showToast('正在打包，稍等几秒…');
     };
 
+    // 快照保留份数
+    const keepCount = ref(10);
+    const loadKeep = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/backup/config?t=${Date.now()}`);
+        const d = await res.json();
+        keepCount.value = d.keep || 10;
+      } catch (e) {}
+    };
+    const saveKeep = async () => {
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/backup/config`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ keep: keepCount.value })
+        });
+        const d = await res.json();
+        showToast(d.success ? '✅ 已设为保留 ' + d.keep + ' 份' : '保存失败');
+      } catch (e) { showToast('保存失败'); }
+      finally { busy.value = false; }
+    };
+
     const createBackup = async () => {
       busy.value = true;
       try {
@@ -250,12 +278,12 @@ createApp({
       finally { busy.value = false; }
     };
 
-    onMounted(() => { loadBackups(); loadTrash(); });
+    onMounted(() => { loadBackups(); loadTrash(); loadKeep(); });
 
     return {
       backups, trash, history, historyLoaded, historyPath, previewContent, busy, toast,
       fmtTime, reasonText, createBackup, restoreBackup, restoreTrash, exportBundle,
-      loadHistory, previewHistory, restoreHistory, loadTrash
+      loadHistory, previewHistory, restoreHistory, loadTrash, keepCount, saveKeep
     };
   }
 }).mount('#app');

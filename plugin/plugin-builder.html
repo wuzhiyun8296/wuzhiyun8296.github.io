@@ -229,12 +229,41 @@
       .btn { min-height: 40px; }
       .form-group input, .form-group textarea { font-size: 16px; }
     }
+    /* 📖 插件开发说明 */
+    .dev-doc { margin: 0 0 14px; background: #1e1e1e; border: 1px solid #333; border-radius: 8px; padding: 10px 14px; }
+    .dev-doc summary { cursor: pointer; font-size: 13px; color: #7fc4ee; outline: none; }
+    .dev-doc-body { margin-top: 10px; font-size: 12.5px; color: #9aa1ab; line-height: 1.8; }
+    .dev-doc-body code { background: #141414; padding: 1px 5px; border-radius: 4px; color: #d7ba7d; }
+    .dev-doc-body pre { background: #101010; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; color: #b8c0c8; }
+    .dev-doc-body p { margin: 8px 0; }
 </style>
 </head>
 <body>
   <div id="app">
     <div class="header">
       <h2>🏭 插件工厂 & 导航管理</h2>
+
+      <details class="dev-doc">
+        <summary>📖 插件怎么写？点开看说明</summary>
+        <div class="dev-doc-body">
+          <p><b>最小可用插件</b>：在 <code>plugin/</code> 下建一个 <code>xxx.html</code>，三件事就够：</p>
+          <pre>1. 引入 Vue：&lt;script src="/libs/vue/vue.global.prod.js"&gt;&lt;/script&gt;
+2. 放一个挂载点：&lt;div id="app"&gt;&lt;/div&gt;
+3. 挂载：Vue.createApp({ ... }).mount('#app')</pre>
+          <p><b>数据不用自己写后端</b>，用现成接口：</p>
+          <pre>读文件：GET  /api/library/file?path=目录/文件.md
+写文件：POST /api/library/file   { path, content }
+列目录：GET  /api/library/tree
+全局搜索：GET /api/global-search?q=关键词</pre>
+          <p><b>手机能用的三个要点</b>：</p>
+          <pre>1. &lt;meta name="mobile" content="ready"&gt;
+2. &lt;meta name="viewport" content="width=device-width, initial-scale=1.0"&gt;
+3. 宽度别写死，用 flex 或 max-width:100%</pre>
+          <p><b>要加新能力</b>：在 <code>server.js</code> 里加 <code>app.get('/api/xxx')</code>；
+          前端报错会自动写进 <code>client_error.log</code>，排查时先看这个文件。</p>
+        </div>
+      </details>
+
       <div class="header-actions">
         <button class="btn btn-order" @click="saveOrder" :disabled="savingOrder" :title="'把当前拖拽好的顺序写入 navigation.json'">
           {{ savingOrder ? '保存中…' : '↕️ 保存排序' }}

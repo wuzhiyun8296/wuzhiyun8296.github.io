@@ -261,6 +261,13 @@
           <div style="font-size: 40px; margin-bottom: 10px;">+</div>
           <div>创建新书</div>
         </div>
+
+        <!-- 📥 从 txt / md / docx 导入旧稿 -->
+        <div class="btn-add-book" @click="$refs.importInput && $refs.importInput.click()" title="把 Word/txt 旧稿导进来，自动放进「导入」书里">
+          <div style="font-size: 40px; margin-bottom: 10px;">📥</div>
+          <div>{{ importBusy ? '导入中…' : '导入旧稿' }}</div>
+        </div>
+        <input ref="importInput" type="file" accept=".txt,.md,.docx,.markdown" style="display:none;" @change="importDraft">
       </div>
 
       <!-- ================= 视图 2：章节目录 ================= -->
@@ -273,6 +280,8 @@
           <div class="chapter-item" v-for="(chapter, idx) in currentBook.children" :key="idx" @click="openChapter(chapter)">
             <div class="chapter-title">📄 {{ chapter.name.replace('.md', '') }}</div>
             <div class="chapter-actions">
+              <button class="secondary" @click.stop="moveChapter(idx, -1)" :disabled="idx === 0" title="上移一位">↑</button>
+              <button class="secondary" @click.stop="moveChapter(idx, 1)" :disabled="idx === currentBook.children.length - 1" title="下移一位">↓</button>
               <button class="secondary" @click.stop="renameChapter(chapter)" title="修改章节名称">✏️ 改名</button>
               <button class="danger" @click.stop="deleteChapter(chapter, idx)" title="彻底删除这一章">删除</button>
             </div>
@@ -289,6 +298,9 @@
           <div class="format-tools-left">
             <button class="format-btn" @click="undo" title="撤销 (Ctrl+Z)" :disabled="!canUndo">↶ 撤销</button>
             <button class="format-btn" @click="redo" title="重做 (Ctrl+Y)" :disabled="!canRedo">↷ 重做</button>
+            <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
+            <button class="format-btn" @click="openFind" title="查找替换 (Ctrl+F)">🔍 查找</button>
+            <button class="format-btn" @click="openPreview" title="在站点里预览这一章">👁 预览</button>
             <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
             <button class="format-btn" @click="formatDoc('bold')" title="加粗选中的文字 (Ctrl+B)"><b>B</b> 粗体</button>
             <button class="format-btn" @click="formatDoc('italic')" title="斜体选中的文字，常用于内心独白 (Ctrl+I)"><i>I</i> 斜体</button>
@@ -356,6 +368,24 @@
     </div>
 
     <!-- 💡 专属导出格式选择弹窗 -->
+    <!-- 🔍 查找替换 -->
+    <div class="custom-modal-overlay" v-if="findState.show" @click.self="findState.show = false">
+      <div class="custom-modal-box" style="width: 420px;">
+        <h3>🔍 查找替换</h3>
+        <div style="display:flex; flex-direction:column; gap:10px; margin:16px 0;">
+          <input id="find-input" v-model="findState.find" placeholder="查找内容"
+                 style="background:#1e1e1e;border:1px solid #444;border-radius:6px;padding:9px 12px;color:#ddd;outline:none;">
+          <input v-model="findState.replace" placeholder="替换为（留空 = 删除）"
+                 style="background:#1e1e1e;border:1px solid #444;border-radius:6px;padding:9px 12px;color:#ddd;outline:none;">
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+          <button class="secondary" @click="findState.show = false">关闭</button>
+          <button class="secondary" @click="doReplace(false)">替换下一个</button>
+          <button style="background:#0e639c;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;"
+                  @click="doReplace(true)">全部替换</button>
+        </div>
+      </div>
+    </div>
     <div class="custom-modal-overlay" v-if="exportModal.show" @click.self="exportModal.show = false">
       <div class="custom-modal-box" style="width: 480px;">
         <h3>📥 导出《{{ exportModal.bookName }}》</h3>
@@ -477,6 +507,116 @@
             currentPath.value = null;
             content.value = '';
           }
+        };
+
+        // ---------- 📥 导入旧稿 ----------
+        const importBusy = ref(false);
+        const importDraft = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          importBusy.value = true;
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch(`${API_BASE}/import/draft`, { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.success) {
+              showToast(`✅ 已导入 ${d.chars} 字，${d.paragraphs} 段`);
+              await fetchLibrary();
+              viewMode.value = 'shelf';
+            } else {
+              showToast('导入失败：' + (d.error || '未知错误'), true);
+            }
+          } catch (err) {
+            showToast('导入失败：' + err.message, true);
+          } finally {
+            importBusy.value = false;
+            e.target.value = '';
+          }
+        };
+
+        // ---------- 🔍 查找替换 ----------
+        const findState = ref({ show: false, find: '', replace: '', matches: 0 });
+        const openFind = () => {
+          findState.value.show = true;
+          setTimeout(() => {
+            const el = document.getElementById('find-input');
+            if (el) el.focus();
+          }, 50);
+        };
+        const editorText = () => {
+          const el = document.getElementById('novel-editor');
+          return el ? el.innerText : '';
+        };
+        const countMatches = () => {
+          const q = findState.value.find;
+          if (!q) return 0;
+          const t = editorText();
+          let n = 0, i = 0;
+          while ((i = t.indexOf(q, i)) !== -1) { n++; i += q.length; }
+          return n;
+        };
+        const doReplace = (all) => {
+          const f = findState.value.find;
+          const r = findState.value.replace;
+          const el = document.getElementById('novel-editor');
+          if (!el || !f) return;
+          const parts = el.innerHTML.split(/(<[^>]+>)/);
+          let hit = 0;
+          const out = parts.map((seg) => {
+            if (seg.startsWith('<')) return seg;
+            if (!seg.includes(f)) return seg;
+            if (all) {
+              const n = seg.split(f).length - 1;
+              hit += n;
+              return seg.split(f).join(r);
+            }
+            if (hit === 0) { hit = 1; return seg.replace(f, r); }
+            return seg;
+          });
+          if (!hit) { showToast('没找到「' + f + '」', true); return; }
+          pushSnapshot();
+          el.innerHTML = out.join('');
+          content.value = el.innerHTML;
+          findState.value.matches = countMatches();
+          showToast(`已替换 ${hit} 处`);
+        };
+
+        // ---------- 👁 站点预览 ----------
+        const openPreview = () => {
+          const p = currentPath.value || '';
+          if (!p) return showToast('先打开一章再预览', true);
+          const seg = p.split('/');
+          const book = seg[0];
+          const name = seg[seg.length - 1].replace(/\.md$/, '');
+          window.open(`http://localhost:5173/novel/chapters/${encodeURIComponent(book)}/${encodeURIComponent(name)}.html`, '_blank');
+          showToast('已在站点打开（需要前端 5173 已启动）');
+        };
+
+        // ---------- ↑↓ 章节排序（交换数字前缀） ----------
+        const moveChapter = async (idx, dir) => {
+          const list = currentBook.value && currentBook.value.children;
+          if (!list) return;
+          const j = idx + dir;
+          if (j < 0 || j >= list.length) return;
+          const a = list[idx], b = list[j];
+          const bookName = currentBook.value.name;
+          const numA = (a.name.match(/^(\d+)/) || [])[1];
+          const numB = (b.name.match(/^(\d+)/) || [])[1];
+          if (!numA || !numB) {
+            return showToast('这两章没有数字编号，改成「第01章」这种名字才能排序', true);
+          }
+          const newA = a.name.replace(/^\d+/, numB);
+          const newB = b.name.replace(/^\d+/, numA);
+          for (const [oldPath, newName] of [[a.name, newA], [b.name, newB]]) {
+            await fetch(`${API_BASE}/library/rename`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ oldPath: `${bookName}/${oldPath}`, newName })
+            });
+          }
+          await fetchLibrary();
+          currentBook.value = books.value.find((x) => x.name === bookName) || currentBook.value;
+          showToast('已调整顺序');
         };
 
         const createBook = () => {
@@ -798,6 +938,12 @@
             e.preventDefault();
             if (viewMode.value === 'editor') toggleFocus();
           }
+          // 🔍 Ctrl+F 打开查找替换
+          if (e.ctrlKey && e.key.toLowerCase() === 'f' && !e.shiftKey && viewMode.value === 'editor') {
+            e.preventDefault();
+            openFind();
+            return;
+          }
           // ↶ 撤销 / ↷ 重做（编辑器里才接管，其它地方保持默认行为）
           if (e.ctrlKey && viewMode.value === 'editor') {
             const k = e.key.toLowerCase();
@@ -889,6 +1035,7 @@
           onRichInput, saveFile, toggleFocus, handleRichKeyDown, handlePaste, formatDoc, autoIndent,
           readingFont, fontPresets, changeReadingFont, webMode, webBlankLines,
           undo, redo, canUndo, canRedo,
+          importBusy, importDraft, openFind, doReplace, findState, openPreview, moveChapter,
           modal, closeModal, confirmModal, exportModal
         };
       }

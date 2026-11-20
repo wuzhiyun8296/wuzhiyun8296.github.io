@@ -327,7 +327,13 @@
     /* 内容区上不留多余空白 */
     .main-container { padding: 0; }
   }
-</style>
+    /* admin-mobile-patch：文章编辑在手机上单栏显示 */
+    @media (max-width: 760px) {
+      .editor-split { flex-direction: column; }
+      .md-textarea, .preview-pane { width: 100% !important; height: 50% !important; border-right: none; border-bottom: 1px solid #333; }
+      .toolbar { flex-wrap: wrap; gap: 6px; }
+    }
+  </style>
 </head>
 <body>
   <div id="app">
@@ -539,6 +545,31 @@
 
   <script>
     const { createApp, ref, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
+
+    // 🧰 前端错误上报：只记录，不打扰用户
+    window.addEventListener('error', (e) => {
+      try {
+        fetch('/api/client-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            msg: e.message || 'unknown',
+            url: location.pathname,
+            stack: (e.error && e.error.stack) || ''
+          })
+        }).catch(() => {});
+      } catch (err) {}
+    });
+    window.addEventListener('unhandledrejection', (e) => {
+      try {
+        fetch('/api/client-error', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ msg: 'unhandled: ' + (e.reason && e.reason.message || e.reason), url: location.pathname })
+        }).catch(() => {});
+      } catch (err) {}
+    });
+
     // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
     const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
       ? 'http://localhost:3001/api'

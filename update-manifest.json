@@ -1,12 +1,12 @@
 {
-  "version": "20261120-224850",
+  "version": "20261120-230954",
   "count": 59,
-  "totalBytes": 992057,
+  "totalBytes": 1024367,
   "files": [
     {
       "path": "admin.html",
-      "size": 69411,
-      "sha256": "ea8a1c6aaf4ded91634d8c8b58d67c19ebdd970bafbbbe45dbb52b4de6661e87"
+      "size": 70603,
+      "sha256": "43a0d889ef6e38d74289b2dcba8891949a52ad7a6b3bec6e863c3e352271cc71"
     },
     {
       "path": "announcement.json",
@@ -30,8 +30,8 @@
     },
     {
       "path": "package.json",
-      "size": 777,
-      "sha256": "ad4dae1ab19ecae02ab67355e6f21ad804256b64d698f25e1d884515f6707bc5"
+      "size": 822,
+      "sha256": "a48b13e8e59d4de9b8e40654286f216c78b6af7262349c23c3b18de6cfbaeaa5"
     },
     {
       "path": "plugin/audit.html",
@@ -40,8 +40,8 @@
     },
     {
       "path": "plugin/backup.html",
-      "size": 11585,
-      "sha256": "8838a3dec147c0e4cced7edcb532a972fed590f50919a3aaf066167b12feef55"
+      "size": 12844,
+      "sha256": "4cba19dbff11ec13d58b02a09d25488735b82c17bc50dc79957831528bf0d439"
     },
     {
       "path": "plugin/characters.html",
@@ -50,13 +50,13 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 38285,
-      "sha256": "e4791c0beb0364df49a796f641d18726fc30dd2155f6be26e1f716b694b58d41"
+      "size": 39705,
+      "sha256": "557caab83c4fa46214c153fbe5f129386896fe8bdad615f2a5220b0af90c41c6"
     },
     {
       "path": "plugin/epoch-map.html",
-      "size": 20193,
-      "sha256": "798a438a26cc3107447ea959a9ec084de183b6826a11397b7fd29b080ead4265"
+      "size": 21029,
+      "sha256": "cf9b69204b5d4f0154c22e9ba30da1436f0b8bf407d0b88d38f5a4f18517c51d"
     },
     {
       "path": "plugin/finance.html",
@@ -65,8 +65,8 @@
     },
     {
       "path": "plugin/firewall.html",
-      "size": 29340,
-      "sha256": "7caad5964c323de2108ae94115e9a6cd035fefde54debd49bae2f6d203bd8eff"
+      "size": 30910,
+      "sha256": "a2ae95df1afe4339c652348b37a03ad0633a6d1eea240cd3fc7def9a19f5b934"
     },
     {
       "path": "plugin/github.html",
@@ -80,8 +80,8 @@
     },
     {
       "path": "plugin/history.html",
-      "size": 52735,
-      "sha256": "a5dad9637e911f83dac2ba6a35446509128a8de9e8dc381a7f57a139bb194a71"
+      "size": 53571,
+      "sha256": "7a584f42d8d718602154b07856171347066d4e6425195f0463174c4f4fdfe4f3"
     },
     {
       "path": "plugin/home-editor.html",
@@ -100,8 +100,8 @@
     },
     {
       "path": "plugin/map.html",
-      "size": 99990,
-      "sha256": "5e9d65253612fb645672be9be33f48503fdbb9f5852f3fa4fc9d8209d6041f92"
+      "size": 100826,
+      "sha256": "0ee9cf437d106867174ac14f5a41a5818a73cdac322ab6b58ccbbc38b95ac1f8"
     },
     {
       "path": "plugin/plotline.html",
@@ -110,8 +110,8 @@
     },
     {
       "path": "plugin/plugin-builder.html",
-      "size": 45503,
-      "sha256": "aaf065becb302731a2df2d047bd99edb843cf7fbb5c8bdde4dd74acad64d2591"
+      "size": 47397,
+      "sha256": "425ba788385ff1f31602b042fda4299bc8b572372f3fc8217dda105437727cf6"
     },
     {
       "path": "plugin/protection.html",
@@ -120,8 +120,8 @@
     },
     {
       "path": "plugin/screenplay.html",
-      "size": 13083,
-      "sha256": "6f88b894d0b42ecaae71b02150a24b3b788888af0023d2c6d9e540bbcf27addb"
+      "size": 23402,
+      "sha256": "09202fb75297dae0b62cfecb9f4f2da3caac7dee3ab9acf14c38b79970764528"
     },
     {
       "path": "plugin/timeline.html",
@@ -135,8 +135,8 @@
     },
     {
       "path": "plugin/writer.html",
-      "size": 43068,
-      "sha256": "089110b73cdc1f0ec3b7311bd498ddafe9581a53df72cc3ef0df19d3eaf89c8e"
+      "size": 50332,
+      "sha256": "bdaa10730bc5d42f9e0a63bca52201d23687d8228f3b04d33d2377a31bf9839b"
     },
     {
       "path": "restart.vbs",
@@ -145,8 +145,8 @@
     },
     {
       "path": "server.js",
-      "size": 225910,
-      "sha256": "701245a376e217f7df0fc377ee4352b8ffbeb0b94ca4d43da7739a1e6afcba66"
+      "size": 230749,
+      "sha256": "f2286165ac7a1f617cbc8da2d72b8087ce5a55543e1935c887d7749df4e921e0"
     },
     {
       "path": "start.bat",
@@ -166,7 +166,7 @@
     {
       "path": "version.json",
       "size": 279,
-      "sha256": "b65d67a06e65ddc0aae521c6a793c0c7ed500edc468d82d58915d3d14f532ef3"
+      "sha256": "e32db43bf9d6d127766e0000abf41b968811bdf311aefb4414141e3981a832a9"
     },
     {
       "path": "website/.vitepress/config.mjs",

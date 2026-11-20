@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>终极战略地图编辑器</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <link rel="stylesheet" href="https://cdn.staticfile.org/leaflet/1.9.4/leaflet.css" />
@@ -184,7 +186,21 @@
     .ask-actions .tb-btn.primary:hover { background: #1177bb; }
     @keyframes fadeIn { from { opacity: 0; } to { opacity: 1; } }
     @keyframes popIn { from { opacity: 0; transform: scale(.94) translateY(8px); } to { opacity: 1; transform: none; } }
-  </style>
+  
+    /* ---------- 📱 手机适配 ---------- */
+    @media (max-width: 760px) {
+      body { padding: 8px !important; overflow-x: hidden; }
+      h2, h3 { font-size: 15px !important; }
+      .btn, button { min-height: 40px; }
+      input, textarea, select { font-size: 15px !important; }
+      /* 画布类：等比缩到屏幕宽，允许上下滚动 */
+      canvas, svg { max-width: 100% !important; height: auto !important; }
+      .canvas-wrap, .map-wrap, #map, #canvas { overflow: auto !important; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .toolbar, .chips, .actions, .controls { flex-wrap: wrap; }
+      .modal-box { width: 92vw !important; max-width: 92vw !important; }
+    }
+</style>
 </head>
 <body>
   <div id="app" style="display: flex; flex-direction: column; height: 100%;">

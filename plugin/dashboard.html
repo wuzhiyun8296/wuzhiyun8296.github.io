@@ -388,6 +388,20 @@
         </div>
       </div>
 
+      <!-- 🎯 写作目标 -->
+      <div class="week-card" v-if="goalTarget > 0" style="margin-top:12px;">
+        <div class="week-head">
+          <span>🎯 总目标 {{ goalTarget.toLocaleString() }} 字</span>
+          <span class="week-total">{{ stats.totalWords.toLocaleString() }} 字 · {{ goalPercent }}%</span>
+        </div>
+        <div style="height:8px;background:#1a1d22;border-radius:99px;overflow:hidden;">
+          <div :style="{ width: goalPercent + '%', height:'100%', background: goalPercent >= 100 ? '#2ea043' : 'linear-gradient(90deg,#2f9cde,#1d6fa5)' }"></div>
+        </div>
+        <div style="font-size:11.5px;color:#6f7681;margin-top:8px;">
+          {{ goalPercent >= 100 ? '🎉 已达成目标' : '还差 ' + (goalTarget - stats.totalWords).toLocaleString() + ' 字' }}
+        </div>
+      </div>
+
       <!-- 全局搜索 -->
       <div class="search-section">
         <input type="text" class="search-input" v-model="searchQuery" placeholder="🔍 全局深度搜索 (输入关键字，如人物、武器、地名等)...">
@@ -585,6 +599,20 @@
         const isSearching = ref(false);
         let searchTimer = null;
 
+        // 🎯 写作目标
+        const goalTarget = ref(0);
+        const goalPercent = computed(() => {
+          if (!goalTarget.value) return 0;
+          return Math.min(100, Math.round((stats.value.totalWords || 0) / goalTarget.value * 100));
+        });
+        const loadGoal = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/writing-goal?t=${Date.now()}`);
+            const d = await res.json();
+            goalTarget.value = d.target || 0;
+          } catch (e) { /* 忽略 */ }
+        };
+
         // 📈 近 7 天码字（localStorage 里由沉浸码字写入）
         const weekStats = computed(() => {
           const table = (() => {
@@ -717,6 +745,7 @@
 
         onMounted(() => {
           fetchData();
+          loadGoal();
           loadLanState();
           // 📣 每次打开/刷新仪表盘都强制拉一次最新公告（不吃 3 分钟缓存）
           loadAnnouncement(true);
@@ -749,7 +778,7 @@
           stats, configLoaded, certTarget, sysNotice, pushNotice, versionInfo, noticeText, noticeFromUpdate, noticeMeta, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
         version, versionChecking,
           searchQuery, searchResults, isSearching, openSearchResult, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
-        , weekStats, showOnboarding, finishOnboarding, onboardGo, lanOpen, lanBackendUrl};
+        , weekStats, goalTarget, goalPercent, showOnboarding, finishOnboarding, onboardGo, lanOpen, lanBackendUrl};
       }
     }).mount('#app');
   </script>

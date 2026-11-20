@@ -15,10 +15,14 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #3c3c3c; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
     ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
-    body { margin: 0; background: #16181c; color: #ccd0d6; font-family: 'Microsoft YaHei', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    html, body { height: 100%; overflow: hidden; }
+    body { margin: 0; background: #16181c; color: #ccd0d6; font-family: 'Microsoft YaHei', system-ui, sans-serif; display: flex; flex-direction: column; }
+    /* 💡 关键：#app 也必须是 flex 纵向容器，否则它只按内容高度走，
+       .split 的 flex:1 就没有可分配的空间，编辑区会被压成一条 */
+    #app { flex: 1; display: flex; flex-direction: column; min-height: 0; overflow: hidden; }
     .top {
       display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
-      background: #1e2126; border-bottom: 1px solid #2c3138; padding: 10px 16px; flex-shrink: 0;
+      background: #1e2126; border-bottom: 1px solid #2c3138; padding: 10px 16px; flex-shrink: 0; flex-grow: 0;
     }
     .top h1 { font-size: 16px; margin: 0; color: #fff; }
     .top select, .top input {
@@ -36,7 +40,7 @@
 
     .tools {
       display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px;
-      background: #1a1d22; border-bottom: 1px solid #2c3138; flex-shrink: 0;
+      background: #1a1d22; border-bottom: 1px solid #2c3138; flex-shrink: 0; flex-grow: 0;
     }
     .tool {
       border: 1px solid #343a42; background: #14171b; color: #9aa1ab;
@@ -44,18 +48,20 @@
     }
     .tool:hover { color: #fff; border-color: #4a525c; }
 
-    .split { flex: 1; display: flex; min-height: 0; }
-    .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+    .split { flex: 1; display: flex; min-height: 0; overflow: hidden; }
+    .pane { flex: 1 1 0; min-width: 0; min-height: 0; display: flex; flex-direction: column; overflow: hidden; }
     .pane + .pane { border-left: 1px solid #2c3138; }
-    .pane-head { font-size: 12px; color: #6f7681; padding: 6px 14px; border-bottom: 1px solid #22262c; }
+    .pane-head { font-size: 12px; color: #6f7681; padding: 6px 14px; border-bottom: 1px solid #22262c; flex-shrink: 0; }
 
+    /* 💡 height:0 + flex:1 是关键：让滚动区严格等于父容器剩余高度，
+       内容再多也只在内部滚动，不会把顶栏顶出屏幕 */
     textarea {
-      flex: 1; width: 100%; min-height: 0; resize: none; outline: none;
+      flex: 1 1 0; height: 0; width: 100%; min-height: 0; resize: none; outline: none;
       background: #101216; color: #d5dae1; border: none; padding: 16px 20px;
       font-family: Consolas, "Courier New", monospace; font-size: 14px; line-height: 1.9;
     }
     .preview {
-      flex: 1; min-height: 0; overflow-y: auto; padding: 20px 26px;
+      flex: 1 1 0; height: 0; min-height: 0; overflow-y: auto; padding: 20px 26px;
       background: #14171b; font-family: Consolas, "Courier New", monospace;
       font-size: 13.5px; line-height: 1.85; color: #c9cfd6; white-space: pre-wrap;
     }
@@ -72,6 +78,64 @@
       border-radius: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 99;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    /* 空状态引导 */
+    .empty-state {
+      flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center;
+      gap: 10px; padding: 40px 20px; text-align: center;
+    }
+    .empty-icon { font-size: 46px; opacity: .8; }
+    .empty-title { font-size: 17px; color: #e8edf3; font-weight: 600; }
+    .empty-desc { font-size: 13px; color: #7d848e; line-height: 1.9; }
+    .empty-actions { display: flex; gap: 10px; margin-top: 8px; flex-wrap: wrap; justify-content: center; }
+
+    /* 📖 教程弹窗 */
+    .help-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 500;
+      display: flex; align-items: center; justify-content: center; padding: 24px;
+    }
+    .help-box {
+      background: #1e2126; border: 1px solid #3a424c; border-radius: 14px;
+      width: 720px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column;
+    }
+    .help-head {
+      display: flex; align-items: center; justify-content: space-between;
+      padding: 16px 20px; border-bottom: 1px solid #2c3138; flex-shrink: 0;
+    }
+    .help-head h2 { margin: 0; font-size: 16px; color: #fff; }
+    .help-close {
+      border: none; background: transparent; color: #8a929c; font-size: 16px;
+      cursor: pointer; padding: 4px 8px; border-radius: 6px;
+    }
+    .help-close:hover { background: #2c3138; color: #fff; }
+    .help-body { padding: 16px 20px; overflow-y: auto; min-height: 0; }
+    .help-lead { font-size: 13px; color: #b9c0c9; line-height: 1.9; margin: 0 0 16px; }
+    .help-item { margin-bottom: 16px; }
+    .help-title { font-size: 13.5px; color: #e8edf3; margin-bottom: 6px; }
+    .help-code {
+      font-family: Consolas, monospace; font-size: 12.5px; color: #9fd6f5;
+      background: #14171b; border: 1px solid #262b31; border-radius: 6px;
+      padding: 7px 10px; margin-bottom: 6px;
+    }
+    .help-note { font-size: 12.5px; color: #8a929c; line-height: 1.85; }
+    .help-note b { color: #c5ccd4; }
+    .tag-scene, .tag-action, .tag-char, .tag-paren, .tag-dialog, .tag-trans, .tag-note {
+      font-size: 11px; padding: 2px 7px; border-radius: 999px; margin-right: 6px;
+      border: 1px solid #3a424c; color: #9aa1ab;
+    }
+    .tag-scene { border-color: #2f6f9e; color: #7fc4ee; }
+    .tag-char { border-color: #8a6d2f; color: #f0c674; }
+    .tag-dialog { border-color: #3a6b4a; color: #8fd6a3; }
+    .tag-trans { border-color: #5a5a6e; color: #b0b0c8; }
+    .help-foot {
+      display: flex; gap: 10px; justify-content: flex-end;
+      padding: 14px 20px; border-top: 1px solid #2c3138; flex-shrink: 0;
+    }
+
+    @media (max-width: 760px) {
+      .help-box { max-height: 90vh; }
+      .help-body { padding: 12px 14px; }
+    }
 
     @media (max-width: 760px) {
       .split { flex-direction: column; }
@@ -92,6 +156,7 @@
     <input v-model="newName" placeholder="新剧本名" style="width:150px;">
     <button class="btn" @click="createScript">＋ 新建</button>
     <span class="spacer"></span>
+    <button class="btn" @click="showHelp = true" title="第一次写剧本？点这里">📖 教程</button>
     <button class="btn primary" @click="save" :disabled="!currentFile || saving">{{ saving ? '保存中…' : '保存 (Ctrl+S)' }}</button>
     <button class="btn" @click="exportText" :disabled="!currentFile">⬇ 导出 .fountain</button>
   </div>
@@ -108,9 +173,24 @@
   </div>
 
   <div class="split">
-    <div class="pane">
-      <div class="pane-head">剧本源文本（Fountain 简化语法）</div>
-      <textarea v-model="text" @input="onInput" @keydown="onKeydown" placeholder="点上面的按钮插入格式，或直接写：
+    <!-- 还没打开剧本时的引导 -->
+    <div class="empty-state" v-if="!currentFile">
+      <div class="empty-icon">🎬</div>
+      <div class="empty-title">还没有打开剧本</div>
+      <div class="empty-desc">
+        左边选一个已有剧本，或者新建一个。<br>
+        不知道怎么写？点下面这个，直接给你一份带格式的示例。
+      </div>
+      <div class="empty-actions">
+        <button class="btn primary" @click="loadSample">📄 载入示例剧本</button>
+        <button class="btn" @click="focusNewName">＋ 新建空白剧本</button>
+      </div>
+    </div>
+
+    <template v-else>
+      <div class="pane">
+        <div class="pane-head">剧本源文本（Fountain 简化语法）</div>
+        <textarea v-model="text" @input="onInput" @keydown="onKeydown" placeholder="点上面的按钮插入格式，或直接写：
 
 INT. 咖啡馆 - 白天
 
@@ -124,14 +204,113 @@ INT. 咖啡馆 - 白天
 哪里不对劲？
 
 CUT TO:"></textarea>
-    </div>
-    <div class="pane">
-      <div class="pane-head">预览（排版后的效果）</div>
-      <div class="preview" v-html="rendered"></div>
-    </div>
+      </div>
+      <div class="pane">
+        <div class="pane-head">预览（排版后的效果）</div>
+        <div class="preview" v-html="rendered"></div>
+      </div>
+    </template>
   </div>
 
   <div class="toast" :class="{ show: toast.show }">{{ toast.text }}</div>
+
+  <!-- 📖 教程（默认不弹，点按钮才开） -->
+  <div class="help-mask" v-if="showHelp" @click.self="showHelp = false">
+    <div class="help-box">
+      <div class="help-head">
+        <h2>📖 剧本写作 · 新手指南</h2>
+        <button class="help-close" @click="showHelp = false">✕</button>
+      </div>
+
+      <div class="help-body">
+        <p class="help-lead">
+          剧本和小说不一样：它是给"拍电影/拍动画"的人看的说明书。<br>
+          所以只要写清楚 <b>在哪、谁、说什么、做什么</b>，不用写心理描写。
+        </p>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-scene">场景标题</span> 这场戏在哪儿、什么时候</div>
+          <div class="help-code">INT. 破旧酒馆 - 夜晚</div>
+          <div class="help-note">
+            <b>INT.</b> = 室内（Interior），<b>EXT.</b> = 室外（Exterior）。<br>
+            中文写「内景 / 外景」也行。后面跟地点和时间（白天/夜晚/黄昏）。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-action">动作</span> 画面里发生什么</div>
+          <div class="help-code">油灯昏黄，木桌上堆着空酒杯。林风把一枚铜币按在桌面。</div>
+          <div class="help-note">
+            只写镜头能拍到的东西：动作、表情、环境。<br>
+            不要写"他心里想……"——观众看不见心里想什么。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-char">角色</span> 谁要说话了</div>
+          <div class="help-code">林风</div>
+          <div class="help-note">
+            单独一行，只写名字。空行前后各留一行，系统就会把它识别成角色名居中显示。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-paren">括号提示</span> 说话的状态</div>
+          <div class="help-code">（压低声音）</div>
+          <div class="help-note">
+            写在角色和台词之间，用括号包住。表示语气、动作或对象。<br>
+            不要滥用——每句台词都加括号会显得很碎。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-dialog">对白</span> 说出来的话</div>
+          <div class="help-code">这枚硬币，不是这个世界的东西。</div>
+          <div class="help-note">
+            紧跟在角色名（或括号提示）下面。一句一行，不要写"他说："这种转述。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-trans">转场</span> 镜头怎么切</div>
+          <div class="help-code">CUT TO:</div>
+          <div class="help-note">
+            常用：CUT TO:（切到）、FADE IN:（淡入）、FADE OUT:（淡出）。<br>
+            中文写「切至」「淡入」「淡出」也识别。不是每场戏都要写，重要转折写一下就行。
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title"><span class="tag-note">备注</span> 只给自己看</div>
+          <div class="help-code">[[备注：这里后面想加一场打斗]]</div>
+          <div class="help-note">双中括号包起来，用来记想法，不会进入正式排版。</div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title">⏱ 几个实用习惯</div>
+          <div class="help-note">
+            · <b>1 页剧本 ≈ 1 分钟画面</b>，一集 20 分钟动画大概 20 页<br>
+            · 一场戏只讲一件事，超过了就切开<br>
+            · 台词尽量短，一句话不超过两行<br>
+            · 用上面的按钮插入格式，比手打不容易出错<br>
+            · 停手 3 秒自动保存，不用怕丢
+          </div>
+        </div>
+
+        <div class="help-item">
+          <div class="help-title">⌨️ 快捷键</div>
+          <div class="help-note">
+            <b>Ctrl + S</b> 立即保存 · <b>Tab</b> 快速插入角色行
+          </div>
+        </div>
+      </div>
+
+      <div class="help-foot">
+        <button class="btn primary" @click="showHelp = false">看完了，开始写</button>
+        <button class="btn" @click="showHelp = false; loadSample()">载入示例剧本</button>
+      </div>
+    </div>
+  </div>
 </div>
 
 <script>
@@ -148,6 +327,7 @@ createApp({
     const newName = ref('');
     const text = ref('');
     const saving = ref(false);
+    const showHelp = ref(false);   // 📖 教程默认关闭，点按钮才开
     const toast = ref({ show: false, text: '' });
 
     const showToast = (msg) => {
@@ -215,6 +395,57 @@ createApp({
       } catch (e) { showToast('读取失败'); }
     };
 
+    const focusNewName = () => {
+      const el = document.querySelector('.top input');
+      if (el) el.focus();
+    };
+
+    // 一键载入示例：没有剧本的人也能马上看到效果
+    const SAMPLE = `INT. 破旧酒馆 - 夜晚
+
+油灯昏黄，木桌上堆着空酒杯。林风把一枚铜币按在桌面，推到苏铭羽面前。
+
+林风
+（压低声音）
+这枚硬币，不是这个世界的东西。
+
+苏铭羽拿起硬币翻看，指尖停在那道奇怪的纹路上。
+
+苏铭羽
+你从哪儿弄来的？
+
+林风
+一个人死前塞给我的。他说，别让教会看见。
+
+短暂的沉默。窗外传来巡逻队的脚步声。
+
+苏铭羽
+（把硬币收进袖口）
+那就别让教会看见。
+
+EXT. 酒馆后巷 - 夜晚
+
+两人翻窗落地。巷子尽头，火把连成一条线。
+
+CUT TO:
+
+INT. 教会地下 - 深夜
+
+石板地面泛着潮湿的冷光。苏铭羽摊开手掌，铜币上的纹路正在发光。
+`;
+
+    const loadSample = async () => {
+      const file = '示例剧本.md';
+      await fetch(`${API_BASE}/library/file`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: DIR + file, content: SAMPLE })
+      });
+      await loadList();
+      currentFile.value = file;
+      await loadScript();
+      showToast('✅ 已载入示例，可以直接改着写');
+    };
+
     const createScript = async () => {
       const name = (newName.value || '').trim();
       if (!name) return showToast('先写个剧本名');
@@ -258,6 +489,11 @@ createApp({
     const onInput = () => {
       clearTimeout(autoSnap);
       autoSnap = setTimeout(() => { if (currentFile.value) save(); }, 3000);
+      // 光标跟随：连按回车也不会跑到屏幕外
+      const ta = document.querySelector('textarea');
+      if (ta && ta.scrollHeight - ta.scrollTop - ta.clientHeight < 60) {
+        ta.scrollTop = ta.scrollHeight;
+      }
     };
 
     const insert = (kind) => {
@@ -297,8 +533,8 @@ createApp({
     onMounted(loadList);
 
     return {
-      scripts, currentFile, newName, text, saving, toast, rendered,
-      loadScript, createScript, save, exportText, insert, onInput, onKeydown
+      scripts, currentFile, newName, text, saving, toast, rendered, showHelp,
+      loadScript, createScript, save, exportText, insert, onInput, onKeydown, loadSample, focusNewName
     };
   }
 }).mount('#app');

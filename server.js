@@ -24,6 +24,7 @@ const cors = require('cors');
 const multer = require('multer');
 const { exec } = require('child_process');
 const marked = require('marked'); // 💡 移到顶层引入
+const { zipStore, unzip, collectFiles } = require('./lib/zip'); // 📦 ZIP 读写（备份/EPUB/Word 导入）
 
 // ================= 💡 进程兜底 =================
 // 任何一次请求里漏出来的异常都不该让整个后台悄无声息地死掉，
@@ -124,7 +125,14 @@ app.use((req, res, next) => {
   const ra = String(req.socket.remoteAddress || '');
   if (ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1') return next();
   if (isPublicPath(req.path)) return next();
-  if (isAuthed(req)) return next();
+  if (isAuthed(req)) {
+    // 👀 只读访客：只能看，不能改
+    const role = sessionRole(req);
+    if (role === 'guest' && !['GET', 'HEAD', 'OPTIONS'].includes(req.method)) {
+      return res.status(403).json({ error: '访客是只读模式，不能修改内容', readOnly: true });
+    }
+    return next();
+  }
 
   // 已登录状态查询之类的接口放行
   if (req.path === '/api/auth/login' || req.path === '/api/auth/status') return next();
@@ -186,6 +194,14 @@ function timeStamp(d = new Date()) {
 }
 
 // 拍一份全量快照（library + 站点 markdown + 关键 json）
+let backupKeepSetting = SNAPSHOT_KEEP;
+try {
+  if (fs.existsSync(path.join(__dirname, '.backup-config.json'))) {
+    const bc = fs.readJsonSync(path.join(__dirname, '.backup-config.json'));
+    if (bc && Number(bc.keep) >= 3) backupKeepSetting = Math.min(50, Number(bc.keep));
+  }
+} catch (e) {}
+
 async function snapshotAll(reason = 'manual') {
   const id = timeStamp();
   const dest = path.join(BACKUP_DIR, id);
@@ -224,7 +240,7 @@ async function snapshotAll(reason = 'manual') {
   // 只留最近 N 份
   const all = (await fs.readdir(BACKUP_DIR, { withFileTypes: true }))
     .filter((d) => d.isDirectory()).map((d) => d.name).sort();
-  while (all.length > SNAPSHOT_KEEP) {
+  while (all.length > backupKeepSetting) {
     const old = all.shift();
     await fs.remove(path.join(BACKUP_DIR, old)).catch(() => {});
   }
@@ -317,6 +333,148 @@ const fontStorage = multer.diskStorage({
   }
 });
 const uploadFont = multer({ storage: fontStorage });
+// 稿件导入：放内存里解析，不落临时文件
+const uploadMemory = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024 } });
+
+// ================= 🧰 杂项：错误上报 / 备份保留数 / 写作目标 =================
+// 前端错误上报（只在真正的异常时打一行日志，不做弹窗骚扰）
+app.post('/api/client-error', express.json({ limit: '32kb' }), (req, res) => {
+  try {
+    const b = req.body || {};
+    const line = `[client-error] ${new Date().toISOString()} ${String(b.msg || '').slice(0, 300)} @ ${String(b.url || '').slice(0, 200)} ${String(b.stack || '').split('\n')[1] || ''}`;
+    console.log(line);
+    try { fs.appendFileSync(path.join(__dirname, 'client_error.log'), line + '\n', 'utf-8'); } catch (e) {}
+  } catch (e) { /* 上报失败不能影响页面 */ }
+  res.json({ ok: true });
+});
+
+// 备份保留份数（默认 10）
+const BACKUP_CONFIG_FILE = path.join(__dirname, '.backup-config.json');
+app.get('/api/backup/config', async (req, res) => {
+  let keep = SNAPSHOT_KEEP;
+  try {
+    if (fs.existsSync(BACKUP_CONFIG_FILE)) {
+      const d = await fs.readJson(BACKUP_CONFIG_FILE);
+      if (d && Number(d.keep) >= 3) keep = Math.min(50, Number(d.keep));
+    }
+  } catch (e) {}
+  res.json({ success: true, keep });
+});
+app.post('/api/backup/config', async (req, res) => {
+  try {
+    const keep = Math.max(3, Math.min(50, Number((req.body && req.body.keep) || 10)));
+    await fs.writeJson(BACKUP_CONFIG_FILE, { keep }, { spaces: 2 });
+    backupKeepSetting = keep;
+    res.json({ success: true, keep });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 写作目标（月）：存在 protection-config 的 targetWords 里，这里给个专用小接口
+app.get('/api/writing-goal', async (req, res) => {
+  try {
+    let target = 0;
+    if (fs.existsSync(PROTECTION_CONFIG_FILE)) {
+      const d = await fs.readJson(PROTECTION_CONFIG_FILE);
+      target = Number(d.targetWords) || 0;
+    }
+    res.json({ success: true, target });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+app.post('/api/writing-goal', async (req, res) => {
+  try {
+    const target = Math.max(0, Number((req.body && req.body.target) || 0));
+    let cfg = {};
+    if (fs.existsSync(PROTECTION_CONFIG_FILE)) cfg = await fs.readJson(PROTECTION_CONFIG_FILE);
+    cfg.targetWords = target;
+    await fs.writeJson(PROTECTION_CONFIG_FILE, cfg, { spaces: 2 });
+    res.json({ success: true, target });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ================= 📥 稿件导入（txt / md / docx） =================
+function decodeText(buf) {
+  // 先按 UTF-8 解；出现大量替换字符就退回 GBK
+  const utf8 = buf.toString('utf8');
+  const bad = (utf8.match(/\uFFFD/g) || []).length;
+  if (bad > 3) {
+    try { return new TextDecoder('gbk').decode(buf); } catch (e) { /* 没 GBK 就用 utf8 */ }
+  }
+  return utf8;
+}
+
+// docx 就是 zip，正文在 word/document.xml
+function docxToHtml(buf) {
+  const files = unzip(buf);
+  const xml = files['word/document.xml'];
+  if (!xml) throw new Error('不是有效的 docx（缺少 word/document.xml）');
+  const text = xml.toString('utf8');
+  // 段落 = <w:p>；段内换行 = <w:br/>
+  const paras = text.split(/<w:p[ >]/).slice(1).map((seg) => {
+    const inner = seg.split('</w:p>')[0] || '';
+    const plain = inner
+      .replace(/<w:br[^>]*\/>/g, '\n')
+      .replace(/<[^>]+>/g, '')
+      .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&').replace(/&quot;/g, '"')
+      .replace(/&#(\d+);/g, (m, d) => String.fromCharCode(parseInt(d, 10)));
+    return plain.split('\n').map((l) => l.trim()).filter(Boolean);
+  }).filter((arr) => arr.length);
+  return paras.map((arr) => arr.map((line) => `<div>&#12288;&#12288;${line}</div>`).join('')).join('');
+}
+
+app.post('/api/import/draft', uploadMemory.single('file'), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ success: false, error: '没有收到文件' });
+    const rawName = Buffer.from(req.file.originalname, 'latin1').toString('utf8');
+    const base = path.basename(rawName).replace(/\.[^.]+$/, '') || '导入的稿件';
+    const ext = (path.extname(rawName) || '').toLowerCase();
+
+    let html = '';
+    if (ext === '.docx') {
+      html = docxToHtml(req.file.buffer);
+    } else if (ext === '.doc') {
+      return res.status(400).json({ success: false, error: '老版 .doc 不支持，请另存为 .docx 或 .txt' });
+    } else {
+      const text = decodeText(req.file.buffer);
+      html = text.split(/\r?\n/).map((line) => {
+        const t = line.trim();
+        return t ? `<div>&#12288;&#12288;${t.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</div>` : '<div><br></div>';
+      }).join('');
+    }
+
+    if (!html.trim()) return res.status(400).json({ success: false, error: '文件里没有可导入的文字' });
+
+    const folder = '导入';
+    const fileName = base + '.md';
+    const rel = path.join(folder, fileName);
+    const full = safeJoin(LIBRARY_DIR, rel);
+    if (!full) return res.status(400).json({ success: false, error: '非法文件名' });
+    await fs.ensureDir(path.dirname(full));
+
+    // 同名不覆盖
+    let finalRel = rel;
+    if (fs.existsSync(full)) {
+      finalRel = path.join(folder, base + '_' + timeStamp() + '.md');
+    }
+    const finalFull = safeJoin(LIBRARY_DIR, finalRel);
+    await fs.writeFile(finalFull, html, 'utf-8');
+
+    const plain = html.replace(/<[^>]+>/g, '').replace(/&#12288;/g, ' ');
+    res.json({
+      success: true,
+      path: finalRel.replace(/\\/g, '/'),
+      chars: plain.replace(/\s/g, '').length,
+      paragraphs: (html.match(/<div>/g) || []).length
+    });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
 
 app.post('/api/upload-font', uploadFont.single('font'), async (req, res) => {
   try {
@@ -1070,95 +1228,12 @@ app.post('/api/history/restore', async (req, res) => {
   }
 });
 
-// ================= 📦 极简 ZIP（store，无压缩）——备份包 & EPUB 共用 =================
-const CRC_TABLE = (() => {
-  const t = new Uint32Array(256);
-  for (let n = 0; n < 256; n++) {
-    let c = n;
-    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
-    t[n] = c >>> 0;
-  }
-  return t;
-})();
-
-function crc32(buf) {
-  let c = 0xffffffff;
-  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
-  return (c ^ 0xffffffff) >>> 0;
-}
-
-// entries: [{ name, data:Buffer|string }]
-function zipStore(entries) {
-  const locals = [];
-  const centrals = [];
-  let offset = 0;
-
-  entries.forEach((e) => {
-    const nameBuf = Buffer.from(e.name, 'utf8');
-    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), 'utf8');
-    const crc = crc32(data);
-
-    const local = Buffer.alloc(30);
-    local.writeUInt32LE(0x04034b50, 0);
-    local.writeUInt16LE(20, 4);
-    local.writeUInt16LE(0x0800, 6);          // UTF-8 文件名
-    local.writeUInt16LE(0, 8);               // store
-    local.writeUInt32LE(crc, 14);
-    local.writeUInt32LE(data.length, 18);
-    local.writeUInt32LE(data.length, 22);
-    local.writeUInt16LE(nameBuf.length, 26);
-    locals.push(local, nameBuf, data);
-
-    const cen = Buffer.alloc(46);
-    cen.writeUInt32LE(0x02014b50, 0);
-    cen.writeUInt16LE(20, 4);
-    cen.writeUInt16LE(20, 6);
-    cen.writeUInt16LE(0x0800, 8);
-    cen.writeUInt16LE(0, 10);
-    cen.writeUInt32LE(crc, 16);
-    cen.writeUInt32LE(data.length, 20);
-    cen.writeUInt32LE(data.length, 24);
-    cen.writeUInt16LE(nameBuf.length, 28);
-    cen.writeUInt32LE(offset, 42);
-    centrals.push(cen, nameBuf);
-
-    offset += local.length + nameBuf.length + data.length;
-  });
-
-  const cenBuf = Buffer.concat(centrals);
-  const eocd = Buffer.alloc(22);
-  eocd.writeUInt32LE(0x06054b50, 0);
-  eocd.writeUInt16LE(entries.length, 8);
-  eocd.writeUInt16LE(entries.length, 10);
-  eocd.writeUInt32LE(cenBuf.length, 12);
-  eocd.writeUInt32LE(offset, 16);
-  return Buffer.concat([...locals, cenBuf, eocd]);
-}
-
-// 递归收集要打包的文件
-function collectFilesForZip(dir, prefix = '', filter = null) {
-  const out = [];
-  if (!fs.existsSync(dir)) return out;
-  for (const name of fs.readdirSync(dir)) {
-    if (name.startsWith('.')) continue;
-    const full = path.join(dir, name);
-    let st;
-    try { st = fs.statSync(full); } catch (e) { continue; }
-    if (st.isDirectory()) {
-      out.push(...collectFilesForZip(full, path.join(prefix, name), filter));
-    } else if (!filter || filter(full, name)) {
-      out.push({ name: path.posix.join(prefix.replace(/\\/g, '/'), name), data: fs.readFileSync(full) });
-    }
-  }
-  return out;
-}
-
 // 导出整站备份包（library + 站点 md/json + 配置）
 app.get('/api/backup/export', async (req, res) => {
   try {
     const entries = [];
-    entries.push(...collectFilesForZip(LIBRARY_DIR, 'library', (f, n) => /\.(md|json|txt)$/i.test(n)));
-    entries.push(...collectFilesForZip(DOCS_DIR, 'docs', (f, n) => {
+    entries.push(...collectFiles(LIBRARY_DIR, 'library', (f, n) => /\.(md|json|txt)$/i.test(n)));
+    entries.push(...collectFiles(DOCS_DIR, 'docs', (f, n) => {
       if (f.includes(path.sep + 'public' + path.sep)) return false;
       return /\.(md|json)$/i.test(n);
     }));
@@ -3463,6 +3538,13 @@ function isAuthed(req) {
   return true;
 }
 
+// 当前会话的角色：admin / guest
+function sessionRole(req) {
+  const token = parseCookies(req).mw_auth;
+  const hit = token && AUTH_SESSIONS.get(token);
+  return (hit && hit.role) || 'admin';
+}
+
 function clientIp(req) {
   return String((req.headers['x-forwarded-for'] || req.socket.remoteAddress || '')).replace('::ffff:', '');
 }
@@ -3504,6 +3586,16 @@ app.post('/api/auth/login', (req, res) => {
   const pw = String((req.body && req.body.password) || '');
   if (!pw) return res.status(400).json({ error: '请输入远程访问码' });
 
+  // 👀 访客码：只读，能看不能改
+  const guestCode = String(cfg.guestCode || '');
+  if (guestCode && pw === guestCode) {
+    AUTH_FAILS.delete(ip);
+    const token = crypto.randomBytes(24).toString('hex');
+    AUTH_SESSIONS.set(token, { expire: now + AUTH_TTL_MS, role: 'guest' });
+    res.setHeader('Set-Cookie', `mw_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_TTL_MS / 1000}`);
+    return res.json({ success: true, role: 'guest' });
+  }
+
   if (hashRemotePassword(pw) !== cfg.remotePassHash) {
     fail.count += 1;
     if (fail.count >= 5) { fail.count = 0; fail.until = now + 60000; }
@@ -3513,7 +3605,7 @@ app.post('/api/auth/login', (req, res) => {
 
   AUTH_FAILS.delete(ip);
   const token = crypto.randomBytes(24).toString('hex');
-  AUTH_SESSIONS.set(token, { expire: now + AUTH_TTL_MS });
+  AUTH_SESSIONS.set(token, { expire: now + AUTH_TTL_MS, role: 'admin' });
   res.setHeader('Set-Cookie', `mw_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_TTL_MS / 1000}`);
   res.json({ success: true });
 });
@@ -3873,11 +3965,15 @@ function restartFrontendDev() {
 app.post('/api/firewall/config', async (req, res) => {
   try {
     const body = req.body || {};
+    // 💡 保留已有字段（remotePassHash 等），否则保存开关会把访问码清掉
     const next = {
+      ...firewallConfig,
       localOnly: !!body.localOnly,
       strictCors: body.strictCors !== false,
       logRequests: body.logRequests !== false
     };
+    // 👀 访客只读码：显式传了才改（空字符串 = 关闭访客访问）
+    if (body.guestCode !== undefined) next.guestCode = String(body.guestCode || '').trim();
     firewallConfig = next;
     await fs.writeJson(FIREWALL_CONFIG_FILE, next, { spaces: 2 });
     res.json({ success: true, needRestart: true, config: next });
