@@ -2406,12 +2406,17 @@ app.get('/api/protection/config', async (req, res) => {
     // 💡 全新安装：作者名和版权文案留空，界面上显示「自定义」，等用户自己填
     await fs.writeJson(PROTECTION_CONFIG_FILE, {
       enableNovelSync: true, 
-      enableWatermark: true, 
+      enableWatermark: true,          // 零宽隐形水印
+      enableVisibleWatermark: true,   // 页面上的淡纹水印（防截图/OCR）
+      watermarkOpacity: 0.05,
+      watermarkSite: '',              // 留空则自动用当前域名
+      copyMode: 'block',              // 默认禁止复制；改成 mark 则只加尾注
+      enableCopyNote: true,           // 关闭「禁止复制」时，是否加尾注
       authorName: '', 
-      enableAntiCopy: true, 
+      enableAntiCopy: true,           // 默认开启禁止复制
       copyrightText: '',
       targetWords: 0,
-      lastCertifiedMilestone: 0 // 💡 新增：记录上次提醒的里程碑（0代表没提示过，1代表十万字提示过，2代表二十万字...）
+      lastCertifiedMilestone: 0
     }, { spaces: 2 });
   }
   res.json(await fs.readJson(PROTECTION_CONFIG_FILE));

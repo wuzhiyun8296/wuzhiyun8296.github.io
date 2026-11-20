@@ -17,6 +17,7 @@
 <script setup>
 import DefaultLayout from 'vitepress/dist/client/theme-default/Layout.vue'
 import { ref, onMounted } from 'vue'
+import { installWatermark } from './watermark.js'
 
 const isHidden = ref(false)
 
@@ -39,14 +40,18 @@ onMounted(async () => {
     document.documentElement.classList.add('sidebar-hidden')
   }
 
-  // 💡 版权保护：强制防选中 + 复制拦截报警
+  // 💡 版权保护：零宽隐形水印 + 可见淡纹 + 复制溯源
+  //    （原来的"禁止选中"对读者太粗暴，且禁用 JS 就能绕过；改成留痕更实用）
+  installWatermark();
+
+  // 兼容老的「防复制」开关：只有显式选了 block 模式才封死复制
   try {
     const res = await fetch(import.meta.env.BASE_URL + 'protection-config.json?t=' + Date.now());
     const config = await res.json();
 
-    if (config.enableAntiCopy) {
-      
-      // 1. 强制注入 CSS：除了代码块和输入框，其他全都不许选中
+    if (config.enableAntiCopy || config.copyMode === 'block') {
+
+      // 1. 禁止选中（仅在 block 模式下启用）
       const style = document.createElement('style');
       style.innerHTML = `
         body, p, span, h1, h2, h3, h4, h5, h6, li, td, th { 
@@ -67,25 +72,20 @@ onMounted(async () => {
 
       // 2. 拦截复制事件：弹出警告并阻止
       document.addEventListener('copy', (e) => {
-        // 如果选中的是代码块（属于白名单），就放行，不拦截
         const selection = document.getSelection();
         if (selection && selection.anchorNode) {
           let node = selection.anchorNode;
-          // 检查选中的节点是否在 pre 或 code 里面
           if (node.nodeType === 3) node = node.parentNode;
           if (node.closest('pre') || node.closest('code')) {
             return; // 代码块放行
           }
         }
-
-        // 如果选中的是普通正文，强行阻止并报警
         e.preventDefault();
         showWarningToast('🚫 请不要复制哦！本文受版权保护。');
       });
 
       // 3. 拦截鼠标右键菜单（防止部分人用右键复制）
       document.addEventListener('contextmenu', (e) => {
-        // 同样判断是否在代码块中
         let node = e.target;
         if (node.closest('pre') || node.closest('code') || node.tagName === 'INPUT' || node.tagName === 'TEXTAREA') {
           return;

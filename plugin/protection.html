@@ -1,4 +1,4 @@
-﻿<!-- 文件路径: plugin/protection.html -->
+<!-- 文件路径: plugin/protection.html -->
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -97,20 +97,58 @@
           <label class="switch"><input type="checkbox" v-model="config.enableNovelSync"><span class="slider"></span></label>
         </div>
         <div class="config-row">
-          <div class="config-info"><h3>💧 注入隐形数字水印</h3><p>在正文插入不可见字符，防抄袭。</p></div>
+          <div class="config-info"><h3>💧 注入隐形数字水印</h3><p>每段末尾插入不可见字符，复制/OCR 后仍能追溯出处。</p></div>
           <label class="switch"><input type="checkbox" v-model="config.enableWatermark"><span class="slider"></span></label>
         </div>
         <div class="config-row" v-if="config.enableWatermark">
           <div class="config-info"><h3>✍️ 水印作者标识</h3></div>
           <input type="text" class="form-input" v-model="config.authorName" style="width: 250px;">
         </div>
+        <div class="config-row" v-if="config.enableWatermark">
+          <div class="config-info"><h3>🌐 水印站点标识</h3><p>留空则自动使用当前访问域名。</p></div>
+          <input type="text" class="form-input" v-model="config.watermarkSite" style="width: 250px;" placeholder="如：wuzhiyun8296.github.io">
+        </div>
+
         <div class="config-row">
-          <div class="config-info"><h3>🚫 开启防复制保护</h3><p>禁止选中文字，复制追加声明。</p></div>
+          <div class="config-info"><h3>👁️ 页面可见淡纹水印</h3><p>截图/拍照后仍能看出出处（铺设一层极淡的文字）。</p></div>
+          <label class="switch"><input type="checkbox" v-model="config.enableVisibleWatermark"><span class="slider"></span></label>
+        </div>
+        <div class="config-row" v-if="config.enableVisibleWatermark">
+          <div class="config-info"><h3>🎚️ 淡纹透明度</h3><p>越小越隐蔽，0.03 ~ 0.1 之间比较合适。</p></div>
+          <input type="number" step="0.01" min="0.01" max="0.3" class="form-input" v-model.number="config.watermarkOpacity" style="width: 110px;">
+        </div>
+
+        <div class="config-row">
+          <div class="config-info">
+            <h3>🚫 禁止复制</h3>
+            <p>默认开启。禁止选中正文、拦截复制和右键菜单。</p>
+          </div>
           <label class="switch"><input type="checkbox" v-model="config.enableAntiCopy"><span class="slider"></span></label>
         </div>
-        <div class="config-row" v-if="config.enableAntiCopy">
-          <div class="config-info"><h3>⚖️ 复制追加声明</h3></div>
+        <div class="config-row" v-if="!config.enableAntiCopy">
+          <div class="config-info"><h3>📋 复制时加水印尾注</h3><p>复制出去的文字自动带一行来源声明，方便溯源。</p></div>
+          <label class="switch"><input type="checkbox" v-model="config.enableCopyNote"><span class="slider"></span></label>
+        </div>
+        <div class="config-row" v-if="!config.enableAntiCopy && config.enableCopyNote">
+          <div class="config-info"><h3>⚖️ 复制追加声明</h3><p>留空则自动用"本文摘自《作者》，请支持正版。"</p></div>
           <input type="text" class="form-input" v-model="config.copyrightText" style="width: 250px;">
+        </div>
+
+        <!-- 🔍 水印解码：粘贴一段可疑文字，看看是不是从这儿流出去的 -->
+        <div class="config-row">
+          <div class="config-info">
+            <h3>🔍 水印检测</h3>
+            <p>把别处看到的文字粘贴到下面，能读出作者/站点/章节，就说明是从这里复制或 OCR 出去的。</p>
+          </div>
+        </div>
+        <div class="config-row" style="display:block;">
+          <textarea class="form-input" v-model="decodeInput" rows="4" style="width:100%;max-width:640px;"
+            placeholder="把可疑文字粘贴到这里…"></textarea>
+          <div style="margin-top:10px;display:flex;gap:10px;align-items:center;">
+            <button class="btn" style="width:120px;" @click="doDecode">解析水印</button>
+            <span v-if="decodeResult" style="color:#4ec9b0;font-size:13px;">✅ {{ decodeResult }}</span>
+            <span v-else-if="decodeTried" style="color:#e06c75;font-size:13px;">❌ 没检测到水印字符</span>
+          </div>
         </div>
       </div>
     </div>
@@ -127,19 +165,68 @@
       setup() {
         const config = ref({ 
           sysNotice: '' ,
-          certTarget: 100000, // 默认 10 万字
-          enableNovelSync: true, enableWatermark: true, authorName: '', enableAntiCopy: true, copyrightText: '' 
+          certTarget: 100000,
+          enableNovelSync: true,
+          enableWatermark: true,
+          enableVisibleWatermark: true,
+          watermarkOpacity: 0.05,
+          watermarkSite: '',
+          copyMode: 'block',
+          authorName: '',
+          enableAntiCopy: true,
+          enableCopyNote: true,
+          copyrightText: ''
         });
+
+        // 💡 保存时把两个开关换算成 copyMode（前端只认这一个字段）
+        const syncCopyMode = () => {
+          if (config.value.enableAntiCopy) config.value.copyMode = 'block';
+          else if (config.value.enableCopyNote === false) config.value.copyMode = 'none';
+          else config.value.copyMode = 'mark';
+        };
+
+        // 🔍 水印解码（与前端 watermark.js 的编码方式一致）
+        const decodeInput = ref('');
+        const decodeResult = ref('');
+        const decodeTried = ref(false);
+
+        const doDecode = () => {
+          decodeTried.value = true;
+          decodeResult.value = '';
+          const cleaned = String(decodeInput.value || '').replace(/[^\u200b\u200c\u2060]/g, '');
+          if (!cleaned) return;
+          const parts = cleaned.split('\u2060').filter((s) => s.length >= 8);
+          for (const part of parts) {
+            let bin = '';
+            for (const ch of part) bin += ch === '\u200c' ? '1' : '0';
+            let b64 = '';
+            for (let i = 0; i + 8 <= bin.length; i += 8) {
+              b64 += String.fromCharCode(parseInt(bin.slice(i, i + 8), 2));
+            }
+            try {
+              const text = decodeURIComponent(escape(atob(b64)));
+              if (text) { decodeResult.value = text; return; }
+            } catch (e) { /* 继续找下一段 */ }
+          }
+        };
 
         const loadData = async () => {
           try {
             const res = await fetch(`${API_BASE}/protection/config?t=${Date.now()}`);
             const data = await res.json();
-            if (data) config.value = { ...config.value, ...data };
+            if (data) {
+              config.value = { ...config.value, ...data };
+              // 老配置没有 enableCopyNote，从 copyMode 反推
+              if (typeof data.enableCopyNote !== 'boolean') {
+                config.value.enableCopyNote = data.copyMode !== 'none';
+              }
+              if (data.copyMode === 'block') config.value.enableAntiCopy = true;
+            }
           } catch (e) {}
         };
 
         const saveConfig = async () => {
+          syncCopyMode();
           await fetch(`${API_BASE}/protection/config`, {
             method: 'POST', headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(config.value)
@@ -148,7 +235,7 @@
         };
 
         onMounted(loadData);
-        return { config, saveConfig };
+        return { config, saveConfig, decodeInput, decodeResult, decodeTried, doDecode };
       }
     }).mount('#app');
   </script>

@@ -1,7 +1,7 @@
 {
-  "version": "20261119-232640",
-  "count": 56,
-  "totalBytes": 904837,
+  "version": "20261120-130408",
+  "count": 57,
+  "totalBytes": 916501,
   "files": [
     {
       "path": "admin.html",
@@ -110,8 +110,8 @@
     },
     {
       "path": "plugin/protection.html",
-      "size": 8089,
-      "sha256": "a9a0b1e98aa63758e83545cf212408d0e86ba330607b8ba9027914d1000d7f6b"
+      "size": 12698,
+      "sha256": "917b58a864dc18ee767048b44f8a91b3c8d3a2612fcb925cbcda65b1969edbc8"
     },
     {
       "path": "plugin/timeline.html",
@@ -135,8 +135,8 @@
     },
     {
       "path": "server.js",
-      "size": 202735,
-      "sha256": "2e893edc811e24d79c9501f8a14abe3290ce8d0b9d9d3d7421fda2aa26fdc592"
+      "size": 203040,
+      "sha256": "a4c687e30a38547511c5f9b1ab054828709e8439c93639eae2c095eb2243c2a7"
     },
     {
       "path": "start.bat",
@@ -155,8 +155,8 @@
     },
     {
       "path": "version.json",
-      "size": 110,
-      "sha256": "598d9f5fd2dc220015fc0d9a35d3f4c017e4a5063f15927c625a9b201ae31fee"
+      "size": 113,
+      "sha256": "a640b7c41dd6f4acb2355546aae1ba5bd2c318da6960cdbb8ac09be0cfcf5e9a"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -165,8 +165,8 @@
     },
     {
       "path": "website/.vitepress/theme/Layout.vue",
-      "size": 4957,
-      "sha256": "a18ead32be0f77e8be4105687541e8b3081d5b552ca51fbf4d5e1b42c270adfe"
+      "size": 4976,
+      "sha256": "f530f5d9b89a378892fffd3d25daa32efb9caf0bfac4f218de9c7eb57b6483be"
     },
     {
       "path": "website/.vitepress/theme/components/EpochMap.vue",
@@ -192,6 +192,11 @@
       "path": "website/.vitepress/theme/index.js",
       "size": 1472,
       "sha256": "471efd7abd9ff2637096f61e2ec428423183097e794b2d97d4cdd6eb1708b9fc"
+    },
+    {
+      "path": "website/.vitepress/theme/watermark.js",
+      "size": 6728,
+      "sha256": "705ca5c32fdc96446e78eaff986a0bb1eb13ee343c7bbff1d6978adf12a66cd9"
     },
     {
       "path": "website/docs/characters.md",

@@ -36,6 +36,7 @@ website/.vitepress/theme/components/HistoryMap.vue
 website/.vitepress/theme/components/NavCards.vue
 website/.vitepress/theme/custom.css
 website/.vitepress/theme/index.js
+website/.vitepress/theme/watermark.js
 website/docs/characters.md
 website/docs/components/NavCards.vue
 website/docs/components/TreeNode.vue
