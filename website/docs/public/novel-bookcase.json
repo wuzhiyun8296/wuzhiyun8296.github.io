@@ -1,10 +1,5 @@
 [
   {
-    "title": "_自动测试",
-    "type": "folder",
-    "children": []
-  },
-  {
     "title": "幻想域",
     "type": "folder",
     "children": [
@@ -82,17 +77,6 @@
         "title": "第15章 中间商",
         "type": "file",
         "link": "/novel/chapters/幻想域/第15章 中间商"
-      }
-    ]
-  },
-  {
-    "title": "剧本",
-    "type": "folder",
-    "children": [
-      {
-        "title": "示例剧本",
-        "type": "file",
-        "link": "/novel/chapters/剧本/示例剧本"
       }
     ]
   }

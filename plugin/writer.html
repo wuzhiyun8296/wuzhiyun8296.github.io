@@ -267,6 +267,12 @@
           <div style="font-size: 40px; margin-bottom: 10px;">📥</div>
           <div>{{ importBusy ? '导入中…' : '导入旧稿' }}</div>
         </div>
+
+        <!-- 🌐 同步到本地前台（不推送、不发版） -->
+        <div class="btn-add-book" @click="syncToFrontend" title="把章节复制到前台站点，本机/手机立刻能看到（不推送）">
+          <div style="font-size: 40px; margin-bottom: 10px;">🌐</div>
+          <div>{{ syncing ? '同步中…' : '同步到前台' }}</div>
+        </div>
         <input ref="importInput" type="file" accept=".txt,.md,.docx,.markdown" style="display:none;" @change="importDraft">
       </div>
 
@@ -301,6 +307,10 @@
             <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
             <button class="format-btn" @click="openFind" title="查找替换 (Ctrl+F)">🔍 查找</button>
             <button class="format-btn" @click="openPreview" title="在站点里预览这一章">👁 预览</button>
+            <button class="format-btn" @click="syncToFrontend" :disabled="syncing"
+                    title="把章节复制到前台站点（不推送、不发版），前台立刻能看到">
+              {{ syncing ? '⏳ 同步中' : '🌐 同步前台' }}
+            </button>
             <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
             <button class="format-btn" @click="formatDoc('bold')" title="加粗选中的文字 (Ctrl+B)"><b>B</b> 粗体</button>
             <button class="format-btn" @click="formatDoc('italic')" title="斜体选中的文字，常用于内心独白 (Ctrl+I)"><i>I</i> 斜体</button>
@@ -580,6 +590,30 @@
           content.value = el.innerHTML;
           findState.value.matches = countMatches();
           showToast(`已替换 ${hit} 处`);
+        };
+
+        // ---------- 🌐 本地同步到前台（不推送） ----------
+        const syncing = ref(false);
+        const syncToFrontend = async () => {
+          if (syncing.value) return;
+          syncing.value = true;
+          try {
+            // 先把当前章节存一下，避免同步的是旧内容
+            if (viewMode.value === 'editor' && currentPath.value) {
+              await saveFile(true);
+            }
+            const res = await fetch(`${API_BASE}/novel/sync`, { method: 'POST' });
+            const d = await res.json();
+            if (d.success) {
+              showToast(`✅ 已同步 ${d.chapters} 章到前台（未推送，仅本机可见）`);
+            } else {
+              showToast('同步失败：' + (d.error || '未知错误'), true);
+            }
+          } catch (e) {
+            showToast('同步失败：' + e.message, true);
+          } finally {
+            syncing.value = false;
+          }
         };
 
         // ---------- 👁 站点预览 ----------
@@ -1035,7 +1069,7 @@
           onRichInput, saveFile, toggleFocus, handleRichKeyDown, handlePaste, formatDoc, autoIndent,
           readingFont, fontPresets, changeReadingFont, webMode, webBlankLines,
           undo, redo, canUndo, canRedo,
-          importBusy, importDraft, openFind, doReplace, findState, openPreview, moveChapter,
+          importBusy, importDraft, openFind, doReplace, findState, openPreview, moveChapter, syncing, syncToFrontend,
           modal, closeModal, confirmModal, exportModal
         };
       }

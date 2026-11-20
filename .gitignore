@@ -21,3 +21,9 @@ update-*.zip
 .update_backup/
 dev_log.txt
 server_log.txt
+
+# 数据安全：备份 / 回收站 / 历史版本 / 前端错误日志（只在本机）
+.backup/
+.trash/
+.history/
+client_error.log

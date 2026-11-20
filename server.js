@@ -1276,6 +1276,28 @@ app.get('/api/backup/export', async (req, res) => {
   }
 });
 
+// 🌐 本地同步：把 library 里的章节复制到前台站点（不推送、不发版）
+app.post('/api/novel/sync', async (req, res) => {
+  try {
+    const msgs = await syncNovelToFrontend();
+    // 统计一下同步了多少章
+    let count = 0;
+    const walk = (dir) => {
+      if (!fs.existsSync(dir)) return;
+      for (const name of fs.readdirSync(dir)) {
+        const full = path.join(dir, name);
+        const st = fs.statSync(full);
+        if (st.isDirectory()) walk(full);
+        else if (name.endsWith('.md')) count++;
+      }
+    };
+    walk(NOVEL_CHAPTERS_DIR);
+    res.json({ success: true, log: msgs.join('\n'), chapters: count });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 // 导出 EPUB（网文/电子书标准格式）
 app.get('/api/library/export/epub', async (req, res) => {
   try {
@@ -2379,6 +2401,117 @@ app.post('/api/git/config', async (req, res) => {
   } catch (error) { res.status(500).json({ error: error.message }); }
 });
 
+// 这些顶层目录不是小说，不该同步到前台章节里
+const NON_NOVEL_DIRS = new Set(['剧本', '导入', '素材', '设定集', '设定']);
+
+async function syncNovelToFrontend() {
+  const msgs = [];
+  msgs.push('> 正在自动同步小说书架到前台...');
+  await fs.emptyDir(NOVEL_CHAPTERS_DIR);
+const bookcase = [];
+const protConfig = fs.existsSync(PROTECTION_CONFIG_FILE) ? await fs.readJson(PROTECTION_CONFIG_FILE) : { enableNovelSync: true, enableWatermark: true };
+  
+  if (protConfig.enableNovelSync) {
+    const watermarkStr = protConfig.enableWatermark ? generateZeroWidthWatermark(`[Author:${protConfig.authorName}]`) : '';
+
+    // 💡 章节的「上一篇/下一篇」按章节顺序来：同步时把 frontmatter 写进每章开头
+    const injectChapterNav = (fileList) => {
+      for (let i = 0; i < fileList.length; i++) {
+        const cur = fileList[i];
+        const prev = fileList[i - 1];
+        const next = fileList[i + 1];
+        let body = fs.readFileSync(cur.full, 'utf-8');
+        // 去掉旧 frontmatter，避免重复叠加
+        if (body.startsWith('---')) {
+          const end = body.indexOf('\n---', 3);
+          if (end > -1) body = body.slice(body.indexOf('\n', end + 1) + 1);
+        }
+        // 💡 顶部要有标题 + 「第 X 章 / 共 N 章」，否则读者进来只看到一堆段落
+        body = body.replace(/^\s+/, '');
+        if (!/^#\s/.test(body)) {
+          body = '# ' + cur.title + '\n\n' + body.replace(/^\n+/, '');
+        }
+        // 💡 行首的全角空格交给 CSS 的 text-indent 处理，源文件里去掉，避免叠成四格
+        body = body.split('\n').map((line) => line.replace(/^[\u3000\u00a0\s]+/, '')).join('\n');
+        // 去掉上一次注入的计数行，保证可重复执行
+        body = body.replace(/^<p class="ch-meta">[\s\S]*?<\/p>\n*/m, '');
+        const metaLine = `<p class="ch-meta">第 ${i + 1} 章 / 共 ${fileList.length} 章</p>`;
+        const h1End = body.indexOf('\n');
+        body = h1End > -1
+          ? body.slice(0, h1End + 1) + '\n' + metaLine + '\n' + body.slice(h1End + 1)
+          : body + '\n\n' + metaLine + '\n';
+        const fm = ['---'];
+        fm.push(prev
+          ? `prev:\n  text: '${prev.title.replace(/'/g, "''")}'\n  link: '${prev.link}'`
+          : 'prev: false');
+        fm.push(next
+          ? `next:\n  text: '${next.title.replace(/'/g, "''")}'\n  link: '${next.link}'`
+          : 'next: false');
+        fm.push('pageClass: novel-chapter');
+        fm.push('---', '', '');
+        fs.writeFileSync(cur.full, fm.join('\n') + body, 'utf-8');
+      }
+    };
+
+    let navQueue = [];
+    const copyNovelFiles = (srcDir, destDir, currentBookcase) => {
+      const savedQueue = navQueue;
+      navQueue = [];
+      if (!fs.existsSync(srcDir)) return;
+      const items = fs.readdirSync(srcDir).sort((a, b) => {
+        const aStat = fs.statSync(path.join(srcDir, a));
+        const bStat = fs.statSync(path.join(srcDir, b));
+        if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
+        if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
+        return a.localeCompare(b, 'zh-CN', {numeric: true});
+      });
+
+      for (const item of items) {
+        if (item.startsWith('.') || item === 'inbox.json') continue;
+        // 只在 library 根层过滤：剧本/导入这些不是小说
+        if (srcDir === LIBRARY_DIR && (NON_NOVEL_DIRS.has(item) || item.startsWith('_'))) continue;
+        const srcPath = path.join(srcDir, item);
+        const destPath = path.join(destDir, item);
+        const stat = fs.statSync(srcPath);
+        
+        if (stat.isDirectory()) {
+          fs.ensureDirSync(destPath);
+          const subBookcase = { title: item, type: 'folder', children: [] };
+          currentBookcase.push(subBookcase);
+          copyNovelFiles(srcPath, destPath, subBookcase.children);
+        } else if (item.endsWith('.md')) {
+          let content = fs.readFileSync(srcPath, 'utf-8');
+          if (protConfig.enableWatermark) {
+            content = content.replace(/[\u200b\u200c\u200d]/g, ''); 
+            content = content.replace(/<\/(div|p)>/gi, `${watermarkStr}</$1>`);
+            if (!content.includes('</div>') && !content.includes('</p>')) content += watermarkStr;
+          }
+          fs.writeFileSync(destPath, content, 'utf-8');
+          
+          const fileEntry = {
+            title: item.replace('.md', ''),
+            type: 'file',
+            link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
+          };
+          currentBookcase.push(fileEntry);
+          navQueue.push({ full: destPath, title: fileEntry.title, link: fileEntry.link });
+        }
+      }
+      injectChapterNav(navQueue);   // 这一层的章节互相串起来
+      navQueue = savedQueue;
+    };
+
+    copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
+    await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
+    msgs.push('> 小说同步完成，防伪水印已注入。');
+  } else {
+    msgs.push('> ⚠️ 小说公开已关闭，正在清空前台小说目录以隐藏内容...');
+    await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), [], { spaces: 2 });
+    msgs.push('> 前台已隐藏小说。');
+  }
+  return msgs;
+}
+
 app.post('/api/git/push', async (req, res) => {
   const { message, note, bumpVersion, mode } = req.body;
 
@@ -2474,108 +2607,7 @@ app.post('/api/git/push', async (req, res) => {
   logs.push(`[INFO] 开始配置并执行 Git 推送...\n`);
 
   try {
-    logs.push(`> 正在自动同步小说书架到前台...\n`);
-    await fs.emptyDir(NOVEL_CHAPTERS_DIR); 
-    
-    const bookcase = []; 
-    const protConfig = fs.existsSync(PROTECTION_CONFIG_FILE) ? await fs.readJson(PROTECTION_CONFIG_FILE) : { enableNovelSync: true, enableWatermark: true };
-    
-    if (protConfig.enableNovelSync) {
-      const watermarkStr = protConfig.enableWatermark ? generateZeroWidthWatermark(`[Author:${protConfig.authorName}]`) : '';
-
-      // 💡 章节的「上一篇/下一篇」按章节顺序来：同步时把 frontmatter 写进每章开头
-      const injectChapterNav = (fileList) => {
-        for (let i = 0; i < fileList.length; i++) {
-          const cur = fileList[i];
-          const prev = fileList[i - 1];
-          const next = fileList[i + 1];
-          let body = fs.readFileSync(cur.full, 'utf-8');
-          // 去掉旧 frontmatter，避免重复叠加
-          if (body.startsWith('---')) {
-            const end = body.indexOf('\n---', 3);
-            if (end > -1) body = body.slice(body.indexOf('\n', end + 1) + 1);
-          }
-          // 💡 顶部要有标题 + 「第 X 章 / 共 N 章」，否则读者进来只看到一堆段落
-          body = body.replace(/^\s+/, '');
-          if (!/^#\s/.test(body)) {
-            body = '# ' + cur.title + '\n\n' + body.replace(/^\n+/, '');
-          }
-          // 💡 行首的全角空格交给 CSS 的 text-indent 处理，源文件里去掉，避免叠成四格
-          body = body.split('\n').map((line) => line.replace(/^[\u3000\u00a0\s]+/, '')).join('\n');
-          // 去掉上一次注入的计数行，保证可重复执行
-          body = body.replace(/^<p class="ch-meta">[\s\S]*?<\/p>\n*/m, '');
-          const metaLine = `<p class="ch-meta">第 ${i + 1} 章 / 共 ${fileList.length} 章</p>`;
-          const h1End = body.indexOf('\n');
-          body = h1End > -1
-            ? body.slice(0, h1End + 1) + '\n' + metaLine + '\n' + body.slice(h1End + 1)
-            : body + '\n\n' + metaLine + '\n';
-          const fm = ['---'];
-          fm.push(prev
-            ? `prev:\n  text: '${prev.title.replace(/'/g, "''")}'\n  link: '${prev.link}'`
-            : 'prev: false');
-          fm.push(next
-            ? `next:\n  text: '${next.title.replace(/'/g, "''")}'\n  link: '${next.link}'`
-            : 'next: false');
-          fm.push('pageClass: novel-chapter');
-          fm.push('---', '', '');
-          fs.writeFileSync(cur.full, fm.join('\n') + body, 'utf-8');
-        }
-      };
-
-      let navQueue = [];
-      const copyNovelFiles = (srcDir, destDir, currentBookcase) => {
-        const savedQueue = navQueue;
-        navQueue = [];
-        if (!fs.existsSync(srcDir)) return;
-        const items = fs.readdirSync(srcDir).sort((a, b) => {
-          const aStat = fs.statSync(path.join(srcDir, a));
-          const bStat = fs.statSync(path.join(srcDir, b));
-          if (aStat.isDirectory() && !bStat.isDirectory()) return -1;
-          if (!aStat.isDirectory() && bStat.isDirectory()) return 1;
-          return a.localeCompare(b, 'zh-CN', {numeric: true});
-        });
-
-        for (const item of items) {
-          if (item.startsWith('.') || item === 'inbox.json') continue;
-          const srcPath = path.join(srcDir, item);
-          const destPath = path.join(destDir, item);
-          const stat = fs.statSync(srcPath);
-          
-          if (stat.isDirectory()) {
-            fs.ensureDirSync(destPath);
-            const subBookcase = { title: item, type: 'folder', children: [] };
-            currentBookcase.push(subBookcase);
-            copyNovelFiles(srcPath, destPath, subBookcase.children);
-          } else if (item.endsWith('.md')) {
-            let content = fs.readFileSync(srcPath, 'utf-8');
-            if (protConfig.enableWatermark) {
-              content = content.replace(/[\u200b\u200c\u200d]/g, ''); 
-              content = content.replace(/<\/(div|p)>/gi, `${watermarkStr}</$1>`);
-              if (!content.includes('</div>') && !content.includes('</p>')) content += watermarkStr;
-            }
-            fs.writeFileSync(destPath, content, 'utf-8');
-            
-            const fileEntry = {
-              title: item.replace('.md', ''),
-              type: 'file',
-              link: `/novel/chapters/${path.relative(NOVEL_CHAPTERS_DIR, destPath).replace(/\\/g, '/').replace('.md', '')}`
-            };
-            currentBookcase.push(fileEntry);
-            navQueue.push({ full: destPath, title: fileEntry.title, link: fileEntry.link });
-          }
-        }
-        injectChapterNav(navQueue);   // 这一层的章节互相串起来
-        navQueue = savedQueue;
-      };
-
-      copyNovelFiles(LIBRARY_DIR, NOVEL_CHAPTERS_DIR, bookcase);
-      await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), bookcase, { spaces: 2 });
-      logs.push(`> 小说同步完成，防伪水印已注入。\n`);
-    } else {
-      logs.push(`> ⚠️ 小说公开已关闭，正在清空前台小说目录以隐藏内容...\n`);
-      await fs.writeJson(path.join(PUBLIC_DIR, 'novel-bookcase.json'), [], { spaces: 2 });
-      logs.push(`> 前台已隐藏小说。\n`);
-    }
+    (await syncNovelToFrontend()).forEach((m) => logs.push(m + '\n'));
 
     const gitignorePath = path.join(__dirname, '.gitignore');
     
@@ -2606,6 +2638,12 @@ update-*.zip
 .update_backup/
 dev_log.txt
 server_log.txt
+
+# 数据安全：备份 / 回收站 / 历史版本 / 前端错误日志（只在本机）
+.backup/
+.trash/
+.history/
+client_error.log
 `;
     await fs.writeFile(gitignorePath, ignoreContent, 'utf-8');
 
