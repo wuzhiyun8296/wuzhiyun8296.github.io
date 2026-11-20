@@ -3799,6 +3799,10 @@ app.get('/api/announcement', async (req, res) => {
 });
 
 // 📢 本机发布公告（改本地文件，随后由推送页发出去）
+app.get('/api/announcement/default', (req, res) => {
+  res.json(emptyAnnouncement());
+});
+
 app.post('/api/announcement', async (req, res) => {
   try {
     if (!firewallConfig.localOnly && !isAuthed(req)) return res.status(401).json({ error: '请先登录' });

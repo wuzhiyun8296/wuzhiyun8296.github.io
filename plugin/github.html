@@ -213,6 +213,27 @@
       /* 终端不够高也够看 */
       .terminal { font-size: 11.5px; line-height: 1.6; max-height: 45vh; }
     }
+
+    /* 🎨 与主题一致的确认框 */
+    .mw-confirm-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72);
+      display: flex; align-items: center; justify-content: center; z-index: 99999;
+      backdrop-filter: blur(2px);
+    }
+    .mw-confirm-box {
+      background: #23262c; border: 1px solid #3a424c; border-radius: 12px;
+      width: 420px; max-width: 92vw; padding: 20px 22px;
+      box-shadow: 0 12px 40px rgba(0,0,0,.5);
+    }
+    .mw-confirm-title { font-size: 15px; color: #fff; font-weight: 600; margin-bottom: 10px; }
+    .mw-confirm-msg { font-size: 13px; color: #b9c0c9; line-height: 1.8; }
+    .mw-confirm-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 18px; }
+    .mw-btn {
+      border: 1px solid #343a42; background: #262a31; color: #d5dae1;
+      border-radius: 8px; padding: 8px 16px; font-size: 13px; cursor: pointer;
+    }
+    .mw-btn:hover { filter: brightness(1.15); }
+    .mw-btn.primary { background: rgba(14,99,156,.35); border-color: #2f6f9e; color: #cfe6f7; }
 </style>
 </head>
 <body>
@@ -315,6 +336,10 @@
         <button class="btn-announce" @click="publishAnnouncement" :disabled="isPushing || !pushNote.trim()">
           📢 发布公告
         </button>
+        <button class="btn-announce" @click="publishDefaultAnnouncement" :disabled="isPushing"
+                title="把公告恢复成系统默认的欢迎语">
+          🔄 恢复默认公告
+        </button>
         <button class="btn-push" @click="pushToGithub" :disabled="isPushing || !commitMsg.trim()">
           <span v-if="isPushing" class="spinner">⏳</span>
           <span v-else>🚀</span>
@@ -339,7 +364,20 @@
       </div>
       <div class="gitee-hint">路径：仓库页 → 管理 → 仓库镜像管理 → 手动同步</div>
     </div>
+    <!-- 🎨 与主题一致的确认框（替代原生 confirm） -->
+  <div class="mw-confirm-mask" v-if="confirmState.show" @click.self="closeConfirm(false)">
+    <div class="mw-confirm-box">
+      <div class="mw-confirm-title">{{ confirmState.title }}</div>
+      <div class="mw-confirm-msg" v-html="confirmState.message"></div>
+      <div class="mw-confirm-actions">
+        <button class="mw-btn ghost" @click="closeConfirm(false)">取消</button>
+        <button class="mw-btn primary" @click="closeConfirm(true)">{{ confirmState.okText }}</button>
+      </div>
+    </div>
   </div>
+
+  </div>
+
 
   <script>
     const { createApp, ref, computed, onMounted, nextTick, watch } = Vue;
@@ -370,6 +408,24 @@
           publishMode.value = kind;
           pushNote.value = kind === 'self' ? PRESET_SELF : PRESET_TEST;
         };
+        const confirmState = ref({ show: false, title: '', message: '', okText: '确定', resolve: null });
+
+        // 🎨 返回 Promise 的确认框
+        const askConfirm = (opts) => new Promise((resolve) => {
+          confirmState.value = {
+            show: true,
+            title: (opts && opts.title) || '确认',
+            message: (opts && opts.message) || '',
+            okText: (opts && opts.okText) || '确定',
+            resolve
+          };
+        });
+        const closeConfirm = (ok) => {
+          const r = confirmState.value.resolve;
+          confirmState.value = { ...confirmState.value, show: false, resolve: null };
+          if (typeof r === 'function') r(!!ok);
+        };
+
         const giteeHint = ref(null);
         const pushedVersion = ref('');
         const isPushing = ref(false);
@@ -434,6 +490,52 @@
         };
 
         // 📢 只发公告：不动版本号、不重建清单，推送一个 announcement.json
+        // 🔄 恢复默认公告：把系统自带的欢迎语重新发布一遍
+        const publishDefaultAnnouncement = async () => {
+          if (isPushing.value) return;
+          if (!config.value.repoUrl || !config.value.token) {
+            isConfigOpen.value = true;
+            logs.value += `\n[ERROR] 请先在配置面板填写仓库地址和 Token！\n`;
+            return;
+          }
+          // 🎨 用自家样式的确认框（原生 confirm 和暗色界面不搭）
+          const ok = await askConfirm({
+            title: '恢复默认公告',
+            message: '把公告恢复成「👋 欢迎使用幻想域写作系统」？<br><br><span style="color:#8a929c;font-size:12.5px;">当前公告会被覆盖，并同步推送到 GitHub 和 Gitee。</span>',
+            okText: '恢复并发布'
+          });
+          if (!ok) return;
+
+          isPushing.value = true;
+          logs.value += `\n[INFO] 正在恢复默认公告…\n`;
+          try {
+            // 先问后端要默认文案，避免前端写死
+            const dres = await fetch(`${API_BASE}/announcement/default?t=${Date.now()}`);
+            const def = await dres.json();
+            const title = def.title || '👋 欢迎使用幻想域写作系统';
+            const body = def.body || '有问题请及时在 B 站私信哦～～';
+
+            const res = await fetch(`${API_BASE}/git/push`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ mode: 'announcement', title, note: body, level: 'info' })
+            });
+            const data = await res.json();
+            logs.value += (data.log || '') + '\n';
+            if (data.success) {
+              logs.value += `[DONE] 已恢复默认公告：${title}\n`;
+              pushNote.value = '';
+              window.parent?.postMessage({ type: 'PUSH_DONE' }, { targetOrigin: '*' });
+            } else {
+              logs.value += `[ERROR] 恢复失败\n`;
+            }
+          } catch (e) {
+            logs.value += `[ERROR] ${e.message}\n`;
+          } finally {
+            isPushing.value = false;
+          }
+        };
+
         const publishAnnouncement = async () => {
           const text = pushNote.value.trim();
           if (!text) { logs.value += '\n[ERROR] 公告内容不能为空\n'; return; }
@@ -562,9 +664,9 @@
 
         onMounted(loadConfig);
 
-        return { pushNote, publishMode, usePreset, publishAnnouncement,
+        return { pushNote, publishMode, usePreset, publishAnnouncement, publishDefaultAnnouncement,
           config, isConfigOpen, commitMsg, isPushing, logs, formattedLogs, terminalRef, 
-          giteeHint, pushedVersion,
+          giteeHint, pushedVersion, confirmState, closeConfirm,
           saveConfig, pushToGithub 
         };
       }
