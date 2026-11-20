@@ -1,6 +1,7 @@
 admin.html
 announcement.json
 icon3.ico
+lib/zip.js
 loading.html
 login.html
 package.json

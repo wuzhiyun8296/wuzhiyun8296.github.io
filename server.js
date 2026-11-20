@@ -24,7 +24,27 @@ const cors = require('cors');
 const multer = require('multer');
 const { exec } = require('child_process');
 const marked = require('marked'); // 💡 移到顶层引入
-const { zipStore, unzip, collectFiles } = require('./lib/zip'); // 📦 ZIP 读写（备份/EPUB/Word 导入）
+
+// 📦 ZIP 读写（备份/EPUB/Word 导入）
+// 💡 容错：万一更新只替换了 server.js 而没带上 lib/，也不能让服务起不来
+let zipLib = null;
+try {
+  zipLib = require('./lib/zip');
+} catch (e) {
+  console.log('[boot] lib/zip.js 缺失，备份/EPUB/导入相关功能暂时不可用（不影响其它功能）');
+}
+const zipStore = (entries) => {
+  if (!zipLib) throw new Error('缺少 lib/zip.js，请重新更新一次（或手动补上这个文件）');
+  return zipLib.zipStore(entries);
+};
+const unzip = (buf) => {
+  if (!zipLib) throw new Error('缺少 lib/zip.js，请重新更新一次');
+  return zipLib.unzip(buf);
+};
+const collectFiles = (dir, prefix, filter) => {
+  if (!zipLib) return [];
+  return zipLib.collectFiles(dir, prefix, filter);
+};
 
 // ================= 💡 进程兜底 =================
 // 任何一次请求里漏出来的异常都不该让整个后台悄无声息地死掉，
@@ -4724,6 +4744,7 @@ async function collectUpdateFiles() {
   const roots = ['server.js', 'admin.html', 'login.html', 'package.json', 'version.json',
                  'update-config.json', 'start.vbs', 'start.bat', 'restart.vbs', 'loading.html', 'icon3.ico',
                  'announcement.json',
+                 'lib',            // 公共模块，漏了客户端会启动失败
                  'plugin', 'website'];
   const out = [];
 
@@ -4791,7 +4812,7 @@ async function runUpdateFlow() {
   }
   if (!sources.length) throw new Error('未配置更新源：请在 update-config.json 的 sources 里填写仓库地址（GitHub / Gitee 公开仓库，不需要 Token）');
 
-  const filesToUpdate = ['server.js', 'admin.html', 'package.json', 'version.json', 'plugin', 'website'];
+  const filesToUpdate = ['server.js', 'admin.html', 'login.html', 'package.json', 'version.json', 'lib', 'plugin', 'website'];
   const zipPath = path.join(__dirname, `update-${Date.now()}.zip`);
   const tempDir = path.join(__dirname, '.temp_update');
 

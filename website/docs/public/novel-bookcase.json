@@ -1,5 +1,10 @@
 [
   {
+    "title": "_自动测试",
+    "type": "folder",
+    "children": []
+  },
+  {
     "title": "幻想域",
     "type": "folder",
     "children": [
