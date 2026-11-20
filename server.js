@@ -992,7 +992,21 @@ app.get('/api/library/tree', async (req, res) => {
           tree.push({ name: file, type: 'file', path: path.relative(LIBRARY_DIR, fullPath).replace(/\\/g, '/') });
         }
       }
-      tree.sort((a, b) => (a.type === 'folder' && b.type !== 'folder' ? -1 : 1));
+      // 💡 排序规则（之前的写法永远返回 1，等于没排，所以章节顺序是乱的）：
+      //    1. 文件夹在前
+      //    2. 有数字前缀的按数字大小（第2章 < 第10章）
+      //    3. 其余按中文拼音，且数字按数值比较
+      const numPrefix = (n) => {
+        const m = /^(\d+)/.exec(String(n));
+        return m ? parseInt(m[1], 10) : null;
+      };
+      tree.sort((a, b) => {
+        if (a.type !== b.type) return a.type === 'folder' ? -1 : 1;
+        const na = numPrefix(a.name);
+        const nb = numPrefix(b.name);
+        if (na !== null && nb !== null && na !== nb) return na - nb;
+        return String(a.name).localeCompare(String(b.name), 'zh-CN', { numeric: true });
+      });
       return tree;
     };
     res.json(await getTree(LIBRARY_DIR));
