@@ -194,7 +194,13 @@
       if (backendReady) {
         await fetchDiagnostic();
       } else {
-        document.getElementById('error-message').innerHTML = '后台端口(3001)未能启动。<br>请确认是否已安装 Node.js 环境，以及是否在项目根目录运行过 <b>npm install</b>。';
+        document.getElementById('error-message').innerHTML =
+          '后台端口(3001)未能启动。<br><br>' +
+          '<b>先做这三步排查：</b><br>' +
+          '1. 打开安装目录，找 <b>server_log.txt</b>，看最后几行写了什么错（最常见的是 <code>Cannot find module</code>，说明更新时少下了文件）<br>' +
+          '2. 确认装过 Node.js：在目录里按住 Shift 右键 → 在此处打开 PowerShell → 输入 <b>node -v</b>，应显示版本号<br>' +
+          '3. 如果提示缺模块（比如 lib/zip.js），直接双击 <b>安装与更新.bat</b> 重新补齐文件<br><br>' +
+          '<span style="color:#8a929c;font-size:12px;">还不行的话，把 server_log.txt 的最后 20 行发给作者。</span>';
         await fetchDiagnostic(); // 尝试拉取，拉不到会有红字提示
       }
     };
