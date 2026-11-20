@@ -119,11 +119,25 @@
     .delete-btn:hover { background: #a82626; color: #fff; }
     .node-item:hover .delete-btn { display: block; }
     
-    #main-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; }
+    #main-editor { flex: 1; display: flex; flex-direction: column; min-width: 0; min-height: 0; }
     .toolbar { padding: 10px 15px; background: #2d2d2d; display: flex; align-items: center; border-bottom: 1px solid #333; }
     .status-text { flex: 1; font-size: 14px; color: #888; font-weight: bold; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-    .editor-split { flex: 1; display: flex; height: 100%; overflow: hidden; }
-    .md-textarea { width: 50%; height: 100%; background: #1e1e1e; color: #d4d4d4; border: none; border-right: 1px solid #333; padding: 20px; font-size: 15px; line-height: 1.6; font-family: Consolas, monospace; resize: none; outline: none; }
+    /* 💡 min-height:0 是关键：不加的话 textarea 的最小高度等于内容高度，
+       会一直往下长、被外层 overflow:hidden 裁掉，光标跑出可视区也不滚动 */
+    .editor-split { flex: 1; display: flex; height: 100%; min-height: 0; overflow: hidden; }
+    .md-textarea { width: 50%; height: 100%; min-height: 0; overflow-y: auto; background: #1e1e1e; color: #d4d4d4; border: none; border-right: 1px solid #333; padding: 20px; font-size: 15px; line-height: 1.6; font-family: Consolas, monospace; resize: none; outline: none; }
+    /* 📱 网文模式开关（按钮式） */
+    .webmode-btn {
+      border: 1px solid #3a3a3a; background: transparent; color: #8a929c;
+      border-radius: 4px; padding: 4px 10px; font-size: 12.5px; cursor: pointer;
+      margin-right: 8px; transition: .15s;
+    }
+    .webmode-btn:hover { color: #fff; border-color: #555; }
+    .webmode-btn.on { background: rgba(14,99,156,.3); border-color: #0e639c; color: #9fd6f5; }
+    .webmode-select {
+      background: #1e1e1e; color: #ccc; border: 1px solid #3a3a3a; border-radius: 4px;
+      padding: 3px 6px; font-size: 12px; margin-right: 10px; outline: none; cursor: pointer;
+    }
     .preview-pane { width: 50%; height: 100%; padding: 20px; overflow-y: auto; line-height: 1.6; font-size: 15px; }
     .preview-pane h1, .preview-pane h2, .preview-pane h3 { color: #fff; border-bottom: 1px solid #444; padding-bottom: 8px; }
     
@@ -472,11 +486,21 @@
           <div id="main-editor">
             <div class="toolbar">
               <span class="status-text">{{ currentPath || '请选择或新建文件' }}</span>
+              <button class="webmode-btn" :class="{ on: webMode }" @click="webMode = !webMode"
+                      title="开启后按回车会留出空行，符合网文排版">
+                📱 网文模式{{ webMode ? '：开' : '：关' }}
+              </button>
+              <select v-if="webMode" v-model.number="webBlankLines" class="webmode-select" title="段落之间空几行">
+                <option :value="1">空一行</option>
+                <option :value="2">空两行</option>
+              </select>
+              <button v-if="currentPath" class="outline" @click="mdUndo" :disabled="!canMdUndo" style="margin-right: 8px;" title="撤销 (Ctrl+Z)">↶ 撤销</button>
+              <button v-if="currentPath" class="outline" @click="mdRedo" :disabled="!canMdRedo" style="margin-right: 8px;" title="重做 (Ctrl+Y)">↷ 重做</button>
               <button v-if="currentPath" class="outline" @click="showTableModal = true" style="margin-right: 10px;">📊 插入表格</button>
               <button @click="saveFile" v-if="currentPath">保存内容 (Ctrl+S)</button>
             </div>
             <div class="editor-split" v-if="currentPath">
-              <textarea id="md-editor" class="md-textarea" v-model="content" placeholder="书写 Markdown..."></textarea>
+              <textarea id="md-editor" class="md-textarea" v-model="content" @input="onMdInput" @keydown="onMdKeydown" placeholder="书写 Markdown..."></textarea>
               <div class="preview-pane" v-html="renderedHtml"></div>
             </div>
             <div v-else style="flex:1; display:flex; align-items:center; justify-content:center; color:#555; font-size:20px;">请选择或新建文件</div>
@@ -514,7 +538,7 @@
   </div>
 
   <script>
-    const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+    const { createApp, ref, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
     // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
     const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
       ? 'http://localhost:3001/api'
@@ -979,12 +1003,18 @@
 
         // 💡 手机端有手机版页面就用手机版，否则用原页面
         const isPhoneView = /Android|iPhone|iPad|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent || '') || window.innerWidth < 760;
+        // 🔍 搜索点开文件：从仪表盘传过来的待打开路径
+        const writerOpenPath = ref('');
         const pluginSrc = computed(() => {
           const id = currentTab.value;
           if (isPhoneView) {
             const hit = (dynamicPlugins.value || []).find((p) => p.id === id);
             // 💡 只有真的存在 xxx.mobile.html 才跳转，否则会 404
             if (hit && hit.mobileFile) return `plugin/${id}.mobile.html`;
+          }
+          // 打开指定章节时带上路径参数，沉浸码字会自己打开
+          if (id === 'writer' && writerOpenPath.value) {
+            return `plugin/writer.html?open=${encodeURIComponent(writerOpenPath.value)}`;
           }
           return `plugin/${id}.html`;
         });
@@ -996,6 +1026,95 @@
           return hit ? hit.name : (currentTab.value === 'article' ? '文章编辑' : currentTab.value);
         });
         const tree = ref([]); const content = ref(''); const currentPath = ref(''); const selectedFolder = ref('');
+
+        // ↶ 文章编辑的撤销/重做（自己维护，避免浏览器把"上一个文件"撤回来）
+        const mdUndoStack = ref([]);
+        const mdRedoStack = ref([]);
+        const canMdUndo = computed(() => mdUndoStack.value.length > 1);
+        const canMdRedo = computed(() => mdRedoStack.value.length > 0);
+        let mdSnapshotTimer = null;
+
+        // 📱 网文模式：回车插入空行（默认开启，记住上次选择）
+        const webMode = ref((() => {
+          try {
+            const saved = localStorage.getItem('mw_article_webmode');
+            return saved === null ? true : saved === '1';
+          } catch (e) { return true; }
+        })());
+        // 📱 网文模式：默认开启，记住上次选择
+        const webBlankLines = ref((() => {
+          try {
+            const saved = parseInt(localStorage.getItem('mw_article_blanklines') || '2', 10);
+            return saved === 1 ? 1 : 2;
+          } catch (e) { return 2; }
+        })());
+        watch(webMode, (val) => {
+          try { localStorage.setItem('mw_article_webmode', val ? '1' : '0'); } catch (e) {}
+        });
+        watch(webBlankLines, (val) => {
+          try { localStorage.setItem('mw_article_blanklines', String(val)); } catch (e) {}
+        });
+
+        const onMdKeydown = (e) => {
+          if (!webMode.value) return;
+          if (e.key === 'Enter' && !e.shiftKey && !e.ctrlKey && !e.metaKey) {
+            e.preventDefault();
+            const ta = e.target;
+            const start = ta.selectionStart;
+            const end = ta.selectionEnd;
+            const text = content.value || '';
+            // 已经是空行结尾就只补一个换行，避免越按越空
+            const before = text.slice(0, start);
+            // 网文排版：段落之间空 N 行 = N+1 个换行
+            const need = webBlankLines.value + 1;
+            const trailing = (before.match(/\n+$/) || [''])[0].length;
+            const insert = trailing >= need ? '' : '\n'.repeat(need - trailing);
+            content.value = text.slice(0, start) + insert + text.slice(end);
+            clearTimeout(mdSnapshotTimer);
+            mdSnapshotTimer = setTimeout(pushMdSnapshot, 400);
+            nextTick(() => {
+              ta.selectionStart = ta.selectionEnd = start + insert.length;
+              const gap = ta.scrollHeight - ta.scrollTop - ta.clientHeight;
+              if (gap < 60) ta.scrollTop = ta.scrollHeight;
+            });
+          }
+        };
+
+        const pushMdSnapshot = () => {
+          const text = content.value || '';
+          const st = mdUndoStack.value;
+          if (st.length && st[st.length - 1] === text) return;
+          st.push(text);
+          if (st.length > 200) st.shift();
+          mdRedoStack.value = [];
+        };
+
+        // 打字停下 400ms 记一笔
+        const onMdInput = () => {
+          clearTimeout(mdSnapshotTimer);
+          mdSnapshotTimer = setTimeout(pushMdSnapshot, 400);
+          // 光标跟随：敲到最后一屏时把滚动条带到底（浏览器有时不跟手）
+          const ta = document.getElementById('md-editor');
+          if (ta) {
+            const gap = ta.scrollHeight - ta.scrollTop - ta.clientHeight;
+            if (gap < 48) ta.scrollTop = ta.scrollHeight;
+          }
+        };
+
+        const mdUndo = () => {
+          const st = mdUndoStack.value;
+          if (st.length <= 1) return;
+          mdRedoStack.value.push(st.pop());
+          content.value = st[st.length - 1];
+        };
+
+        const mdRedo = () => {
+          const rs = mdRedoStack.value;
+          if (!rs.length) return;
+          const text = rs.pop();
+          mdUndoStack.value.push(text);
+          content.value = text;
+        };
 
         const renderedHtml = computed(() => {
           if (!content.value || typeof content.value !== 'string') return '';
@@ -1016,6 +1135,9 @@
           try {
             const res = await fetch(`${API_BASE}/file?path=${encodeURIComponent(path)}`); 
             const data = await res.json(); content.value = data.content || ''; currentPath.value = path; 
+            // 换文件时把历史栈重置到当前内容，绝不让撤销串到上一个文件
+            mdUndoStack.value = [content.value];
+            mdRedoStack.value = [];
           } catch (e) { showToast('读取文件失败', true); }
         };
 
@@ -1100,7 +1222,22 @@
           document.body.appendChild(toast); setTimeout(() => toast.remove(), 2500);
         };
 
-        const handleKeydown = (e) => { if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') { e.preventDefault(); saveFile(); } };
+        const handleKeydown = (e) => {
+          // 文章编辑：Ctrl+S 保存
+          if ((e.ctrlKey || e.metaKey) && e.key === 's' && currentTab.value === 'article') {
+            e.preventDefault();
+            saveFile();
+            return;
+          }
+          // 文章编辑：Ctrl+Z 撤销 / Ctrl+Y 或 Ctrl+Shift+Z 重做
+          // 💡 接管浏览器原生撤销：原生会把"上一个文件的内容"也当成可撤销操作，
+          //    切文件后按 Ctrl+Z 可能把旧文件内容撤回来，很危险。
+          if ((e.ctrlKey || e.metaKey) && currentTab.value === 'article') {
+            const k = String(e.key || '').toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); mdUndo(); }
+            else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); mdRedo(); }
+          }
+        };
         
         // 💡 会话过期（服务端 401）时自动回到登录页
         const originalFetch = window.fetch.bind(window);
@@ -1130,6 +1267,21 @@
 
         const handleIframeMessage = (e) => {
           if (!e.data) return;
+          // 💡 仪表盘的"去建世界观 / 直接开写"按钮，帮用户切到对应插件
+          if (e.data.type === 'NAVIGATE' && e.data.id) {
+            currentTab.value = String(e.data.id);
+          }
+          // 🔍 搜索结果点开：书库 → 沉浸码字；设定集 → 文章编辑
+          if (e.data.type === 'OPEN_FILE' && e.data.path) {
+            const p = String(e.data.path).replace(/\\/g, '/');
+            if (p.startsWith('library/')) {
+              writerOpenPath.value = p.slice('library/'.length);
+              currentTab.value = 'writer';
+            } else if (p.startsWith('website/docs/')) {
+              currentTab.value = 'article';
+              nextTick(() => loadFile(p.slice('website/docs/'.length)));
+            }
+          }
           if (e.data.type === 'REFRESH_PLUGINS') {
             loadDynamicPlugins();
           }
@@ -1202,9 +1354,10 @@
           isAuthenticated, password, showError, handleLogin, loginHint, changePassword, logout,
           currentTab, tree, content, currentPath, selectedFolder, renderedHtml, 
           loadFile, saveFile, newFile, newFolder, deleteNode,
+          mdUndo, mdRedo, canMdUndo, canMdRedo, onMdInput, webMode, webBlankLines, onMdKeydown,
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
-          navGroupRef, handleNavWheel,
+          navGroupRef, handleNavWheel, writerOpenPath,
           dynamicPlugins, checkUpdate, repairFiles, doRepair, toolsOpen, toolRef, toggleTools, pickTool, restartBackend, navDrawer, goTab, currentTitle, pluginSrc
         };
       }

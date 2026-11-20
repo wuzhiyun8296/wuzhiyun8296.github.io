@@ -169,9 +169,116 @@ const PUBLIC_DIR = path.join(DOCS_DIR, 'public');
 const ASSETS_DIR = path.join(PUBLIC_DIR, 'assets');
 const FONTS_DIR = path.join(PUBLIC_DIR, 'fonts');
 const LIBRARY_DIR = path.join(__dirname, 'library');
-
 const NOVEL_FRONTEND_DIR = path.join(DOCS_DIR, 'novel'); 
 const NOVEL_CHAPTERS_DIR = path.join(NOVEL_FRONTEND_DIR, 'chapters'); 
+
+// ================= 🛟 数据安全：自动备份 / 回收站 / 版本历史 =================
+const BACKUP_DIR = path.join(__dirname, '.backup');
+const TRASH_DIR = path.join(__dirname, '.trash');
+const HISTORY_DIR = path.join(__dirname, '.history');
+const SNAPSHOT_KEEP = 10;      // 最多保留 10 份快照
+const HISTORY_KEEP = 12;       // 每个文件最多保留 12 个历史版本
+const HISTORY_MIN_GAP_MS = 60 * 1000;   // 同一文件 60 秒内不重复存历史
+
+function timeStamp(d = new Date()) {
+  const p = (n) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
+
+// 拍一份全量快照（library + 站点 markdown + 关键 json）
+async function snapshotAll(reason = 'manual') {
+  const id = timeStamp();
+  const dest = path.join(BACKUP_DIR, id);
+  await fs.ensureDir(dest);
+
+  if (fs.existsSync(LIBRARY_DIR)) {
+    await fs.copy(LIBRARY_DIR, path.join(dest, 'library'), { overwrite: true });
+  }
+  // 站点里的 markdown（不复制 public / 图片，省体积）
+  const docsDest = path.join(dest, 'docs');
+  await fs.ensureDir(docsDest);
+  const walk = async (dir, rel = '') => {
+    const items = await fs.readdir(dir, { withFileTypes: true });
+    for (const it of items) {
+      if (it.name.startsWith('.') || it.name === 'public' || it.name === 'assets') continue;
+      const src = path.join(dir, it.name);
+      const out = path.join(docsDest, rel, it.name);
+      if (it.isDirectory()) await walk(src, path.join(rel, it.name));
+      else if (/\.(md|json)$/i.test(it.name)) {
+        await fs.ensureDir(path.dirname(out));
+        await fs.copy(src, out, { overwrite: true });
+      }
+    }
+  };
+  try { await walk(DOCS_DIR); } catch (e) { /* 目录不存在就跳过 */ }
+
+  // 根目录的几个配置
+  for (const f of ['version.json', 'announcement.json', 'navigation.json']) {
+    const src = path.join(__dirname, f);
+    if (fs.existsSync(src)) await fs.copy(src, path.join(dest, f), { overwrite: true });
+  }
+
+  await fs.writeJson(path.join(dest, 'meta.json'),
+    { id, reason, at: new Date().toISOString(), files: await countFiles(dest) }, { spaces: 2 });
+
+  // 只留最近 N 份
+  const all = (await fs.readdir(BACKUP_DIR, { withFileTypes: true }))
+    .filter((d) => d.isDirectory()).map((d) => d.name).sort();
+  while (all.length > SNAPSHOT_KEEP) {
+    const old = all.shift();
+    await fs.remove(path.join(BACKUP_DIR, old)).catch(() => {});
+  }
+  return id;
+}
+
+async function countFiles(dir) {
+  let n = 0;
+  const walk = async (d) => {
+    for (const it of await fs.readdir(d, { withFileTypes: true })) {
+      if (it.isDirectory()) await walk(path.join(d, it.name));
+      else n++;
+    }
+  };
+  await walk(dir).catch(() => {});
+  return n;
+}
+
+// 存历史版本（覆盖前调用）
+async function saveHistory(filePath, oldContent) {
+  try {
+    if (oldContent == null) return;
+    const rel = path.relative(__dirname, filePath).replace(/[\\/]/g, '_');
+    const dir = path.join(HISTORY_DIR, rel);
+    await fs.ensureDir(dir);
+    const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.md')).sort();
+    // 60 秒内已存过就跳过，避免刷屏
+    const last = files[files.length - 1];
+    if (last) {
+      const t = parseInt(last.slice(0, 15).replace('-', ''), 10);   // YYYYMMDDHHmmss
+      const lastMs = new Date(
+        t.toString().slice(0, 4) + '-' + t.toString().slice(4, 6) + '-' + t.toString().slice(6, 8) + 'T' +
+        t.toString().slice(8, 10) + ':' + t.toString().slice(10, 12) + ':' + t.toString().slice(12, 14)
+      ).getTime();
+      if (Date.now() - lastMs < HISTORY_MIN_GAP_MS) return;
+    }
+    await fs.writeFile(path.join(dir, timeStamp() + '.md'), oldContent, 'utf-8');
+    const all = (await fs.readdir(dir)).filter((f) => f.endsWith('.md')).sort();
+    while (all.length > HISTORY_KEEP) {
+      await fs.remove(path.join(dir, all.shift())).catch(() => {});
+    }
+  } catch (e) { /* 历史存不下来不能影响保存 */ }
+}
+
+// 删除 → 移进回收站（可还原）
+async function moveToTrash(targetPath) {
+  const rel = path.relative(__dirname, targetPath);
+  const name = timeStamp() + '__' + rel.replace(/[\\/]/g, '_');
+  const dest = path.join(TRASH_DIR, name);
+  await fs.ensureDir(TRASH_DIR);
+  await fs.move(targetPath, dest, { overwrite: true });
+  await fs.writeJson(dest + '.json', { original: rel, at: new Date().toISOString() }, { spaces: 2 });
+  return name;
+}
 
 fs.ensureDirSync(PUBLIC_DIR);
 fs.ensureDirSync(ASSETS_DIR);
@@ -735,6 +842,11 @@ app.post('/api/library/file', async (req, res) => {
     const filePath = safeJoin(LIBRARY_DIR, req.body.path);
     if (!filePath) return res.status(400).json({ success: false, error: '非法路径' });
     await fs.ensureDir(path.dirname(filePath));
+    // 🛟 覆盖前留一份历史版本（60 秒内不重复存）
+    if (fs.existsSync(filePath)) {
+      const old = await fs.readFile(filePath, 'utf-8').catch(() => null);
+      if (old != null && old !== req.body.content) await saveHistory(filePath, old);
+    }
     await fs.writeFile(filePath, req.body.content, 'utf-8');
     res.json({ success: true });
   } catch (error) {
@@ -748,8 +860,9 @@ app.post('/api/library/delete', async (req, res) => {
     if (!targetPath) return res.status(400).json({ success: false, error: '非法路径' });
     if (!targetPath.startsWith(LIBRARY_DIR)) return res.status(403).json({ error: '非法路径' });
     if (fs.existsSync(targetPath)) {
-      await fs.remove(targetPath);
-      res.json({ success: true });
+      // 🗑 删除进回收站，30 天内可还原
+      const trashName = await moveToTrash(targetPath);
+      res.json({ success: true, trash: trashName });
     } else {
       res.status(404).json({ error: '文件不存在' });
     }
@@ -780,6 +893,361 @@ app.post('/api/library/rename', async (req, res) => {
     res.json({ success: true });
   } catch (error) { 
     res.status(500).json({ error: error.message }); 
+  }
+});
+
+// ================= 🛟 数据安全接口 =================
+// 备份列表
+app.get('/api/backup/list', async (req, res) => {
+  try {
+    await fs.ensureDir(BACKUP_DIR);
+    const dirs = (await fs.readdir(BACKUP_DIR, { withFileTypes: true }))
+      .filter((d) => d.isDirectory()).map((d) => d.name).sort().reverse();
+    const list = [];
+    for (const id of dirs) {
+      let meta = null;
+      try { meta = await fs.readJson(path.join(BACKUP_DIR, id, 'meta.json')); } catch (e) {}
+      const st = await fs.stat(path.join(BACKUP_DIR, id)).catch(() => null);
+      list.push({
+        id,
+        at: meta ? meta.at : (st ? st.mtime.toISOString() : ''),
+        reason: meta ? meta.reason : '',
+        files: meta ? meta.files : 0
+      });
+    }
+    res.json({ success: true, list, dir: '.backup' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 手动备份
+app.post('/api/backup/create', async (req, res) => {
+  try {
+    const id = await snapshotAll(req.body && req.body.reason ? String(req.body.reason) : 'manual');
+    res.json({ success: true, id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 从快照恢复（恢复前先备份当前状态，避免越恢复越糟）
+app.post('/api/backup/restore', async (req, res) => {
+  try {
+    const id = String((req.body && req.body.id) || '');
+    if (!/^\d{8}-\d{6}$/.test(id)) return res.status(400).json({ success: false, error: '快照 ID 不合法' });
+    const src = path.join(BACKUP_DIR, id);
+    if (!fs.existsSync(src)) return res.status(404).json({ success: false, error: '快照不存在' });
+
+    await snapshotAll('before-restore');
+
+    const libSrc = path.join(src, 'library');
+    if (fs.existsSync(libSrc)) {
+      await fs.remove(LIBRARY_DIR).catch(() => {});
+      await fs.copy(libSrc, LIBRARY_DIR, { overwrite: true });
+    }
+    const docsSrc = path.join(src, 'docs');
+    if (fs.existsSync(docsSrc)) {
+      const walk = async (dir, rel = '') => {
+        for (const it of await fs.readdir(dir, { withFileTypes: true })) {
+          const s = path.join(dir, it.name);
+          const d = path.join(DOCS_DIR, rel, it.name);
+          if (it.isDirectory()) { await fs.ensureDir(d); await walk(s, path.join(rel, it.name)); }
+          else { await fs.ensureDir(path.dirname(d)); await fs.copy(s, d, { overwrite: true }); }
+        }
+      };
+      await walk(docsSrc);
+    }
+    res.json({ success: true, id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 回收站列表
+app.get('/api/trash/list', async (req, res) => {
+  try {
+    await fs.ensureDir(TRASH_DIR);
+    const items = (await fs.readdir(TRASH_DIR)).filter((f) => !f.endsWith('.json')).sort().reverse();
+    const list = [];
+    for (const name of items) {
+      let meta = null;
+      try { meta = await fs.readJson(path.join(TRASH_DIR, name + '.json')); } catch (e) {}
+      const st = await fs.stat(path.join(TRASH_DIR, name)).catch(() => null);
+      list.push({
+        name,
+        original: meta ? meta.original : name,
+        at: meta ? meta.at : (st ? st.mtime.toISOString() : ''),
+        size: st ? st.size : 0,
+        isDir: st ? st.isDirectory() : false
+      });
+    }
+    res.json({ success: true, list });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 从回收站还原
+app.post('/api/trash/restore', async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '');
+    if (!name || name.includes('/') || name.includes('\\')) return res.status(400).json({ success: false, error: '参数不合法' });
+    const src = path.join(TRASH_DIR, name);
+    if (!fs.existsSync(src)) return res.status(404).json({ success: false, error: '回收站里没有这个文件' });
+    let meta = {};
+    try { meta = await fs.readJson(path.join(TRASH_DIR, name + '.json')); } catch (e) {}
+    const original = meta.original || path.join('library', name);
+    const dest = path.join(__dirname, original);
+    // 目标已存在就加时间后缀，绝不覆盖
+    let finalDest = dest;
+    if (fs.existsSync(finalDest)) {
+      const ext = path.extname(dest);
+      finalDest = dest.slice(0, dest.length - ext.length) + '_还原' + timeStamp() + ext;
+    }
+    await fs.ensureDir(path.dirname(finalDest));
+    await fs.move(src, finalDest, { overwrite: false });
+    await fs.remove(path.join(TRASH_DIR, name + '.json')).catch(() => {});
+    res.json({ success: true, path: path.relative(__dirname, finalDest) });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 某个文件的历史版本
+app.get('/api/history/list', async (req, res) => {
+  try {
+    const rel = String(req.query.path || '');
+    if (!rel) return res.status(400).json({ success: false, error: '缺少 path' });
+    const full = safeJoin(LIBRARY_DIR, rel);
+    if (!full) return res.status(400).json({ success: false, error: '非法路径' });
+    const key = path.relative(__dirname, full).replace(/[\\/]/g, '_');
+    const dir = path.join(HISTORY_DIR, key);
+    if (!fs.existsSync(dir)) return res.json({ success: true, list: [] });
+    const files = (await fs.readdir(dir)).filter((f) => f.endsWith('.md')).sort().reverse();
+    res.json({ success: true, list: files, key });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 读取某个历史版本内容
+app.get('/api/history/file', async (req, res) => {
+  try {
+    const rel = String(req.query.path || '');
+    const file = String(req.query.file || '');
+    if (!rel || !/^\d{8}-\d{6}\.md$/.test(file)) return res.status(400).json({ success: false, error: '参数不合法' });
+    const full = safeJoin(LIBRARY_DIR, rel);
+    if (!full) return res.status(400).json({ success: false, error: '非法路径' });
+    const key = path.relative(__dirname, full).replace(/[\\/]/g, '_');
+    const src = path.join(HISTORY_DIR, key, file);
+    if (!fs.existsSync(src)) return res.status(404).json({ success: false, error: '版本不存在' });
+    res.json({ success: true, content: await fs.readFile(src, 'utf-8') });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 把历史版本写回当前文件（同样先留一份现版本）
+app.post('/api/history/restore', async (req, res) => {
+  try {
+    const rel = String((req.body && req.body.path) || '');
+    const file = String((req.body && req.body.file) || '');
+    if (!rel || !/^\d{8}-\d{6}\.md$/.test(file)) return res.status(400).json({ success: false, error: '参数不合法' });
+    const full = safeJoin(LIBRARY_DIR, rel);
+    if (!full) return res.status(400).json({ success: false, error: '非法路径' });
+    const key = path.relative(__dirname, full).replace(/[\\/]/g, '_');
+    const src = path.join(HISTORY_DIR, key, file);
+    if (!fs.existsSync(src)) return res.status(404).json({ success: false, error: '版本不存在' });
+    if (fs.existsSync(full)) {
+      const cur = await fs.readFile(full, 'utf-8').catch(() => null);
+      if (cur != null) await saveHistory(full, cur);
+    }
+    await fs.copy(src, full, { overwrite: true });
+    res.json({ success: true });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// ================= 📦 极简 ZIP（store，无压缩）——备份包 & EPUB 共用 =================
+const CRC_TABLE = (() => {
+  const t = new Uint32Array(256);
+  for (let n = 0; n < 256; n++) {
+    let c = n;
+    for (let k = 0; k < 8; k++) c = c & 1 ? 0xedb88320 ^ (c >>> 1) : c >>> 1;
+    t[n] = c >>> 0;
+  }
+  return t;
+})();
+
+function crc32(buf) {
+  let c = 0xffffffff;
+  for (let i = 0; i < buf.length; i++) c = CRC_TABLE[(c ^ buf[i]) & 0xff] ^ (c >>> 8);
+  return (c ^ 0xffffffff) >>> 0;
+}
+
+// entries: [{ name, data:Buffer|string }]
+function zipStore(entries) {
+  const locals = [];
+  const centrals = [];
+  let offset = 0;
+
+  entries.forEach((e) => {
+    const nameBuf = Buffer.from(e.name, 'utf8');
+    const data = Buffer.isBuffer(e.data) ? e.data : Buffer.from(String(e.data), 'utf8');
+    const crc = crc32(data);
+
+    const local = Buffer.alloc(30);
+    local.writeUInt32LE(0x04034b50, 0);
+    local.writeUInt16LE(20, 4);
+    local.writeUInt16LE(0x0800, 6);          // UTF-8 文件名
+    local.writeUInt16LE(0, 8);               // store
+    local.writeUInt32LE(crc, 14);
+    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(data.length, 22);
+    local.writeUInt16LE(nameBuf.length, 26);
+    locals.push(local, nameBuf, data);
+
+    const cen = Buffer.alloc(46);
+    cen.writeUInt32LE(0x02014b50, 0);
+    cen.writeUInt16LE(20, 4);
+    cen.writeUInt16LE(20, 6);
+    cen.writeUInt16LE(0x0800, 8);
+    cen.writeUInt16LE(0, 10);
+    cen.writeUInt32LE(crc, 16);
+    cen.writeUInt32LE(data.length, 20);
+    cen.writeUInt32LE(data.length, 24);
+    cen.writeUInt16LE(nameBuf.length, 28);
+    cen.writeUInt32LE(offset, 42);
+    centrals.push(cen, nameBuf);
+
+    offset += local.length + nameBuf.length + data.length;
+  });
+
+  const cenBuf = Buffer.concat(centrals);
+  const eocd = Buffer.alloc(22);
+  eocd.writeUInt32LE(0x06054b50, 0);
+  eocd.writeUInt16LE(entries.length, 8);
+  eocd.writeUInt16LE(entries.length, 10);
+  eocd.writeUInt32LE(cenBuf.length, 12);
+  eocd.writeUInt32LE(offset, 16);
+  return Buffer.concat([...locals, cenBuf, eocd]);
+}
+
+// 递归收集要打包的文件
+function collectFilesForZip(dir, prefix = '', filter = null) {
+  const out = [];
+  if (!fs.existsSync(dir)) return out;
+  for (const name of fs.readdirSync(dir)) {
+    if (name.startsWith('.')) continue;
+    const full = path.join(dir, name);
+    let st;
+    try { st = fs.statSync(full); } catch (e) { continue; }
+    if (st.isDirectory()) {
+      out.push(...collectFilesForZip(full, path.join(prefix, name), filter));
+    } else if (!filter || filter(full, name)) {
+      out.push({ name: path.posix.join(prefix.replace(/\\/g, '/'), name), data: fs.readFileSync(full) });
+    }
+  }
+  return out;
+}
+
+// 导出整站备份包（library + 站点 md/json + 配置）
+app.get('/api/backup/export', async (req, res) => {
+  try {
+    const entries = [];
+    entries.push(...collectFilesForZip(LIBRARY_DIR, 'library', (f, n) => /\.(md|json|txt)$/i.test(n)));
+    entries.push(...collectFilesForZip(DOCS_DIR, 'docs', (f, n) => {
+      if (f.includes(path.sep + 'public' + path.sep)) return false;
+      return /\.(md|json)$/i.test(n);
+    }));
+    for (const f of ['version.json', 'announcement.json', 'navigation.json', 'package.json']) {
+      const p = path.join(__dirname, f);
+      if (fs.existsSync(p)) entries.push({ name: f, data: fs.readFileSync(p) });
+    }
+    entries.push({
+      name: 'README.txt',
+      data: `备份包\n生成时间：${new Date().toLocaleString('zh-CN')}\n文件数：${entries.length}\n\n恢复方法：把 library/ 和 docs/ 覆盖回项目对应目录即可。\n`
+    });
+
+    const zip = zipStore(entries);
+    const name = '幻想域备份_' + timeStamp() + '.zip';
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
+    res.send(zip);
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// 导出 EPUB（网文/电子书标准格式）
+app.get('/api/library/export/epub', async (req, res) => {
+  try {
+    const bookName = String(req.query.book || '');
+    if (!bookName) return res.status(400).send('缺少书籍名称');
+    const bookDir = path.join(LIBRARY_DIR, bookName);
+    if (!fs.existsSync(bookDir)) return res.status(404).send('找不到这本书');
+
+    const files = fs.readdirSync(bookDir).filter((f) => f.endsWith('.md') && !f.startsWith('.'));
+    files.sort((a, b) => a.localeCompare(b, 'zh-CN', { numeric: true }));
+
+    const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    const toParagraphs = (raw) => {
+      const text = raw
+        .replace(/<br\s*\/?>/gi, '\n')
+        .replace(/<\/(div|p)>/gi, '\n')
+        .replace(/<[^>]+>/g, '')
+        .replace(/&#12288;/g, '　')
+        .replace(/&nbsp;/g, ' ')
+        .replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&amp;/g, '&');
+      return text.split('\n').map((l) => l.trim()).filter(Boolean);
+    };
+
+    const chapters = files.map((f, i) => ({
+      id: 'ch' + (i + 1),
+      title: f.replace(/\.md$/, ''),
+      paras: toParagraphs(fs.readFileSync(path.join(bookDir, f), 'utf-8'))
+    }));
+
+    const entries = [];
+    // mimetype 必须是第一个文件且不压缩
+    entries.push({ name: 'mimetype', data: 'application/epub+zip' });
+    entries.push({
+      name: 'META-INF/container.xml',
+      data: '<?xml version="1.0" encoding="UTF-8"?>\n<container version="1.0" xmlns="urn:oasis:names:tc:opendocument:xmlns:container">\n  <rootfiles><rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/></rootfiles>\n</container>'
+    });
+    entries.push({
+      name: 'OEBPS/styles.css',
+      data: `body { font-family: serif; line-height: 1.8; }\np { text-indent: 2em; margin: 0.6em 0; }\nh2 { text-align: center; margin: 1em 0; }`
+    });
+
+    chapters.forEach((ch) => {
+      const body = ch.paras.map((p) => `<p>${esc(p)}</p>`).join('\n');
+      entries.push({
+        name: `OEBPS/${ch.id}.xhtml`,
+        data: `<?xml version="1.0" encoding="UTF-8"?>\n<!DOCTYPE html>\n<html xmlns="http://www.w3.org/1999/xhtml">\n<head><meta charset="utf-8"/><title>${esc(ch.title)}</title><link rel="stylesheet" href="styles.css"/></head>\n<body><h2>${esc(ch.title)}</h2>\n${body}\n</body></html>`
+      });
+    });
+
+    const manifest = chapters.map((c) => `<item id="${c.id}" href="${c.id}.xhtml" media-type="application/xhtml+xml"/>`).join('\n');
+    const spine = chapters.map((c) => `<itemref idref="${c.id}"/>`).join('\n');
+    entries.push({
+      name: 'OEBPS/content.opf',
+      data: `<?xml version="1.0" encoding="UTF-8"?>\n<package xmlns="http://www.idpf.org/2007/opf" version="2.0" unique-identifier="BookId">\n<metadata xmlns:dc="http://purl.org/dc/elements/1.1/">\n  <dc:title>${esc(bookName)}</dc:title>\n  <dc:language>zh-CN</dc:language>\n  <dc:identifier id="BookId">urn:uuid:${Date.now()}</dc:identifier>\n</metadata>\n<manifest>\n<item id="ncx" href="toc.ncx" media-type="application/x-dtbncx+xml"/>\n<item id="css" href="styles.css" media-type="text/css"/>\n${manifest}\n</manifest>\n<spine toc="ncx">\n${spine}\n</spine>\n</package>`
+    });
+    entries.push({
+      name: 'OEBPS/toc.ncx',
+      data: `<?xml version="1.0" encoding="UTF-8"?>\n<ncx xmlns="http://www.daisy.org/z3986/2005/ncx/" version="2005-1">\n<head><meta name="dtb:uid" content="urn:uuid:${Date.now()}"/></head>\n<docTitle><text>${esc(bookName)}</text></docTitle>\n<navMap>\n${chapters.map((c, i) => `<navPoint id="np${i}" playOrder="${i + 1}"><navLabel><text>${esc(c.title)}</text></navLabel><content src="${c.id}.xhtml"/></navPoint>`).join('\n')}\n</navMap>\n</ncx>`
+    });
+
+    const zip = zipStore(entries);
+    const name = `${bookName}_${timeStamp()}.epub`;
+    res.setHeader('Content-Type', 'application/epub+zip');
+    res.setHeader('Content-Disposition', `attachment; filename*=UTF-8''${encodeURIComponent(name)}`);
+    res.send(zip);
+  } catch (e) {
+    res.status(500).send('导出失败：' + e.message);
   }
 });
 
@@ -952,39 +1420,80 @@ app.get('/api/dashboard/stats', async (req, res) => {
 });
 
 app.get('/api/global-search', async (req, res) => {
-  const query = req.query.q;
-  if (!query) return res.json([]);
+  try {
+    const query = String(req.query.q || '').trim();
+    if (!query) return res.json([]);
+    if (query.length > 50) return res.status(400).json({ error: '关键词太长' });
 
-  const results = [];
-  const searchDir = (dir, type) => {
-    if (!fs.existsSync(dir)) return;
-    const files = fs.readdirSync(dir);
-    for (const file of files) {
-      if (IGNORE_DIRS.includes(file) || file.startsWith('.')) continue;
+    const q = query.toLowerCase();
+    const results = [];
 
-      const fullPath = path.join(dir, file);
-      const stat = fs.statSync(fullPath);
-      if (stat.isDirectory()) {
-        searchDir(fullPath, type);
-      } else if (file.endsWith('.md')) {
-        const content = fs.readFileSync(fullPath, 'utf-8');
-        if (content.includes(query)) {
-          const index = content.indexOf(query);
-          const snippet = content.substring(Math.max(0, index - 20), Math.min(content.length, index + 30)).replace(/\n/g, ' ');
-          results.push({
-            title: file.replace('.md', ''),
-            path: fullPath,
-            type: type,
-            snippet: `...${snippet}...`
-          });
-        }
+    // 在文本里找出所有命中位置，返回带行号的上下文
+    const findInText = (text, maxHits = 3) => {
+      const hits = [];
+      const lower = text.toLowerCase();
+      let from = 0;
+      while (hits.length < maxHits) {
+        const idx = lower.indexOf(q, from);
+        if (idx < 0) break;
+        const before = text.slice(0, idx);
+        const line = before.split('\n').length;
+        const start = Math.max(0, idx - 25);
+        const end = Math.min(text.length, idx + query.length + 35);
+        hits.push({
+          line,
+          snippet: (start > 0 ? '…' : '') + text.slice(start, end).replace(/\s+/g, ' ') + (end < text.length ? '…' : '')
+        });
+        from = idx + query.length;
       }
-    }
-  };
-  
-  searchDir(DOCS_DIR, '设定集');
-  searchDir(LIBRARY_DIR, '书库');
-  res.json(results);
+      return hits;
+    };
+
+    const walk = (dir, kind, relBase = '') => {
+      if (!fs.existsSync(dir)) return;
+      for (const name of fs.readdirSync(dir)) {
+        if (name.startsWith('.') || IGNORE_DIRS.includes(name)) continue;
+        const full = path.join(dir, name);
+        let st;
+        try { st = fs.statSync(full); } catch (e) { continue; }
+        if (st.isDirectory()) { walk(full, kind, path.join(relBase, name)); continue; }
+        if (!/\.(md|json)$/i.test(name)) continue;
+        if (st.size > 2 * 1024 * 1024) continue;      // 超大文件跳过
+
+        let text = '';
+        try { text = fs.readFileSync(full, 'utf-8'); } catch (e) { continue; }
+        if (!text.toLowerCase().includes(q)) continue;
+
+        const hits = findInText(text);
+        if (!hits.length) continue;
+        // 标题：md 取首个 # 标题，json 用文件名
+        let title = name.replace(/\.(md|json)$/i, '');
+        if (name.endsWith('.md')) {
+          const h1 = /^\s*#\s+(.+)$/m.exec(text);
+          if (h1) title = h1[1].trim();
+        }
+        results.push({
+          title,
+          type: kind,
+          rel: path.relative(__dirname, full),
+          line: hits[0].line,
+          count: hits.length,
+          snippet: hits[0].snippet,
+          more: hits.slice(1).map((h) => '第 ' + h.line + ' 行：' + h.snippet)
+        });
+        if (results.length >= 200) return;
+      }
+    };
+
+    walk(DOCS_DIR, '设定集');
+    walk(LIBRARY_DIR, '书库');
+
+    // 章节标题命中优先，其次命中次数多的
+    results.sort((a, b) => (b.count - a.count) || a.rel.localeCompare(b.rel));
+    res.json(results.slice(0, 100));
+  } catch (e) {
+    res.status(500).json({ error: e.message });
+  }
 });
 
 app.get('/api/backup', async (req, res) => {
@@ -2686,6 +3195,8 @@ const systemPluginMap = {
   'home-editor': { name: '首页设计与导出', icon: '🎨' },
   'plugin-builder': { name: '插件工厂', icon: '🏭' },
   'firewall': { name: '防火墙', icon: '🛡️' },
+  'backup': { name: '数据安全', icon: '🛟' },
+  'screenplay': { name: '剧本写作', icon: '🎬' },
   'diagnostic': { name: '环境检测', icon: '🩺' },
   'article': { name: '文章编辑', icon: '📝' }
 };
@@ -3391,6 +3902,8 @@ app.post('/api/firewall/logs/clear', (req, res) => {
 function defaultNavigation() {
   return [
     { id: 'writer', title: '沉浸码字', desc: '系统内置', icon: '✍️', link: '/writer', isSystem: true, scope: 'both' },
+    { id: 'backup', title: '数据安全', desc: '快照备份 / 回收站 / 历史版本', icon: '🛟', link: '/backup', isSystem: true, scope: 'admin' },
+    { id: 'screenplay', title: '剧本写作', desc: '场景 / 对白 / 转场，Fountain 语法', icon: '🎬', link: '/screenplay', isSystem: true, scope: 'both' },
     { id: 'plotline', title: '剧情大纲', desc: '系统内置', icon: '🎬', link: '/plotline', isSystem: true, scope: 'both' },
     { id: 'timeline', title: '时间线', desc: '系统内置', icon: '⏳', link: '/timeline', isSystem: true, scope: 'both' },
     { id: 'characters', title: '人物档案', desc: '系统内置', icon: '👤', link: '/characters', isSystem: true, scope: 'both' },
@@ -4951,6 +5464,22 @@ function onListening() {
   // 💡 下面这些是「清理/加固」性质的工作，跟对外服务无关：
   //    放到 1.5 秒后再做，避免它们（尤其是 git 子进程）拖慢启动观感
   setTimeout(() => {
+
+  // 🛟 数据安全：启动后拍一份快照，之后每 30 分钟一份（最多保留 10 份）
+  (async () => {
+    try {
+      await snapshotAll('boot');
+      console.log('[backup] 启动快照完成');
+    } catch (e) { console.log('[backup] 启动快照失败：' + e.message); }
+
+    const timer = setInterval(async () => {
+      try {
+        const id = await snapshotAll('auto');
+        console.log('[backup] 定时快照 ' + id);
+      } catch (e) { console.log('[backup] 定时快照失败：' + e.message); }
+    }, 30 * 60 * 1000);
+    timer.unref();
+  })();
 
   // 💡 启动时自动清理：把 .git/config 里历史遗留的明文 Token 换成干净地址
   (async () => {

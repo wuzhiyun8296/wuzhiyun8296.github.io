@@ -2,6 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>世界观树插件</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -75,7 +77,19 @@
     }
     .icon-item:hover { background: #3a3a44; border-color: #5b5b68; transform: translateY(-1px); }
     .icon-item.on { background: #0e639c; border-color: #4aa3df; box-shadow: 0 0 0 2px rgba(14,99,156,.3); }
-  </style>
+  
+    /* ---------- 📱 手机适配 ---------- */
+    @media (max-width: 760px) {
+      body { padding: 10px !important; }
+      h2, h3 { font-size: 15px !important; }
+      .btn, button { min-height: 40px; padding: 9px 14px; font-size: 13px; }
+      input, textarea, select { font-size: 15px !important; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .toolbar, .chips, .actions { flex-wrap: wrap; }
+      canvas { max-width: 100% !important; height: auto !important; }
+      .modal-box { width: 92vw !important; max-width: 92vw !important; }
+    }
+</style>
 </head>
 <body>
   <div id="app">

@@ -3,6 +3,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>首页设计与全站导出</title>
   <script src="/libs/vue/vue.global.prod.js"></script>
   <style>
@@ -116,7 +118,19 @@
     ::-webkit-scrollbar-track { background: transparent; }
     ::-webkit-scrollbar-thumb { background: #444; border-radius: 4px; }
     ::-webkit-scrollbar-thumb:hover { background: #666; }
-  </style>
+  
+    /* ---------- 📱 手机适配 ---------- */
+    @media (max-width: 760px) {
+      body { padding: 10px !important; }
+      h2, h3 { font-size: 15px !important; }
+      .btn, button { min-height: 40px; padding: 9px 14px; font-size: 13px; }
+      input, textarea, select { font-size: 15px !important; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      .toolbar, .chips, .actions { flex-wrap: wrap; }
+      canvas { max-width: 100% !important; height: auto !important; }
+      .modal-box { width: 92vw !important; max-width: 92vw !important; }
+    }
+</style>
 </head>
 <body>
   <div id="app">

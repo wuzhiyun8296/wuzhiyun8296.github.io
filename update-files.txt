@@ -5,6 +5,7 @@ loading.html
 login.html
 package.json
 plugin/audit.html
+plugin/backup.html
 plugin/characters.html
 plugin/dashboard.html
 plugin/epoch-map.html
@@ -20,6 +21,7 @@ plugin/map.html
 plugin/plotline.html
 plugin/plugin-builder.html
 plugin/protection.html
+plugin/screenplay.html
 plugin/timeline.html
 plugin/world-tree.html
 plugin/writer.html

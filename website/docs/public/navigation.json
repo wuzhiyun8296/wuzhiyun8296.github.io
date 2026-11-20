@@ -239,5 +239,29 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true
+  },
+  {
+    "id": "backup",
+    "title": "数据安全",
+    "desc": "自动注册的插件",
+    "icon": "🛟",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false,
+    "autoRegistered": true,
+    "scope": "admin"
+  },
+  {
+    "id": "screenplay",
+    "title": "剧本写作",
+    "desc": "自动注册的插件",
+    "icon": "🎬",
+    "link": "#",
+    "isSystem": true,
+    "hideFrontend": true,
+    "hideBackend": false,
+    "autoRegistered": true,
+    "scope": "admin"
   }
 ]

@@ -1,12 +1,12 @@
 {
-  "version": "20261120-130509",
-  "count": 57,
-  "totalBytes": 916501,
+  "version": "20261120-224850",
+  "count": 59,
+  "totalBytes": 992057,
   "files": [
     {
       "path": "admin.html",
-      "size": 61725,
-      "sha256": "a7aafed30555dc8242fe2255b3390d26cfc1b9854e4f9e7faef5b41ae86e5952"
+      "size": 69411,
+      "sha256": "ea8a1c6aaf4ded91634d8c8b58d67c19ebdd970bafbbbe45dbb52b4de6661e87"
     },
     {
       "path": "announcement.json",
@@ -35,8 +35,13 @@
     },
     {
       "path": "plugin/audit.html",
-      "size": 5712,
-      "sha256": "c069c11db43f31ea5fe7ee2fd1ed2e1ddff053e22c245417eeb93739af9feff9"
+      "size": 6406,
+      "sha256": "057826292b99f88237cf04ff376469bee7c6fca158f39113d20a174311c6be64"
+    },
+    {
+      "path": "plugin/backup.html",
+      "size": 11585,
+      "sha256": "8838a3dec147c0e4cced7edcb532a972fed590f50919a3aaf066167b12feef55"
     },
     {
       "path": "plugin/characters.html",
@@ -45,8 +50,8 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 31189,
-      "sha256": "37576be112706cbc99612ce6fd0bfab8ce05363255fab291cb8862acc4dddb67"
+      "size": 38285,
+      "sha256": "e4791c0beb0364df49a796f641d18726fc30dd2155f6be26e1f716b694b58d41"
     },
     {
       "path": "plugin/epoch-map.html",
@@ -70,8 +75,8 @@
     },
     {
       "path": "plugin/graph.html",
-      "size": 11548,
-      "sha256": "9c75564ee6787fad8442f4b1f2abb41cb124c24f78019d6dae17a524aae95188"
+      "size": 12242,
+      "sha256": "cd6e08fbe22f0252bdfa7d3ef987ac6958e8cfd03ab3c2c437421913ea3bb489"
     },
     {
       "path": "plugin/history.html",
@@ -80,8 +85,8 @@
     },
     {
       "path": "plugin/home-editor.html",
-      "size": 26302,
-      "sha256": "c4e4f43022a94ca6c8b2625497476c660f35b41a40648a951cef65c23c527fec"
+      "size": 26996,
+      "sha256": "930e9985dd6951cabd34526cf6db61fb67eb25c89abdb813470242fb5e141b08"
     },
     {
       "path": "plugin/map-core.js",
@@ -100,8 +105,8 @@
     },
     {
       "path": "plugin/plotline.html",
-      "size": 26800,
-      "sha256": "223561e8586e40f5323ef8d0f53c3abe8f1b00fa6f054c046209f8eba6c94376"
+      "size": 27538,
+      "sha256": "386efb970624d6ae6043737d8f4371bc974eb6324150af36eb84a50dcbd2acab"
     },
     {
       "path": "plugin/plugin-builder.html",
@@ -110,23 +115,28 @@
     },
     {
       "path": "plugin/protection.html",
-      "size": 12698,
-      "sha256": "917b58a864dc18ee767048b44f8a91b3c8d3a2612fcb925cbcda65b1969edbc8"
+      "size": 13436,
+      "sha256": "03e85cb4b17536f9830bc9eeff4683d4c73d9d999b9bbf5679302ad39829533a"
+    },
+    {
+      "path": "plugin/screenplay.html",
+      "size": 13083,
+      "sha256": "6f88b894d0b42ecaae71b02150a24b3b788888af0023d2c6d9e540bbcf27addb"
     },
     {
       "path": "plugin/timeline.html",
-      "size": 8088,
-      "sha256": "70b494302e05773420ffb1dd42d9942e9370ee4c27df423d7b8d00881ac34ccb"
+      "size": 8826,
+      "sha256": "a4426bec8c08d04b6a183593f9d698155d415a1b7b0c21099f24d5354500fc70"
     },
     {
       "path": "plugin/world-tree.html",
-      "size": 14758,
-      "sha256": "89641505ea47e43c7c8ea1b6eebf26e86c80f3ff58bf9465ca952fe5dc489cbd"
+      "size": 15452,
+      "sha256": "be1f4fbc6fab9a7390e83c99a2ba99c6a955286c268d90067141dca834507081"
     },
     {
       "path": "plugin/writer.html",
-      "size": 34988,
-      "sha256": "b46151e338e0a3647caff262aa7e28df2e5241115d3f7806f900d37ca13b57ad"
+      "size": 43068,
+      "sha256": "089110b73cdc1f0ec3b7311bd498ddafe9581a53df72cc3ef0df19d3eaf89c8e"
     },
     {
       "path": "restart.vbs",
@@ -135,8 +145,8 @@
     },
     {
       "path": "server.js",
-      "size": 203040,
-      "sha256": "a4c687e30a38547511c5f9b1ab054828709e8439c93639eae2c095eb2243c2a7"
+      "size": 225910,
+      "sha256": "701245a376e217f7df0fc377ee4352b8ffbeb0b94ca4d43da7739a1e6afcba66"
     },
     {
       "path": "start.bat",
@@ -155,8 +165,8 @@
     },
     {
       "path": "version.json",
-      "size": 113,
-      "sha256": "ef073e52f8c4818a5f3ec71ba8957cb8eaf00791d389ba9332aa66876b7adb71"
+      "size": 279,
+      "sha256": "b65d67a06e65ddc0aae521c6a793c0c7ed500edc468d82d58915d3d14f532ef3"
     },
     {
       "path": "website/.vitepress/config.mjs",

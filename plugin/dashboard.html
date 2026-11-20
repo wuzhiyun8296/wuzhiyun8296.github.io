@@ -112,6 +112,44 @@
     .search-item { background: #1e1e1e; border: 1px solid #333; padding: 15px; border-radius: 6px; display: flex; flex-direction: column; gap: 8px;}
     .search-item .title { color: #0e639c; font-weight: bold; font-size: 15px; }
     .search-item .snippet { color: #aaa; font-size: 13px; line-height: 1.5; }
+    .search-item .search-meta { color: #6f7681; font-size: 11.5px; }
+
+    /* 📈 近 7 天码字 */
+    .week-card { background: #252526; border: 1px solid #333; border-radius: 8px; padding: 14px 18px; margin-top: 14px; }
+    .week-head { display: flex; justify-content: space-between; font-size: 13px; color: #bbb; margin-bottom: 10px; }
+    .week-total { color: #7fc4ee; }
+    .week-bars { display: flex; gap: 8px; align-items: flex-end; height: 64px; }
+    .week-item { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 4px; height: 100%; }
+    .bar-wrap { flex: 1; width: 100%; display: flex; align-items: flex-end; }
+    .bar { width: 100%; background: linear-gradient(180deg,#2f9cde,#1d6fa5); border-radius: 4px 4px 0 0; min-height: 2px; transition: .2s; }
+    .day-label { font-size: 10.5px; color: #6f7681; }
+
+    /* 🎓 新人引导 */
+    .onboard-mask {
+      position: fixed; inset: 0; background: rgba(0,0,0,.72); z-index: 9000;
+      display: flex; align-items: center; justify-content: center; padding: 20px;
+    }
+    .onboard-box {
+      background: #242830; border: 1px solid #3a424c; border-radius: 14px;
+      padding: 24px 26px; max-width: 560px; width: 100%;
+    }
+    .onboard-box h2 { margin: 0 0 18px; font-size: 18px; color: #fff; }
+    .onboard-steps { display: flex; flex-direction: column; gap: 14px; }
+    .onboard-step { display: flex; gap: 12px; align-items: flex-start; }
+    .step-no {
+      width: 24px; height: 24px; border-radius: 50%; background: #0e639c; color: #fff;
+      font-size: 13px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex: 0 0 24px;
+    }
+    .step-name { color: #e8edf3; font-size: 14px; margin-bottom: 3px; }
+    .step-desc { color: #8a929c; font-size: 12.5px; line-height: 1.6; }
+    .onboard-actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+    .onboard-btn {
+      border: 1px solid #2f6f9e; background: rgba(14,99,156,.25); color: #cfe6f7;
+      border-radius: 9px; padding: 9px 16px; font-size: 13px; cursor: pointer;
+    }
+    .onboard-btn.ghost { background: #262a31; border-color: #3a424c; color: #98a0aa; }
+    .onboard-btn:hover { filter: brightness(1.15); }
+    .onboard-tip { margin-top: 14px; font-size: 12px; color: #6f7681; line-height: 1.7; }
 
     /* 下半部分双列布局 */
     .bottom-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
@@ -298,13 +336,71 @@
         </div>
       </div>
 
+      <!-- 📈 近 7 天码字 -->
+      <div class="week-card" v-if="weekStats.total > 0">
+        <div class="week-head">
+          <span>📈 最近 7 天</span>
+          <span class="week-total">共 {{ weekStats.total }} 字</span>
+        </div>
+        <div class="week-bars">
+          <div v-for="d in weekStats.days" :key="d.day" class="week-item">
+            <div class="bar-wrap">
+              <div class="bar" :style="{ height: d.percent + '%' }" :title="d.words + ' 字'"></div>
+            </div>
+            <div class="day-label">{{ d.label }}</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 🎓 新人引导 -->
+      <div class="onboard-mask" v-if="showOnboarding">
+        <div class="onboard-box">
+          <h2>👋 第一次用？三步就能开始</h2>
+          <div class="onboard-steps">
+            <div class="onboard-step">
+              <div class="step-no">1</div>
+              <div>
+                <div class="step-name">先搭世界观</div>
+                <div class="step-desc">在「世界观树」里建几个条目：世界总览、国家、势力。</div>
+              </div>
+            </div>
+            <div class="onboard-step">
+              <div class="step-no">2</div>
+              <div>
+                <div class="step-name">再录人物</div>
+                <div class="step-desc">「人物档案」里建角色，写上动机和弱点，后面写起来不容易崩人设。</div>
+              </div>
+            </div>
+            <div class="onboard-step">
+              <div class="step-no">3</div>
+              <div>
+                <div class="step-name">然后开写</div>
+                <div class="step-desc">「沉浸码字」新建章节，边写边自动保存，写完一键同步到网站。</div>
+              </div>
+            </div>
+          </div>
+          <div class="onboard-actions">
+            <button class="onboard-btn" @click="onboardGo('world-tree')">去建世界观</button>
+            <button class="onboard-btn" @click="onboardGo('writer')">直接开写</button>
+            <button class="onboard-btn ghost" @click="finishOnboarding">知道了</button>
+          </div>
+          <div class="onboard-tip">💡 数据会自动备份（每 30 分钟），删掉的章节进回收站，可在「🛟 数据安全」里还原。</div>
+        </div>
+      </div>
+
       <!-- 全局搜索 -->
       <div class="search-section">
         <input type="text" class="search-input" v-model="searchQuery" placeholder="🔍 全局深度搜索 (输入关键字，如人物、武器、地名等)...">
         <div class="search-results" v-if="searchResults.length > 0">
-          <div class="search-item" v-for="(res, idx) in searchResults" :key="idx">
+          <div class="search-item" v-for="(res, idx) in searchResults" :key="idx"
+               style="cursor:pointer;" @click="openSearchResult(res)"
+               title="点击打开这个文件">
             <div class="title">[{{ res.type }}] {{ res.title }}</div>
             <div class="snippet">{{ res.snippet }}</div>
+            <div class="search-meta">
+              第 {{ res.line }} 行 · 共 {{ res.count }} 处 · {{ res.rel }}
+            </div>
+            <div class="snippet" v-for="(m, i) in (res.more || [])" :key="i" style="opacity:.75;">{{ m }}</div>
           </div>
         </div>
         <div v-else-if="searchQuery && !isSearching" style="text-align: center; color: #666; margin-top: 15px; font-size: 13px;">
@@ -475,9 +571,39 @@
 
         // 搜索相关
         const searchQuery = ref('');
+        // 🔍 点搜索结果 → 让主控台打开对应文件
+        const openSearchResult = (res) => {
+          if (!res || !res.rel) return;
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'OPEN_FILE', path: res.rel }, '*');
+          } else {
+            showToast('请从主控台里打开：' + res.rel);
+          }
+        };
+
         const searchResults = ref([]);
         const isSearching = ref(false);
         let searchTimer = null;
+
+        // 📈 近 7 天码字（localStorage 里由沉浸码字写入）
+        const weekStats = computed(() => {
+          const table = (() => {
+            try { return JSON.parse(localStorage.getItem('mw_daily_words') || '{}'); } catch (e) { return {}; }
+          })();
+          const days = [];
+          let total = 0;
+          for (let i = 6; i >= 0; i--) {
+            const d = new Date();
+            d.setDate(d.getDate() - i);
+            const key = d.toISOString().split('T')[0];
+            const words = table[key] || 0;
+            total += words;
+            days.push({ day: key, label: (d.getMonth() + 1) + '/' + d.getDate(), words, percent: 0 });
+          }
+          const max = Math.max(1, ...days.map((x) => x.words));
+          days.forEach((x) => { x.percent = Math.round((x.words / max) * 100); });
+          return { days, total };
+        });
 
         // 灵感碎片
         const inboxList = ref([]);
@@ -597,14 +723,33 @@
           // 从防火墙页切回来时也能拿到最新状态
           window.addEventListener('focus', loadLanState);
           window.addEventListener('focus', () => loadAnnouncement(true));
+          // 🎓 第一次用：弹一个三步引导（只弹一次）
+          try {
+            if (!localStorage.getItem('mw_onboarded')) {
+              showOnboarding.value = true;
+            }
+          } catch (e) {}
         });
+
+        // 🎓 新人引导
+        const showOnboarding = ref(false);
+        const finishOnboarding = () => {
+          showOnboarding.value = false;
+          try { localStorage.setItem('mw_onboarded', '1'); } catch (e) {}
+        };
+        const onboardGo = (target) => {
+          finishOnboarding();
+          if (window.parent && window.parent !== window) {
+            window.parent.postMessage({ type: 'NAVIGATE', id: target }, '*');
+          }
+        };
 
         return { 
           ann, annIsNew, fmtDate, markAnnRead, loadAnnouncement,
           stats, configLoaded, certTarget, sysNotice, pushNotice, versionInfo, noticeText, noticeFromUpdate, noticeMeta, formatNoticeTime, progressPercent, currentMilestone, isCopyrightAlert, confirmCertified,
         version, versionChecking,
-          searchQuery, searchResults, isSearching, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
-        , lanOpen, lanBackendUrl};
+          searchQuery, searchResults, isSearching, openSearchResult, inboxList, newInbox, addInbox, removeInbox, downloadBackup 
+        , weekStats, showOnboarding, finishOnboarding, onboardGo, lanOpen, lanBackendUrl};
       }
     }).mount('#app');
   </script>

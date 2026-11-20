@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<!-- 文件路径: plugin/screenplay.html  剧本写作 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>剧本写作</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    /* 深色滚动条：默认的白条在暗色界面里太刺眼 */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: #3c3c3c; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    body { margin: 0; background: #16181c; color: #ccd0d6; font-family: 'Microsoft YaHei', system-ui, sans-serif; height: 100vh; display: flex; flex-direction: column; overflow: hidden; }
+    .top {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      background: #1e2126; border-bottom: 1px solid #2c3138; padding: 10px 16px; flex-shrink: 0;
+    }
+    .top h1 { font-size: 16px; margin: 0; color: #fff; }
+    .top select, .top input {
+      background: #14171b; color: #dfe4ea; border: 1px solid #343a42;
+      border-radius: 8px; padding: 7px 10px; font-size: 13px; outline: none;
+    }
+    .spacer { flex: 1; }
+    .btn {
+      border: 1px solid #343a42; background: #262a31; color: #d5dae1;
+      border-radius: 9px; padding: 8px 14px; font-size: 13px; cursor: pointer; transition: .15s;
+    }
+    .btn:hover { background: #2f353d; }
+    .btn.primary { background: rgba(14,99,156,.25); border-color: #2f6f9e; color: #cfe6f7; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    .tools {
+      display: flex; gap: 6px; flex-wrap: wrap; padding: 8px 16px;
+      background: #1a1d22; border-bottom: 1px solid #2c3138; flex-shrink: 0;
+    }
+    .tool {
+      border: 1px solid #343a42; background: #14171b; color: #9aa1ab;
+      border-radius: 7px; padding: 6px 12px; font-size: 12.5px; cursor: pointer;
+    }
+    .tool:hover { color: #fff; border-color: #4a525c; }
+
+    .split { flex: 1; display: flex; min-height: 0; }
+    .pane { flex: 1; min-width: 0; display: flex; flex-direction: column; min-height: 0; }
+    .pane + .pane { border-left: 1px solid #2c3138; }
+    .pane-head { font-size: 12px; color: #6f7681; padding: 6px 14px; border-bottom: 1px solid #22262c; }
+
+    textarea {
+      flex: 1; width: 100%; min-height: 0; resize: none; outline: none;
+      background: #101216; color: #d5dae1; border: none; padding: 16px 20px;
+      font-family: Consolas, "Courier New", monospace; font-size: 14px; line-height: 1.9;
+    }
+    .preview {
+      flex: 1; min-height: 0; overflow-y: auto; padding: 20px 26px;
+      background: #14171b; font-family: Consolas, "Courier New", monospace;
+      font-size: 13.5px; line-height: 1.85; color: #c9cfd6; white-space: pre-wrap;
+    }
+    .preview .scene { font-weight: 700; color: #7fc4ee; margin: 18px 0 6px; }
+    .preview .char { text-align: center; font-weight: 700; color: #f0c674; margin-top: 12px; }
+    .preview .paren { text-align: center; color: #8a929c; font-style: italic; }
+    .preview .dialog { text-align: center; margin: 0 auto 8px; max-width: 80%; }
+    .preview .action { margin: 6px 0; }
+    .preview .trans { text-align: right; color: #8a929c; margin: 12px 0; }
+
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(10px);
+      background: #262a31; border: 1px solid #3a424c; color: #e8ecf1; padding: 10px 20px;
+      border-radius: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 99;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 760px) {
+      .split { flex-direction: column; }
+      .pane + .pane { border-left: none; border-top: 1px solid #2c3138; }
+      textarea, .preview { font-size: 13px; }
+      .top h1 { font-size: 14px; }
+    }
+  </style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <h1>🎬 剧本写作</h1>
+    <select v-model="currentFile" @change="loadScript" style="min-width:170px;">
+      <option value="">— 选择剧本 —</option>
+      <option v-for="f in scripts" :key="f" :value="f">{{ f }}</option>
+    </select>
+    <input v-model="newName" placeholder="新剧本名" style="width:150px;">
+    <button class="btn" @click="createScript">＋ 新建</button>
+    <span class="spacer"></span>
+    <button class="btn primary" @click="save" :disabled="!currentFile || saving">{{ saving ? '保存中…' : '保存 (Ctrl+S)' }}</button>
+    <button class="btn" @click="exportText" :disabled="!currentFile">⬇ 导出 .fountain</button>
+  </div>
+
+  <div class="tools">
+    <button class="tool" @click="insert('scene')">🎬 场景标题</button>
+    <button class="tool" @click="insert('action')">📝 动作</button>
+    <button class="tool" @click="insert('char')">👤 角色</button>
+    <button class="tool" @click="insert('paren')">（括号提示）</button>
+    <button class="tool" @click="insert('dialog')">💬 对白</button>
+    <button class="tool" @click="insert('trans')">➡ 转场</button>
+    <span class="spacer"></span>
+    <button class="tool" @click="insert('note')">📌 备注</button>
+  </div>
+
+  <div class="split">
+    <div class="pane">
+      <div class="pane-head">剧本源文本（Fountain 简化语法）</div>
+      <textarea v-model="text" @input="onInput" @keydown="onKeydown" placeholder="点上面的按钮插入格式，或直接写：
+
+INT. 咖啡馆 - 白天
+
+林风坐在窗边，手里捏着一枚铜币。
+
+林风
+（压低声音）
+这枚硬币不对劲。
+
+苏铭羽
+哪里不对劲？
+
+CUT TO:"></textarea>
+    </div>
+    <div class="pane">
+      <div class="pane-head">预览（排版后的效果）</div>
+      <div class="preview" v-html="rendered"></div>
+    </div>
+  </div>
+
+  <div class="toast" :class="{ show: toast.show }">{{ toast.text }}</div>
+</div>
+
+<script>
+const { createApp, ref, computed, onMounted } = Vue;
+const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:3001/api'
+  : location.origin + '/api';
+const DIR = '剧本/';
+
+createApp({
+  setup() {
+    const scripts = ref([]);
+    const currentFile = ref('');
+    const newName = ref('');
+    const text = ref('');
+    const saving = ref(false);
+    const toast = ref({ show: false, text: '' });
+
+    const showToast = (msg) => {
+      toast.value = { show: true, text: msg };
+      setTimeout(() => { toast.value.show = false; }, 1800);
+    };
+
+    // ---------- Fountain 简化解析 ----------
+    const classify = (lines) => {
+      const out = [];
+      const isScene = (l) => /^(INT|EXT|I\/E|内景|外景)[\.\s]/i.test(l);
+      const isTrans = (l) => /^(CUT TO|FADE (IN|OUT)|切至|淡入|淡出|转场)/i.test(l);
+      const isChar = (l) => l.length <= 20 && l === l.toUpperCase() && /[A-Z\u4e00-\u9fa5]/.test(l) && !/[。！？，]/.test(l);
+      const isParen = (l) => /^[（(].*[）)]$/.test(l);
+
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        const t = line.trim();
+        if (!t) { out.push({ type: 'blank' }); continue; }
+        if (isScene(t)) { out.push({ type: 'scene', text: t }); continue; }
+        if (isTrans(t)) { out.push({ type: 'trans', text: t }); continue; }
+        if (isParen(t)) { out.push({ type: 'paren', text: t }); continue; }
+        const prevBlank = i === 0 || !lines[i - 1].trim();
+        const nextBlank = i === lines.length - 1 || !lines[i + 1].trim();
+        if (isChar(t) && (prevBlank || nextBlank)) { out.push({ type: 'char', text: t }); continue; }
+        // 角色下面紧跟的一行是台词
+        const prev = out[out.length - 1];
+        if (prev && (prev.type === 'char' || prev.type === 'paren')) { out.push({ type: 'dialog', text: t }); continue; }
+        out.push({ type: 'action', text: t });
+      }
+      return out;
+    };
+
+    const rendered = computed(() => {
+      const blocks = classify((text.value || '').split('\n'));
+      const esc = (s) => String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+      return blocks.map((b) => {
+        if (b.type === 'blank') return '<div style="height:8px"></div>';
+        if (b.type === 'scene') return `<div class="scene">${esc(b.text)}</div>`;
+        if (b.type === 'char') return `<div class="char">${esc(b.text)}</div>`;
+        if (b.type === 'paren') return `<div class="paren">${esc(b.text)}</div>`;
+        if (b.type === 'dialog') return `<div class="dialog">${esc(b.text)}</div>`;
+        if (b.type === 'trans') return `<div class="trans">${esc(b.text)}</div>`;
+        return `<div class="action">${esc(b.text)}</div>`;
+      }).join('');
+    });
+
+    // ---------- 文件读写 ----------
+    const loadList = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/library/tree?t=${Date.now()}`);
+        const tree = await res.json();
+        const dir = (tree || []).find((n) => n.name === '剧本');
+        scripts.value = dir && dir.children ? dir.children.map((c) => c.name) : [];
+      } catch (e) { /* 忽略 */ }
+    };
+
+    const loadScript = async () => {
+      if (!currentFile.value) return;
+      try {
+        const res = await fetch(`${API_BASE}/library/file?path=${encodeURIComponent(DIR + currentFile.value)}`);
+        const d = await res.json();
+        text.value = d.content || '';
+        showToast('已打开 ' + currentFile.value);
+      } catch (e) { showToast('读取失败'); }
+    };
+
+    const createScript = async () => {
+      const name = (newName.value || '').trim();
+      if (!name) return showToast('先写个剧本名');
+      const file = name.endsWith('.md') ? name : name + '.md';
+      const demo = `INT. 场景地点 - 白天\n\n（在这里写动作描述）\n\n角色名\n（情绪提示）\n台词内容\n\nCUT TO:\n`;
+      await fetch(`${API_BASE}/library/file`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: DIR + file, content: demo })
+      });
+      newName.value = '';
+      await loadList();
+      currentFile.value = file;
+      await loadScript();
+      showToast('✅ 已创建 ' + file);
+    };
+
+    const save = async () => {
+      if (!currentFile.value) return;
+      saving.value = true;
+      try {
+        await fetch(`${API_BASE}/library/file`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: DIR + currentFile.value, content: text.value })
+        });
+        showToast('✅ 已保存');
+      } catch (e) { showToast('保存失败'); }
+      finally { saving.value = false; }
+    };
+
+    const exportText = () => {
+      const blob = new Blob([text.value], { type: 'text/plain;charset=utf-8' });
+      const a = document.createElement('a');
+      a.href = URL.createObjectURL(blob);
+      a.download = (currentFile.value || '剧本').replace(/\.md$/, '') + '.fountain';
+      a.click();
+      setTimeout(() => URL.revokeObjectURL(a.href), 3000);
+    };
+
+    // ---------- 插入格式 ----------
+    let autoSnap = null;
+    const onInput = () => {
+      clearTimeout(autoSnap);
+      autoSnap = setTimeout(() => { if (currentFile.value) save(); }, 3000);
+    };
+
+    const insert = (kind) => {
+      const ta = document.querySelector('textarea');
+      const start = ta ? ta.selectionStart : text.value.length;
+      const end = ta ? ta.selectionEnd : text.value.length;
+      const before = text.value.slice(0, start);
+      const after = text.value.slice(end);
+      const needNl = before && !/\n$/.test(before) ? '\n\n' : '';
+      let frag = '';
+      if (kind === 'scene') frag = 'INT. 地点 - 白天\n\n';
+      else if (kind === 'action') frag = '动作描述。\n\n';
+      else if (kind === 'char') frag = '角色名\n';
+      else if (kind === 'paren') frag = '（情绪提示）\n';
+      else if (kind === 'dialog') frag = '台词内容\n\n';
+      else if (kind === 'trans') frag = 'CUT TO:\n\n';
+      else if (kind === 'note') frag = '[[备注：写给导演/自己的话]]\n';
+      text.value = before + needNl + frag + after;
+      if (ta) {
+        const pos = (before + needNl + frag).length;
+        setTimeout(() => { ta.focus(); ta.setSelectionRange(pos, pos); }, 0);
+      }
+    };
+
+    // Tab / Enter 的剧本习惯：Tab 在角色和对白之间切换
+    const onKeydown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') {
+        e.preventDefault();
+        save();
+      }
+      if (e.key === 'Tab') {
+        e.preventDefault();
+        insert('char');
+      }
+    };
+
+    onMounted(loadList);
+
+    return {
+      scripts, currentFile, newName, text, saving, toast, rendered,
+      loadScript, createScript, save, exportText, insert, onInput, onKeydown
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

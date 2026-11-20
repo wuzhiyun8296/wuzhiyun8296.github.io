@@ -22,7 +22,7 @@
     * { box-sizing: border-box; }
     body { margin: 0; background: #121212; color: #bbb; font-family: 'Microsoft YaHei', sans-serif; height: 100vh; display: flex; overflow: hidden; }
     
-    #app { display: flex; flex-direction: column; width: 100%; height: 100%; }
+    #app { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
 
     .global-header { height: 50px; background: #1e1e1e; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; flex-shrink: 0; }
     .breadcrumb { display: flex; gap: 10px; align-items: center; font-size: 16px; }
@@ -30,7 +30,7 @@
     .breadcrumb span:hover { color: #fff; }
     .breadcrumb span.active { color: #d29922; font-weight: bold; cursor: default; }
     
-    .view-container { flex: 1; overflow-y: auto; position: relative; }
+    .view-container { flex: 1; overflow-y: auto; position: relative; min-height: 0; }
 
     /* ============ 视图 1：书架 ============ */
     .shelf-view { padding: 40px; max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
@@ -73,21 +73,36 @@
     .chapter-item:hover .chapter-actions { opacity: 1; }
 
     /* ============ 视图 3：沉浸码字 ============ */
-    .editor-view { flex: 1; display: flex; flex-direction: column; height: 100%; background: #121212; }
+    .editor-view { flex: 1; display: flex; flex-direction: column; height: 100%; min-height: 0; background: #121212; }
     
     .format-toolbar { height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background: #1a1a1a; border-bottom: 1px solid #222; flex-shrink: 0; }
     .format-tools-left { display: flex; align-items: center; gap: 5px;}
     .format-tools-right { font-size: 12px; color: #555; display: flex; gap: 15px;}
     .format-btn { background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px 10px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
     .format-btn:hover { background: #333; color: #fff; }
+    /* 按钮式开关：开启时高亮 */
+    .format-btn.on { background: rgba(14,99,156,.35); color: #9fd6f5; }
     
-    .editor-container { flex: 1; display: flex; justify-content: center; overflow: hidden; padding: 20px 40px; }
+    /* 💡 min-height:0 必须加：否则编辑器的最小高度会等于内容高度，
+       内容一多就整个撑高、被外层 overflow:hidden 裁掉，回车时光标跑出屏幕也不滚动 */
+    .editor-container { flex: 1; display: flex; justify-content: center; overflow: hidden; padding: 20px 40px; min-height: 0; }
     .rich-editor {
-      width: 100%; max-width: 900px; height: 100%; background: transparent; border: none; outline: none; overflow-y: auto;
+      width: 100%; max-width: 900px; height: 100%; min-height: 0; background: transparent; border: none; outline: none; overflow-y: auto;
       color: #ddd; font-size: 18px; line-height: 2; padding: 10px 20px; font-family: 'Microsoft YaHei', sans-serif; letter-spacing: 0.5px; white-space: pre-wrap; 
     }
     .rich-editor::-webkit-scrollbar { width: 8px; }
     .rich-editor::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+    /* 📱 网文模式开关 */
+    .webmode-toggle {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; color: #888; cursor: pointer; user-select: none;
+    }
+    .webmode-toggle input { cursor: pointer; }
+    .webmode-select {
+      background: #262626; color: #ddd; border: 1px solid #3a3a3a;
+      border-radius: 6px; padding: 3px 6px; font-size: 12px; outline: none; cursor: pointer;
+    }
 
     /* 🔤 常用字体选择器 */
     .font-picker {
@@ -272,6 +287,9 @@
       <div class="editor-view" v-if="viewMode === 'editor'">
         <div class="format-toolbar" v-if="!isFocus">
           <div class="format-tools-left">
+            <button class="format-btn" @click="undo" title="撤销 (Ctrl+Z)" :disabled="!canUndo">↶ 撤销</button>
+            <button class="format-btn" @click="redo" title="重做 (Ctrl+Y)" :disabled="!canRedo">↷ 重做</button>
+            <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
             <button class="format-btn" @click="formatDoc('bold')" title="加粗选中的文字 (Ctrl+B)"><b>B</b> 粗体</button>
             <button class="format-btn" @click="formatDoc('italic')" title="斜体选中的文字，常用于内心独白 (Ctrl+I)"><i>I</i> 斜体</button>
             <button class="format-btn" @click="formatDoc('underline')" title="给选中的文字加下划线 (Ctrl+U)"><u>U</u> 下划线</button>
@@ -283,6 +301,15 @@
           </div>
           
           <div class="format-tools-right">
+            <!-- 📱 网文模式：按钮式开关，回车留空行（默认开启） -->
+            <button class="format-btn" :class="{ on: webMode }" @click="webMode = !webMode"
+                    title="开启后按回车会留出空行，符合网文排版">
+              📱 网文模式{{ webMode ? '：开' : '：关' }}
+            </button>
+            <select v-if="webMode" v-model.number="webBlankLines" class="webmode-select" title="段落之间空几行">
+              <option :value="1">空一行</option>
+              <option :value="2">空两行</option>
+            </select>
             <!-- 🔤 常用字体：只保留 5 种，选了会同步到前台阅读页 -->
             <label class="font-picker" title="选择正文显示字体，前台阅读页也会跟着变">
               🅰
@@ -358,6 +385,14 @@
               <p>极简格式，不包含任何缩进与排版，适合纯文本备份。</p>
             </div>
           </button>
+
+          <button class="format-btn-lg" @click="doExport('epub')">
+            <div class="icon">📚</div>
+            <div class="text">
+              <h4>电子书 EPUB</h4>
+              <p>通用电子书格式，可导入微信读书、Apple Books；也能用 Calibre 转 Kindle 或 PDF。</p>
+            </div>
+          </button>
         </div>
 
         <div class="modal-actions" style="margin-top: 20px;">
@@ -369,7 +404,7 @@
   </div>
 
   <script>
-    const { createApp, ref, computed, onMounted, onUnmounted, nextTick } = Vue;
+    const { createApp, ref, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
     // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
     const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
       ? 'http://localhost:3001/api'
@@ -492,6 +527,11 @@
         const doExport = (format) => {
           const bookName = exportModal.value.bookName;
           exportModal.value.show = false;
+          if (format === 'epub') {
+            window.open(`${API_BASE}/library/export/epub?book=${encodeURIComponent(bookName)}`);
+            showToast('📥 正在生成 EPUB…');
+            return;
+          }
           window.open(`${API_BASE}/library/export?book=${encodeURIComponent(bookName)}&format=${format}`);
           showToast(`📥 正在导出 ${format.toUpperCase()} 格式...`);
         };
@@ -551,7 +591,11 @@
             await nextTick();
             const editor = document.getElementById('novel-editor');
             if(editor) editor.innerHTML = content.value;
-            
+
+            // ↶ 打开新章节：历史栈重置到当前内容
+            undoStack.value = [content.value];
+            redoStack.value = [];
+
             lastInputLen = totalWords.value;
           } catch (e) { showToast('读取失败', true); }
         };
@@ -578,14 +622,131 @@
            if (currentLen > lastInputLen) {
               todayWords.value += (currentLen - lastInputLen);
               localStorage.setItem(todayKey, todayWords.value);
+              saveDailyStat(todayWords.value);
            }
            lastInputLen = currentLen;
+           scheduleSnapshot();
+           // 光标跟随：用真实坐标判断，连续回车也不会把光标留在屏幕外
+           requestAnimationFrame(keepCaretVisible);
+        };
+
+        // ---------- 撤销 / 重做（自己维护历史栈，比浏览器原生可靠） ----------
+        const undoStack = ref([]);
+        const redoStack = ref([]);
+        const canUndo = computed(() => undoStack.value.length > 1);
+        const canRedo = computed(() => redoStack.value.length > 0);
+        let snapshotTimer = null;
+
+        const editorHtml = () => {
+          const el = document.getElementById('novel-editor');
+          return el ? el.innerHTML : '';
+        };
+
+        const pushSnapshot = () => {
+          const html = editorHtml();
+          const st = undoStack.value;
+          if (st.length && st[st.length - 1] === html) return;
+          st.push(html);
+          if (st.length > 120) st.shift();
+          redoStack.value = [];
+        };
+
+        // 输入停下 400ms 再记一笔，避免每敲一个字都存
+        const scheduleSnapshot = () => {
+          clearTimeout(snapshotTimer);
+          snapshotTimer = setTimeout(pushSnapshot, 400);
+        };
+
+        const applyHtml = (html) => {
+          const el = document.getElementById('novel-editor');
+          if (!el) return;
+          el.innerHTML = html;
+          content.value = html;
+          lastInputLen = totalWords.value;
+        };
+
+        const undo = () => {
+          const st = undoStack.value;
+          if (st.length <= 1) return;
+          redoStack.value.push(st.pop());
+          applyHtml(st[st.length - 1]);
+        };
+
+        const redo = () => {
+          const rs = redoStack.value;
+          if (!rs.length) return;
+          const html = rs.pop();
+          undoStack.value.push(html);
+          applyHtml(html);
+        };
+
+        // ---------- 写作统计：把每日字数存成一张表 ----------
+        const saveDailyStat = (words) => {
+          try {
+            const key = 'mw_daily_words';
+            const table = JSON.parse(localStorage.getItem(key) || '{}');
+            const day = new Date().toISOString().split('T')[0];
+            table[day] = Math.max(table[day] || 0, words);
+            // 只留最近 90 天
+            const days = Object.keys(table).sort().slice(-90);
+            const trimmed = {};
+            days.forEach((d) => { trimmed[d] = table[d]; });
+            localStorage.setItem(key, JSON.stringify(trimmed));
+          } catch (e) { /* 忽略 */ }
+        };
+
+        // 📱 网文模式：回车留空行（默认开启，记住上次选择）
+        const webMode = ref((() => {
+          try {
+            const saved = localStorage.getItem('mw_writer_webmode');
+            return saved === null ? true : saved === '1';
+          } catch (e) { return true; }
+        })());
+        const webBlankLines = ref((() => {
+          try {
+            const saved = parseInt(localStorage.getItem('mw_writer_blanklines') || '2', 10);
+            return saved === 1 ? 1 : 2;
+          } catch (e) { return 2; }
+        })());
+        watch(webMode, (val) => {
+          try { localStorage.setItem('mw_writer_webmode', val ? '1' : '0'); } catch (e) {}
+        });
+        watch(webBlankLines, (val) => {
+          try { localStorage.setItem('mw_writer_blanklines', String(val)); } catch (e) {}
+        });
+
+        // 💡 让光标始终留在可视区：用 Range 的真实坐标判断，
+        //    比 scrollHeight 可靠（连续回车时内容高度可能还没更新）
+        const keepCaretVisible = () => {
+          const el = document.getElementById('novel-editor');
+          if (!el) return;
+          const sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return;
+          const range = sel.getRangeAt(0).cloneRange();
+          range.collapse(false);
+          const rect = range.getBoundingClientRect();
+          const box = el.getBoundingClientRect();
+          if (!box.height) return;
+          if (rect.bottom > box.bottom - 28) {
+            el.scrollTop += rect.bottom - box.bottom + 28;
+          } else if (rect.top < box.top + 28 && rect.top > 0) {
+            el.scrollTop -= box.top - rect.top + 28;
+          }
         };
 
         const handleRichKeyDown = (e) => {
           if (e.key === 'Enter' && !e.shiftKey) {
             e.preventDefault();
-            document.execCommand('insertHTML', false, '<br>&#12288;&#12288;');
+            if (webMode.value) {
+              // 网文排版：空 N 行 = N 个 <br>（之前多插了一个，导致"空两行"变成三行）
+              // 注意：换行本身由回车承担，<br> 只负责空出来的那几行
+              const brs = '<br>'.repeat(Math.max(0, webBlankLines.value));
+              document.execCommand('insertHTML', false, brs + '&#12288;&#12288;');
+            } else {
+              document.execCommand('insertHTML', false, '<br>&#12288;&#12288;');
+            }
+            // 插入后两帧再校正滚动（等浏览器把新行排好版）
+            requestAnimationFrame(() => requestAnimationFrame(keepCaretVisible));
           }
         };
 
@@ -637,6 +798,12 @@
             e.preventDefault();
             if (viewMode.value === 'editor') toggleFocus();
           }
+          // ↶ 撤销 / ↷ 重做（编辑器里才接管，其它地方保持默认行为）
+          if (e.ctrlKey && viewMode.value === 'editor') {
+            const k = e.key.toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+          }
         };
 
         const showToast = (msg, isError = false) => {
@@ -657,6 +824,12 @@
           window.addEventListener('keydown', handleGlobalKeydown);
           // 🔤 读取已保存的阅读字体
           loadReadingFont();
+          // 🔍 从仪表盘搜索点进来时，直接打开对应章节
+          const openPath = new URLSearchParams(location.search).get('open');
+          if (openPath) {
+            const name = openPath.split('/').pop();
+            openChapter({ path: openPath, name: name });
+          }
         });
 
         // 🔤 常用字体：本地立即生效，同时写进前台配置，阅读页跟着变
@@ -714,7 +887,8 @@
           goToShelf, openBook, goToChapters, createBook, renameBook, openExportModal, doExport, 
           createChapter, renameChapter, openChapter, deleteChapter,
           onRichInput, saveFile, toggleFocus, handleRichKeyDown, handlePaste, formatDoc, autoIndent,
-          readingFont, fontPresets, changeReadingFont,
+          readingFont, fontPresets, changeReadingFont, webMode, webBlankLines,
+          undo, redo, canUndo, canRedo,
           modal, closeModal, confirmModal, exportModal
         };
       }

@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<!-- 文件路径: plugin/backup.html  数据安全 -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>数据安全</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #16181c; color: #ccd0d6; font-family: 'Microsoft YaHei', system-ui, sans-serif; }
+    #app { max-width: 900px; margin: 0 auto; padding: 18px 16px 80px; }
+    h1 { font-size: 18px; color: #fff; margin: 0 0 4px; }
+    .sub { font-size: 12.5px; color: #757d88; margin-bottom: 18px; line-height: 1.7; }
+
+    .card { background: #1e2126; border: 1px solid #2c3138; border-radius: 12px; padding: 14px 16px; margin-bottom: 14px; }
+    .card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 10px; }
+    .card h2 { font-size: 14.5px; color: #e8edf3; margin: 0; font-weight: 600; }
+    .btn {
+      border: 1px solid #343a42; background: #262a31; color: #d5dae1;
+      border-radius: 9px; padding: 8px 14px; font-size: 13px; cursor: pointer; transition: .15s;
+    }
+    .btn:hover { background: #2f353d; }
+    .btn.primary { background: rgba(14,99,156,.25); border-color: #2f6f9e; color: #cfe6f7; }
+    .btn.danger { background: rgba(168,38,38,.18); border-color: #7a2a2a; color: #ffb3b3; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+
+    .row {
+      display: flex; align-items: center; gap: 12px; padding: 9px 0;
+      border-bottom: 1px solid #262b31; font-size: 13px;
+    }
+    .row:last-child { border-bottom: none; }
+    .row .grow { flex: 1; min-width: 0; }
+    .row .name { color: #dfe4ea; word-break: break-all; }
+    .row .meta { font-size: 11.5px; color: #6f7681; margin-top: 2px; }
+    .empty { color: #6a717b; font-size: 13px; padding: 10px 0; }
+    .tag { font-size: 11px; padding: 2px 7px; border-radius: 999px; border: 1px solid #3a424c; color: #8f97a2; }
+    .tag.auto { border-color: #2f6f9e; color: #7fc4ee; }
+    .toast {
+      position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(10px);
+      background: #262a31; border: 1px solid #3a424c; color: #e8ecf1; padding: 10px 20px;
+      border-radius: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 99;
+    }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+    .hint { font-size: 12px; color: #6f7681; line-height: 1.8; margin-top: 8px; }
+    @media (max-width: 760px) { .row { flex-wrap: wrap; } .btn { padding: 10px 14px; } }
+  </style>
+</head>
+<body>
+<div id="app">
+  <h1>🛟 数据安全</h1>
+  <div class="sub">
+    自动备份每 30 分钟一次（保留最近 10 份）；删除的章节进回收站，可随时还原；每次保存会留历史版本。
+  </div>
+
+  <!-- 备份 -->
+  <div class="card">
+    <div class="card-head">
+      <h2>📦 快照备份</h2>
+      <button class="btn primary" @click="createBackup" :disabled="busy">
+        {{ busy ? '备份中…' : '立即备份' }}
+      </button>
+      <button class="btn" @click="exportBundle" title="把当前数据打成一个 zip，可拷到 U 盘或别的电脑">⬇ 导出备份包</button>
+    </div>
+    <div v-if="!backups.length" class="empty">还没有备份，点「立即备份」生成第一份。</div>
+    <div v-for="b in backups" :key="b.id" class="row">
+      <span class="tag" :class="{ auto: b.reason === 'auto' || b.reason === 'boot' }">{{ reasonText(b.reason) }}</span>
+      <div class="grow">
+        <div class="name">{{ fmtTime(b.at) }}</div>
+        <div class="meta">{{ b.files }} 个文件 · {{ b.id }}</div>
+      </div>
+      <button class="btn" @click="restoreBackup(b)">恢复到这份</button>
+    </div>
+    <div class="hint">恢复前会自动再备份一次当前状态，恢复错了也能退回去。</div>
+  </div>
+
+  <!-- 回收站 -->
+  <div class="card">
+    <div class="card-head">
+      <h2>🗑 回收站（{{ trash.length }}）</h2>
+      <button class="btn" @click="loadTrash" :disabled="busy">刷新</button>
+    </div>
+    <div v-if="!trash.length" class="empty">回收站是空的。</div>
+    <div v-for="t in trash" :key="t.name" class="row">
+      <div class="grow">
+        <div class="name">{{ t.original }}</div>
+        <div class="meta">{{ fmtTime(t.at) }} · {{ t.isDir ? '文件夹' : Math.round(t.size / 1024) + ' KB' }}</div>
+      </div>
+      <button class="btn primary" @click="restoreTrash(t)">还原</button>
+    </div>
+    <div class="hint">还原时如果同名文件已存在，会自动加时间后缀，不会覆盖。</div>
+  </div>
+
+  <!-- 历史版本 -->
+  <div class="card">
+    <div class="card-head">
+      <h2>🕘 历史版本</h2>
+    </div>
+    <div class="row">
+      <div class="grow">
+        <input v-model="historyPath" placeholder="输入章节路径，例如：幻想域/第01章 初识世界.md"
+               style="width:100%;background:#14171b;border:1px solid #343a42;border-radius:8px;padding:8px 10px;color:#dfe4ea;font-size:13px;outline:none;">
+      </div>
+      <button class="btn" @click="loadHistory" :disabled="busy">查看</button>
+    </div>
+    <div v-if="historyLoaded && !history.length" class="empty">这个文件还没有历史版本。</div>
+    <div v-for="h in history" :key="h" class="row">
+      <div class="grow">
+        <div class="name">{{ h }}</div>
+      </div>
+      <button class="btn" @click="previewHistory(h)">预览</button>
+      <button class="btn primary" @click="restoreHistory(h)">还原</button>
+    </div>
+    <div v-if="previewContent" class="hint" style="white-space:pre-wrap;background:#14171b;border:1px solid #262b31;border-radius:8px;padding:10px;max-height:220px;overflow:auto;">
+      {{ previewContent }}
+    </div>
+  </div>
+
+  <div class="toast" :class="{ show: toast.show }">{{ toast.text }}</div>
+</div>
+
+<script>
+const { createApp, ref, onMounted } = Vue;
+const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:3001/api'
+  : location.origin + '/api';
+
+createApp({
+  setup() {
+    const backups = ref([]);
+    const trash = ref([]);
+    const history = ref([]);
+    const historyLoaded = ref(false);
+    const historyPath = ref('');
+    const previewContent = ref('');
+    const busy = ref(false);
+    const toast = ref({ show: false, text: '' });
+
+    const showToast = (text) => {
+      toast.value = { show: true, text };
+      setTimeout(() => { toast.value.show = false; }, 2000);
+    };
+    const fmtTime = (iso) => {
+      if (!iso) return '未知时间';
+      const d = new Date(iso);
+      if (isNaN(d)) return iso;
+      const p = (n) => String(n).padStart(2, '0');
+      return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}:${p(d.getSeconds())}`;
+    };
+    const reasonText = (r) => ({ boot: '启动', auto: '定时', manual: '手动', 'before-restore': '恢复前', test: '手动' }[r] || r || '手动');
+
+    const loadBackups = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/backup/list?t=${Date.now()}`);
+        const d = await res.json();
+        backups.value = d.list || [];
+      } catch (e) { /* 忽略 */ }
+    };
+    const loadTrash = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/trash/list?t=${Date.now()}`);
+        const d = await res.json();
+        trash.value = d.list || [];
+      } catch (e) { /* 忽略 */ }
+    };
+
+    const exportBundle = () => {
+      window.open(`${API_BASE}/backup/export`);
+      showToast('正在打包，稍等几秒…');
+    };
+
+    const createBackup = async () => {
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/backup/create`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ reason: 'manual' })
+        });
+        const d = await res.json();
+        if (d.success) { showToast('✅ 备份完成 ' + d.id); await loadBackups(); }
+        else showToast('备份失败：' + (d.error || '未知错误'));
+      } catch (e) { showToast('备份失败：' + e.message); }
+      finally { busy.value = false; }
+    };
+
+    const restoreBackup = async (b) => {
+      if (!confirm('确定把整个数据恢复到「' + fmtTime(b.at) + '」这份快照？\n当前状态会先被自动备份。')) return;
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/backup/restore`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ id: b.id })
+        });
+        const d = await res.json();
+        if (d.success) { showToast('✅ 已恢复到 ' + b.id); await loadBackups(); }
+        else showToast('恢复失败：' + (d.error || '未知错误'));
+      } catch (e) { showToast('恢复失败：' + e.message); }
+      finally { busy.value = false; }
+    };
+
+    const restoreTrash = async (t) => {
+      if (!confirm('把「' + t.original + '」还原回去？')) return;
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/trash/restore`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name: t.name })
+        });
+        const d = await res.json();
+        if (d.success) { showToast('✅ 已还原到 ' + d.path); await loadTrash(); }
+        else showToast('还原失败：' + (d.error || '未知错误'));
+      } catch (e) { showToast('还原失败：' + e.message); }
+      finally { busy.value = false; }
+    };
+
+    const loadHistory = async () => {
+      if (!historyPath.value.trim()) return;
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/history/list?path=${encodeURIComponent(historyPath.value.trim())}&t=${Date.now()}`);
+        const d = await res.json();
+        history.value = d.list || [];
+        historyLoaded.value = true;
+        previewContent.value = '';
+      } catch (e) { showToast('读取失败：' + e.message); }
+      finally { busy.value = false; }
+    };
+
+    const previewHistory = async (file) => {
+      try {
+        const res = await fetch(`${API_BASE}/history/file?path=${encodeURIComponent(historyPath.value.trim())}&file=${encodeURIComponent(file)}`);
+        const d = await res.json();
+        previewContent.value = d.content || '（读不到内容）';
+      } catch (e) { showToast('预览失败：' + e.message); }
+    };
+
+    const restoreHistory = async (file) => {
+      if (!confirm('把这个版本写回当前文件？当前内容会先存一份历史。')) return;
+      busy.value = true;
+      try {
+        const res = await fetch(`${API_BASE}/history/restore`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ path: historyPath.value.trim(), file })
+        });
+        const d = await res.json();
+        if (d.success) { showToast('✅ 已还原'); await loadHistory(); }
+        else showToast('还原失败：' + (d.error || '未知错误'));
+      } catch (e) { showToast('还原失败：' + e.message); }
+      finally { busy.value = false; }
+    };
+
+    onMounted(() => { loadBackups(); loadTrash(); });
+
+    return {
+      backups, trash, history, historyLoaded, historyPath, previewContent, busy, toast,
+      fmtTime, reasonText, createBackup, restoreBackup, restoreTrash, exportBundle,
+      loadHistory, previewHistory, restoreHistory, loadTrash
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>
