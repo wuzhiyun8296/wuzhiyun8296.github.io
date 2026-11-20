@@ -263,5 +263,16 @@
     "hideBackend": false,
     "autoRegistered": true,
     "scope": "admin"
+  },
+  {
+    "id": "writer-preview",
+    "title": "沉浸写书",
+    "desc": "自动注册的插件",
+    "icon": "🧩",
+    "link": "#",
+    "isSystem": false,
+    "hideFrontend": true,
+    "hideBackend": false,
+    "autoRegistered": true
   }
 ]

@@ -1,0 +1,1132 @@
+<!-- 文件路径: plugin/writer.html -->
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <title>沉浸写书</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    /* ---------- 全局暗色细滚动条 ---------- */
+    * { scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb {
+      background: #3c3c3c; border-radius: 8px;
+      border: 2px solid transparent; background-clip: content-box;
+    }
+    ::-webkit-scrollbar-thumb:hover { background: #4e4e4e; background-clip: content-box; }
+    ::-webkit-scrollbar-thumb:active { background: #5c5c5c; background-clip: content-box; }
+    ::-webkit-scrollbar-corner { background: transparent; }
+
+    * { box-sizing: border-box; }
+    body { margin: 0; background: #121212; color: #bbb; font-family: 'Microsoft YaHei', sans-serif; height: 100vh; display: flex; overflow: hidden; }
+    
+    #app { display: flex; flex-direction: column; width: 100%; height: 100%; min-height: 0; }
+
+    .global-header { height: 50px; background: #1e1e1e; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; flex-shrink: 0; }
+    .breadcrumb { display: flex; gap: 10px; align-items: center; font-size: 16px; }
+    .breadcrumb span { cursor: pointer; color: #888; transition: color 0.2s;}
+    .breadcrumb span:hover { color: #fff; }
+    .breadcrumb span.active { color: #d29922; font-weight: bold; cursor: default; }
+    
+    .view-container { flex: 1; overflow-y: auto; position: relative; min-height: 0; }
+
+    /* ============ 视图 1：书架 ============ */
+    .shelf-view { padding: 40px; max-width: 1200px; margin: 0 auto; display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 20px; }
+    
+    /* 💡 调整卡片高度容纳按钮 */
+    .book-card { 
+      background: #1e1e1e; border: 1px solid #333; border-radius: 8px; 
+      transition: all 0.2s; display: flex; flex-direction: column; 
+      align-items: center; height: 260px; position: relative; cursor: pointer; overflow: hidden;
+    }
+    .book-card:hover { background: #252526; border-color: #0e639c; transform: translateY(-5px); box-shadow: 0 10px 20px rgba(0,0,0,0.5); }
+    
+    .book-info-area { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; padding: 20px 20px 0 20px; width: 100%; }
+    .book-icon { font-size: 50px; margin-bottom: 15px; }
+    .book-title { font-size: 18px; font-weight: bold; color: #fff; text-align: center; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;}
+    .book-count { font-size: 12px; color: #666; margin-top: 10px; }
+    
+    /* 书卡右上角操作：小圆形图标按钮，横排，悬停才出现（手机常显） */
+    .book-actions {
+      position: absolute; top: 10px; right: 10px;
+      display: flex; gap: 6px; opacity: 0; transition: opacity .18s;
+      z-index: 2;
+    }
+    .book-card:hover .book-actions { opacity: 1; }
+    .book-actions button {
+      width: 28px; height: 28px; padding: 0; border-radius: 8px;
+      display: flex; align-items: center; justify-content: center;
+      font-size: 13px; line-height: 1; border: 1px solid transparent;
+      background: rgba(255,255,255,.07); color: #c5ccd4;
+      backdrop-filter: blur(4px); transition: .15s;
+    }
+    .book-actions button:hover { background: rgba(255,255,255,.16); color: #fff; transform: translateY(-1px); }
+    .book-actions button.danger { background: rgba(168,38,38,.18); color: #ff9b9b; }
+    .book-actions button.danger:hover { background: rgba(201,42,42,.5); color: #fff; }
+    @media (max-width: 760px) {
+      .book-actions { opacity: 1; }
+    }
+
+    /* 💡 显眼的导出按钮 */
+    .btn-export-bar {
+      width: 100%; padding: 12px; background: rgba(46, 160, 67, 0.15); 
+      border-top: 1px solid #333; color: #2ea043; text-align: center; 
+      font-weight: bold; font-size: 14px; display: flex; align-items: center; justify-content: center; gap: 8px;
+      transition: all 0.2s;
+    }
+    .book-card:hover .btn-export-bar { background: #2ea043; color: #fff; }
+
+    .btn-add-book { background: transparent; border: 2px dashed #444; color: #666; border-radius: 8px; height: 260px; display: flex; flex-direction: column; align-items: center; justify-content: center; cursor: pointer; transition: all 0.2s; font-size: 16px;}
+    .btn-add-book:hover { border-color: #0e639c; color: #0e639c; background: rgba(14, 99, 156, 0.1); }
+
+    /* ============ 视图 2：章节目录 ============ */
+    .chapters-view { padding: 40px; max-width: 800px; margin: 0 auto; }
+    .chapter-list { display: flex; flex-direction: column; gap: 10px; }
+    .chapter-item { background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 15px 20px; display: flex; justify-content: space-between; align-items: center; cursor: pointer; transition: background 0.2s; }
+    .chapter-item:hover { background: #252526; border-color: #444; }
+    .chapter-title { font-size: 16px; color: #ddd; }
+    .chapter-actions { display: flex; gap: 10px; opacity: 0; transition: opacity 0.2s; }
+    .chapter-item:hover .chapter-actions { opacity: 1; }
+
+    /* ============ 视图 3：沉浸码字 ============ */
+    .editor-view { flex: 1; display: flex; flex-direction: column; height: 100%; min-height: 0; background: #121212; }
+    
+    .format-toolbar { height: 40px; display: flex; justify-content: space-between; align-items: center; padding: 0 20px; background: #1a1a1a; border-bottom: 1px solid #222; flex-shrink: 0; }
+    .format-tools-left { display: flex; align-items: center; gap: 5px;}
+    .format-tools-right { font-size: 12px; color: #555; display: flex; gap: 15px;}
+    .format-btn { background: transparent; border: none; color: #888; font-size: 14px; cursor: pointer; padding: 4px 10px; border-radius: 4px; transition: all 0.2s; display: flex; align-items: center; gap: 4px; }
+    .format-btn:hover { background: #333; color: #fff; }
+    /* 按钮式开关：开启时高亮 */
+    .format-btn.on { background: rgba(14,99,156,.35); color: #9fd6f5; }
+    
+    /* 💡 min-height:0 必须加：否则编辑器的最小高度会等于内容高度，
+       内容一多就整个撑高、被外层 overflow:hidden 裁掉，回车时光标跑出屏幕也不滚动 */
+    .editor-container { flex: 1; display: flex; justify-content: center; overflow: hidden; padding: 20px 40px; min-height: 0; }
+    .rich-editor {
+      width: 100%; max-width: 900px; height: 100%; min-height: 0; background: transparent; border: none; outline: none; overflow-y: auto;
+      color: #ddd; font-size: 18px; line-height: 2; padding: 10px 20px; font-family: 'Microsoft YaHei', sans-serif; letter-spacing: 0.5px; white-space: pre-wrap; 
+    }
+    .rich-editor::-webkit-scrollbar { width: 8px; }
+    .rich-editor::-webkit-scrollbar-thumb { background: #333; border-radius: 4px; }
+
+    /* 📱 网文模式开关 */
+    .webmode-toggle {
+      display: inline-flex; align-items: center; gap: 5px;
+      font-size: 12px; color: #888; cursor: pointer; user-select: none;
+    }
+    .webmode-toggle input { cursor: pointer; }
+    .webmode-select {
+      background: #262626; color: #ddd; border: 1px solid #3a3a3a;
+      border-radius: 6px; padding: 3px 6px; font-size: 12px; outline: none; cursor: pointer;
+    }
+
+    /* 🔤 常用字体选择器 */
+    .font-picker {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; color: #888; cursor: pointer;
+    }
+    .font-picker select {
+      background: #262626; color: #ddd; border: 1px solid #3a3a3a;
+      border-radius: 6px; padding: 3px 8px; font-size: 12px; outline: none; cursor: pointer;
+    }
+    .font-picker select:hover { border-color: #555; }
+    .rich-editor:empty:before { content: attr(placeholder); color: #555; pointer-events: none; display: block; line-height: 1.5; }
+
+    /* 进度条 */
+    .progress-container { width: 100px; height: 6px; background: #333; border-radius: 3px; overflow: hidden; display: inline-block; vertical-align: middle; margin-left: 10px;}
+    .progress-bar { height: 100%; background: #2ea043; transition: width 0.3s; }
+
+    /* 按钮通用 */
+    button { background: #0e639c; color: white; border: none; padding: 6px 12px; cursor: pointer; border-radius: 4px; font-size: 13px; font-weight: bold; display: flex; align-items: center; gap: 5px; transition: background 0.2s;}
+    button:hover { background: #1177bb; }
+    button.secondary { background: #333; }
+    button.secondary:hover { background: #444; }
+    button.danger { background: #a82626; }
+    button.danger:hover { background: #c92a2a; }
+    button.success { background: #2ea043; }
+    button.success:hover { background: #3fb950; }
+
+    /* 💡 高级模态框样式 */
+    .custom-modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; z-index: 99999; background: rgba(15, 15, 15, 0.7); backdrop-filter: blur(5px); display: flex; justify-content: center; align-items: center; }
+    .custom-modal-box { background: #252526; border: 1px solid #444; border-radius: 10px; padding: 25px; width: 420px; box-shadow: 0 15px 40px rgba(0,0,0,0.6); animation: scaleIn 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); }
+    @keyframes scaleIn { from { opacity: 0; transform: scale(0.9); } to { opacity: 1; transform: scale(1); } }
+    .custom-modal-box h3 { margin: 0 0 10px 0; color: #fff; font-size: 18px; }
+    .custom-modal-box p { color: #888; font-size: 13px; margin-bottom: 20px; line-height: 1.5; }
+    .modal-input-group { margin-bottom: 15px; }
+    .modal-input-group input { width: 100%; background: #1e1e1e; border: 1px solid #444; color: #fff; padding: 12px; border-radius: 6px; font-size: 14px; outline: none; transition: border 0.2s; }
+    .modal-input-group input:focus { border-color: #0e639c; }
+    .modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 25px; }
+    
+    /* 💡 格式选择按钮组 */
+    .format-selector { display: flex; flex-direction: column; gap: 10px; margin-top: 15px; }
+    .format-btn-lg { 
+      background: #1e1e1e; border: 1px solid #444; border-radius: 8px; padding: 15px; 
+      text-align: left; cursor: pointer; transition: all 0.2s; display: flex; align-items: center; gap: 15px;
+    }
+    .format-btn-lg:hover { border-color: #0e639c; background: #252526; transform: translateX(5px); }
+    .format-btn-lg .icon { font-size: 24px; }
+    .format-btn-lg .text h4 { margin: 0 0 5px 0; color: #fff; font-size: 15px; }
+    .format-btn-lg .text p { margin: 0; color: #888; font-size: 12px; }
+  
+    /* ---------- 📱 手机端适配 ---------- */
+    @media (max-width: 760px) {
+      .global-header {
+        flex-direction: column; align-items: stretch; gap: 8px;
+        padding: 10px 12px; height: auto;
+      }
+      .breadcrumb { font-size: 13px; flex-wrap: wrap; gap: 4px; }
+      .global-header .stats { font-size: 12px !important; flex-wrap: wrap; gap: 8px; display: flex; align-items: center; }
+      .global-header .stats span[style*="margin-left"] { margin-left: 8px !important; }
+
+      .shelf-view {
+        padding: 14px 12px 40px;
+        grid-template-columns: 1fr;
+        gap: 12px;
+      }
+      .book-card { padding: 16px; }
+
+      .chapter-list { gap: 8px; }
+      .chapter-item {
+        padding: 12px 14px; flex-direction: column; align-items: flex-start; gap: 8px;
+      }
+      .chapter-actions { opacity: 1 !important; }
+
+      /* 编辑器：去掉左右 40px，正文占满宽度 */
+      .editor-container { padding: 12px 10px; }
+      .editor-view { height: auto; }
+      .rich-editor {
+        font-size: 16px !important; line-height: 1.9 !important;
+        padding: 14px 12px !important; min-height: 60vh;
+      }
+      /* 格式工具栏：横向滚动，不挤成一团 */
+      .format-toolbar {
+        flex-wrap: nowrap; overflow-x: auto; gap: 6px;
+        padding: 8px 10px; scrollbar-width: none;
+      }
+      .format-toolbar::-webkit-scrollbar { display: none; }
+      .format-btn {
+        flex-shrink: 0; padding: 8px 10px !important; font-size: 12.5px !important;
+        white-space: nowrap;
+      }
+    }
+
+    @media (max-width: 760px) {
+      /* 💡 桌面版常把 body 锁成 100vh + overflow:hidden，手机必须放开才能滑动 */
+      html, body {
+        height: auto !important; min-height: 100%;
+        overflow-y: auto !important; overflow-x: hidden !important;
+        -webkit-overflow-scrolling: touch;
+      }
+      body { display: block !important; max-width: 100%; }
+      * { max-width: 100%; }
+    }
+  .book-actions{opacity:1 !important;}  /* 预览用：强制显示悬停按钮 */
+  </style>
+</head>
+<body>
+  <div id="app">
+    <div class="global-header">
+      <div class="breadcrumb">
+        <span :class="{ active: viewMode === 'shelf' }" @click="goToShelf">📚 我的书架</span>
+        <template v-if="currentBook">
+          <span>/</span>
+          <span :class="{ active: viewMode === 'chapters' }" @click="goToChapters">{{ currentBook.name }}</span>
+        </template>
+        <template v-if="currentPath && viewMode === 'editor'">
+          <span>/</span>
+          <span class="active">{{ currentPath.split('/').pop().replace('.md', '') }}</span>
+        </template>
+      </div>
+
+      <div style="display: flex; gap: 20px; align-items: center;" v-if="viewMode === 'editor'">
+        <div class="stats" style="font-size: 13px;">
+          总字数: <span style="color:#fff; font-weight:bold; font-size:15px;">{{ totalWords }}</span>
+          <span style="margin-left: 20px;">今日码字: <span style="color:#fff; font-weight:bold; font-size:15px;">{{ todayWords }}</span></span>
+          <div class="progress-container" title="每日目标 2000 字">
+            <div class="progress-bar" :style="{ width: Math.min(todayWords / 2000 * 100, 100) + '%' }"></div>
+          </div>
+        </div>
+        <button class="secondary" @click="toggleFocus" title="进入沉浸模式，隐藏所有干扰 (Ctrl+Shift+F)">
+          {{ isFocus ? '🔍 退出沉浸 (Ctrl+Shift+F)' : '👁️ 沉浸模式 (Ctrl+Shift+F)' }}
+        </button>
+        <button class="success" @click="saveFile(false)" :disabled="!currentPath" title="保存当前章节 (Ctrl+S)">💾 保存 (Ctrl+S)</button>
+      </div>
+    </div>
+
+    <div class="view-container">
+      
+      <!-- ================= 视图 1：书架 ================= -->
+      <div class="shelf-view" v-if="viewMode === 'shelf'">
+        <div class="book-card" v-for="(book, idx) in books" :key="idx">
+          <div class="book-actions">
+            <button class="secondary" @click.stop="renameBook(book)" title="重命名这本书">✏️</button>
+            <button class="danger" @click.stop="deleteBook(book)" title="删除这本书（进回收站，可还原）">🗑</button>
+          </div>
+          
+          <div class="book-info-area" @click="openBook(book)">
+            <div class="book-icon">📕</div>
+            <div class="book-title">{{ book.name }}</div>
+            <div class="book-count">{{ book.children ? book.children.length : 0 }} 章</div>
+          </div>
+
+          <!-- 💡 极其显眼的导出入口 -->
+          <div class="btn-export-bar" @click.stop="openExportModal(book)">
+            📥 一键导出本书
+          </div>
+        </div>
+
+        <div class="btn-add-book" @click="createBook" title="在 library 文件夹下新建一本书">
+          <div style="font-size: 40px; margin-bottom: 10px;">+</div>
+          <div>创建新书</div>
+        </div>
+
+        <!-- 📥 从 txt / md / docx 导入旧稿 -->
+        <div class="btn-add-book" @click="$refs.importInput && $refs.importInput.click()" title="把 Word/txt 旧稿导进来，自动放进「导入」书里">
+          <div style="font-size: 40px; margin-bottom: 10px;">📥</div>
+          <div>{{ importBusy ? '导入中…' : '导入旧稿' }}</div>
+        </div>
+
+        <!-- 🌐 同步到本地前台（不推送、不发版） -->
+        <div class="btn-add-book" @click="syncToFrontend" title="把章节复制到前台站点，本机/手机立刻能看到（不推送）">
+          <div style="font-size: 40px; margin-bottom: 10px;">🌐</div>
+          <div>{{ syncing ? '同步中…' : '同步到前台' }}</div>
+        </div>
+        <input ref="importInput" type="file" accept=".txt,.md,.docx,.markdown" style="display:none;" @change="importDraft">
+      </div>
+
+      <!-- ================= 视图 2：章节目录 ================= -->
+      <div class="chapters-view" v-if="viewMode === 'chapters'">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px;">
+          <h2 style="color: #fff; margin: 0;">《{{ currentBook.name }}》目录</h2>
+          <button @click="createChapter" title="为这本书添加一个新章节">+ 新建章节</button>
+        </div>
+        <div class="chapter-list">
+          <div class="chapter-item" v-for="(chapter, idx) in currentBook.children" :key="idx" @click="openChapter(chapter)">
+            <div class="chapter-title">📄 {{ chapter.name.replace('.md', '') }}</div>
+            <div class="chapter-actions">
+              <button class="secondary" @click.stop="moveChapter(idx, -1)" :disabled="idx === 0" title="上移一位">↑</button>
+              <button class="secondary" @click.stop="moveChapter(idx, 1)" :disabled="idx === currentBook.children.length - 1" title="下移一位">↓</button>
+              <button class="secondary" @click.stop="renameChapter(chapter)" title="修改章节名称">✏️ 改名</button>
+              <button class="danger" @click.stop="deleteChapter(chapter, idx)" title="彻底删除这一章">删除</button>
+            </div>
+          </div>
+          <div v-if="!currentBook.children || currentBook.children.length === 0" style="text-align: center; color: #666; padding: 50px;">
+            这本书还没有章节，点击右上角新建吧！
+          </div>
+        </div>
+      </div>
+
+      <!-- ================= 视图 3：沉浸码字 ================= -->
+      <div class="editor-view" v-if="viewMode === 'editor'">
+        <div class="format-toolbar" v-if="!isFocus">
+          <div class="format-tools-left">
+            <button class="format-btn" @click="undo" title="撤销 (Ctrl+Z)" :disabled="!canUndo">↶ 撤销</button>
+            <button class="format-btn" @click="redo" title="重做 (Ctrl+Y)" :disabled="!canRedo">↷ 重做</button>
+            <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
+            <button class="format-btn" @click="openFind" title="查找替换 (Ctrl+F)">🔍 查找</button>
+            <button class="format-btn" @click="openPreview" title="在站点里预览这一章">👁 预览</button>
+            <button class="format-btn" @click="syncToFrontend" :disabled="syncing"
+                    title="把章节复制到前台站点（不推送、不发版），前台立刻能看到">
+              {{ syncing ? '⏳ 同步中' : '🌐 同步前台' }}
+            </button>
+            <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
+            <button class="format-btn" @click="formatDoc('bold')" title="加粗选中的文字 (Ctrl+B)"><b>B</b> 粗体</button>
+            <button class="format-btn" @click="formatDoc('italic')" title="斜体选中的文字，常用于内心独白 (Ctrl+I)"><i>I</i> 斜体</button>
+            <button class="format-btn" @click="formatDoc('underline')" title="给选中的文字加下划线 (Ctrl+U)"><u>U</u> 下划线</button>
+            <div style="width: 1px; height: 16px; background: #444; margin: 0 5px;"></div>
+            <button class="format-btn" @click="formatDoc('justifyLeft')" title="段落靠左对齐">⯇ 左对齐</button>
+            <button class="format-btn" @click="formatDoc('justifyCenter')" title="将选中的文字居中显示">≡ 居中</button>
+            <button class="format-btn" @click="formatDoc('insertHorizontalRule')" title="插入一条场景分割线">— 分割线</button>
+            <button class="format-btn" @click="autoIndent" title="为所有未缩进的段落自动加上两个全角空格">⇥ 首行缩进</button>
+          </div>
+          
+          <div class="format-tools-right">
+            <!-- 📱 网文模式：按钮式开关，回车留空行（默认开启） -->
+            <button class="format-btn" :class="{ on: webMode }" @click="webMode = !webMode"
+                    title="开启后按回车会留出空行，符合网文排版">
+              📱 网文模式{{ webMode ? '：开' : '：关' }}
+            </button>
+            <select v-if="webMode" v-model.number="webBlankLines" class="webmode-select" title="段落之间空几行">
+              <option :value="1">空一行</option>
+              <option :value="2">空两行</option>
+            </select>
+            <!-- 🔤 常用字体：只保留 5 种，选了会同步到前台阅读页 -->
+            <label class="font-picker" title="选择正文显示字体，前台阅读页也会跟着变">
+              🅰
+              <select :value="readingFont" @change="changeReadingFont($event.target.value)">
+                <option v-for="f in fontPresets" :key="f.key" :value="f.key">{{ f.label }}</option>
+              </select>
+            </label>
+            <span title="打字时按回车会自动空两格">💡 回车自动缩进</span>
+            <span title="复制的内容会保留段落并自动缩进">📋 粘贴自动排版</span>
+            <span title="保存后 VitePress 网页会自动更新">🌐 同步至网站</span>
+          </div>
+        </div>
+
+        <div class="editor-container">
+          <div 
+            v-if="currentPath"
+            id="novel-editor"
+            class="rich-editor"
+            contenteditable="true"
+            placeholder="落笔即成史... (温馨提示：如果你想加粗或居中，请先用鼠标选中文字，再点击上方的按钮)"
+            @input="onRichInput"
+            @keydown="handleRichKeyDown"
+            @paste="handlePaste"
+          ></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 💡 普通弹窗（新建/重命名/删除） -->
+    <div class="custom-modal-overlay" v-if="modal.show" @click.self="closeModal">
+      <div class="custom-modal-box">
+        <h3>{{ modal.title }}</h3>
+        <p v-if="modal.message">{{ modal.message }}</p>
+        
+        <div class="modal-input-group" v-if="modal.type === 'prompt'">
+          <input v-model="modal.input1" :placeholder="modal.placeholder1" @keyup.enter="confirmModal" autofocus />
+        </div>
+
+        <div class="modal-actions">
+          <button class="secondary" @click="closeModal">取消</button>
+          <button :class="{ danger: modal.isDanger }" @click="confirmModal">确认</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 💡 专属导出格式选择弹窗 -->
+    <!-- 🔍 查找替换 -->
+    <div class="custom-modal-overlay" v-if="findState.show" @click.self="findState.show = false">
+      <div class="custom-modal-box" style="width: 420px;">
+        <h3>🔍 查找替换</h3>
+        <div style="display:flex; flex-direction:column; gap:10px; margin:16px 0;">
+          <input id="find-input" v-model="findState.find" placeholder="查找内容"
+                 style="background:#1e1e1e;border:1px solid #444;border-radius:6px;padding:9px 12px;color:#ddd;outline:none;">
+          <input v-model="findState.replace" placeholder="替换为（留空 = 删除）"
+                 style="background:#1e1e1e;border:1px solid #444;border-radius:6px;padding:9px 12px;color:#ddd;outline:none;">
+        </div>
+        <div style="display:flex; gap:8px; justify-content:flex-end; flex-wrap:wrap;">
+          <button class="secondary" @click="findState.show = false">关闭</button>
+          <button class="secondary" @click="doReplace(false)">替换下一个</button>
+          <button style="background:#0e639c;color:#fff;border:none;border-radius:6px;padding:8px 14px;cursor:pointer;"
+                  @click="doReplace(true)">全部替换</button>
+        </div>
+      </div>
+    </div>
+    <div class="custom-modal-overlay" v-if="exportModal.show" @click.self="exportModal.show = false">
+      <div class="custom-modal-box" style="width: 480px;">
+        <h3>📥 导出《{{ exportModal.bookName }}》</h3>
+        <p>请选择导出格式，系统将自动打包全书。</p>
+        
+        <div class="format-selector">
+          <button class="format-btn-lg" @click="doExport('html')">
+            <div class="icon">🌐</div>
+            <div class="text">
+              <h4>精美 HTML (推荐)</h4>
+              <p>带目录、独立排版，适合发给读者阅读，也可按 Ctrl+P 存为 PDF。</p>
+            </div>
+          </button>
+          
+          <button class="format-btn-lg" @click="doExport('novel')">
+            <div class="icon">📖</div>
+            <div class="text">
+              <h4>网络小说格式</h4>
+              <p>自动首行缩进两格，适合直接粘贴到起点、番茄等小说平台发表。</p>
+            </div>
+          </button>
+
+          <button class="format-btn-lg" @click="doExport('txt')">
+            <div class="icon">📄</div>
+            <div class="text">
+              <h4>纯文本 TXT</h4>
+              <p>极简格式，不包含任何缩进与排版，适合纯文本备份。</p>
+            </div>
+          </button>
+
+          <button class="format-btn-lg" @click="doExport('epub')">
+            <div class="icon">📚</div>
+            <div class="text">
+              <h4>电子书 EPUB</h4>
+              <p>通用电子书格式，可导入微信读书、Apple Books；也能用 Calibre 转 Kindle 或 PDF。</p>
+            </div>
+          </button>
+        </div>
+
+        <div class="modal-actions" style="margin-top: 20px;">
+          <button class="secondary" @click="exportModal.show = false">取消</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <script>
+    const { createApp, ref, computed, onMounted, onUnmounted, nextTick, watch } = Vue;
+    // 💡 手机/局域网访问时 localhost 指向手机自己，必须用当前域名
+    const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1' || location.protocol === 'file:')
+      ? 'http://localhost:3001/api'
+      : location.origin + '/api';
+
+    createApp({
+      setup() {
+        const viewMode = ref('shelf'); 
+        const libraryTree = ref([]);
+        const currentBook = ref(null);
+        const currentPath = ref('');
+        const content = ref(''); 
+        
+        const isFocus = ref(false);
+        
+        const modal = ref({ show: false, type: '', title: '', message: '', input1: '', placeholder1: '', callback: null, isDanger: false });
+        const openModal = (options) => { modal.value = { ...modal.value, ...options, show: true, input1: options.input1 || '' }; };
+        const closeModal = () => { modal.value.show = false; };
+        const confirmModal = () => {
+          if (modal.value.callback) { modal.value.callback(modal.value.input1); }
+          closeModal();
+        };
+
+        // 💡 新增导出弹窗状态
+        const exportModal = ref({ show: false, bookName: '' });
+
+        const totalWords = computed(() => {
+          const tempDiv = document.createElement('div');
+          tempDiv.innerHTML = content.value;
+          const text = (tempDiv.textContent || tempDiv.innerText || '').replace(/[\s\n\r]/g, '');
+          return text.length;
+        });
+        
+        const todayWords = ref(0);
+        const todayKey = 'writer_daily_count_' + new Date().toISOString().split('T')[0];
+        let lastInputLen = 0;
+        let autoSaveTimer = null;
+
+        const fetchLibrary = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/library/tree`);
+            libraryTree.value = await res.json();
+            return libraryTree.value;
+          } catch (e) {
+            showToast('获取书库失败', true);
+            return [];
+          }
+        };
+
+        const books = computed(() => {
+          // 剧本 / 导入 是别的模块的目录，不在小说书架上显示
+          const HIDE = new Set(['剧本', '导入', '素材', '设定集', '设定']);
+          return libraryTree.value.filter(
+            (item) => item.type === 'folder' && !HIDE.has(item.name) && !item.name.startsWith('_')
+          );
+        });
+
+        // 🗑 删除整本书（进回收站，可还原）
+        const deleteBook = (book) => {
+          openModal({
+            type: 'confirm',
+            title: '🗑 删除这本书',
+            message: `确定删除《${book.name}》吗？<br><br><span style="color:#8a929c;font-size:12.5px;">书里的 ${book.children ? book.children.length : 0} 章会一起删除，但会进回收站，可在「🛟 数据安全」里还原。</span>`,
+            isDanger: true,
+            callback: async () => {
+              try {
+                const res = await fetch(`${API_BASE}/library/delete`, {
+                  method: 'POST',
+                  headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: book.name })
+                });
+                const d = await res.json();
+                if (d.success) {
+                  showToast('✅ 已删除，可在数据安全里还原');
+                  await fetchLibrary();
+                  viewMode.value = 'shelf';
+                } else {
+                  showToast('删除失败：' + (d.error || '未知错误'), true);
+                }
+              } catch (e) {
+                showToast('删除失败：' + e.message, true);
+              }
+            }
+          });
+        };
+
+        const goToShelf = async () => {
+          await fetchLibrary();
+          viewMode.value = 'shelf';
+          currentBook.value = null;
+          currentPath.value = null;
+          content.value = '';
+        };
+
+        const openBook = (book) => {
+          currentBook.value = book;
+          viewMode.value = 'chapters';
+        };
+
+        const goToChapters = () => {
+          if (currentBook.value) {
+            viewMode.value = 'chapters';
+            currentPath.value = null;
+            content.value = '';
+          }
+        };
+
+        // ---------- 📥 导入旧稿 ----------
+        const importBusy = ref(false);
+        const importDraft = async (e) => {
+          const file = e.target.files && e.target.files[0];
+          if (!file) return;
+          importBusy.value = true;
+          try {
+            const fd = new FormData();
+            fd.append('file', file);
+            const res = await fetch(`${API_BASE}/import/draft`, { method: 'POST', body: fd });
+            const d = await res.json();
+            if (d.success) {
+              showToast(`✅ 已导入 ${d.chars} 字，${d.paragraphs} 段`);
+              await fetchLibrary();
+              viewMode.value = 'shelf';
+            } else {
+              showToast('导入失败：' + (d.error || '未知错误'), true);
+            }
+          } catch (err) {
+            showToast('导入失败：' + err.message, true);
+          } finally {
+            importBusy.value = false;
+            e.target.value = '';
+          }
+        };
+
+        // ---------- 🔍 查找替换 ----------
+        const findState = ref({ show: false, find: '', replace: '', matches: 0 });
+        const openFind = () => {
+          findState.value.show = true;
+          setTimeout(() => {
+            const el = document.getElementById('find-input');
+            if (el) el.focus();
+          }, 50);
+        };
+        const editorText = () => {
+          const el = document.getElementById('novel-editor');
+          return el ? el.innerText : '';
+        };
+        const countMatches = () => {
+          const q = findState.value.find;
+          if (!q) return 0;
+          const t = editorText();
+          let n = 0, i = 0;
+          while ((i = t.indexOf(q, i)) !== -1) { n++; i += q.length; }
+          return n;
+        };
+        const doReplace = (all) => {
+          const f = findState.value.find;
+          const r = findState.value.replace;
+          const el = document.getElementById('novel-editor');
+          if (!el || !f) return;
+          const parts = el.innerHTML.split(/(<[^>]+>)/);
+          let hit = 0;
+          const out = parts.map((seg) => {
+            if (seg.startsWith('<')) return seg;
+            if (!seg.includes(f)) return seg;
+            if (all) {
+              const n = seg.split(f).length - 1;
+              hit += n;
+              return seg.split(f).join(r);
+            }
+            if (hit === 0) { hit = 1; return seg.replace(f, r); }
+            return seg;
+          });
+          if (!hit) { showToast('没找到「' + f + '」', true); return; }
+          pushSnapshot();
+          el.innerHTML = out.join('');
+          content.value = el.innerHTML;
+          findState.value.matches = countMatches();
+          showToast(`已替换 ${hit} 处`);
+        };
+
+        // ---------- 🌐 本地同步到前台（不推送） ----------
+        const syncing = ref(false);
+        const syncToFrontend = async () => {
+          if (syncing.value) return;
+          syncing.value = true;
+          try {
+            // 先把当前章节存一下，避免同步的是旧内容
+            if (viewMode.value === 'editor' && currentPath.value) {
+              await saveFile(true);
+            }
+            const res = await fetch(`${API_BASE}/novel/sync`, { method: 'POST' });
+            const d = await res.json();
+            if (d.success) {
+              showToast(`✅ 已同步 ${d.chapters} 章到前台（未推送，仅本机可见）`);
+            } else {
+              showToast('同步失败：' + (d.error || '未知错误'), true);
+            }
+          } catch (e) {
+            showToast('同步失败：' + e.message, true);
+          } finally {
+            syncing.value = false;
+          }
+        };
+
+        // ---------- 👁 站点预览 ----------
+        const openPreview = () => {
+          const p = currentPath.value || '';
+          if (!p) return showToast('先打开一章再预览', true);
+          const seg = p.split('/');
+          const book = seg[0];
+          const name = seg[seg.length - 1].replace(/\.md$/, '');
+          window.open(`http://localhost:5173/novel/chapters/${encodeURIComponent(book)}/${encodeURIComponent(name)}.html`, '_blank');
+          showToast('已在站点打开（需要前端 5173 已启动）');
+        };
+
+        // ---------- ↑↓ 章节排序（交换数字前缀） ----------
+        const moveChapter = async (idx, dir) => {
+          const list = currentBook.value && currentBook.value.children;
+          if (!list) return;
+          const j = idx + dir;
+          if (j < 0 || j >= list.length) return;
+          const a = list[idx], b = list[j];
+          const bookName = currentBook.value.name;
+          const numA = (a.name.match(/^(\d+)/) || [])[1];
+          const numB = (b.name.match(/^(\d+)/) || [])[1];
+          if (!numA || !numB) {
+            return showToast('这两章没有数字编号，改成「第01章」这种名字才能排序', true);
+          }
+          const newA = a.name.replace(/^\d+/, numB);
+          const newB = b.name.replace(/^\d+/, numA);
+          for (const [oldPath, newName] of [[a.name, newA], [b.name, newB]]) {
+            await fetch(`${API_BASE}/library/rename`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ oldPath: `${bookName}/${oldPath}`, newName })
+            });
+          }
+          await fetchLibrary();
+          currentBook.value = books.value.find((x) => x.name === bookName) || currentBook.value;
+          showToast('已调整顺序');
+        };
+
+        const createBook = () => {
+          openModal({
+            type: 'prompt', title: '📕 新建书籍', placeholder1: '请输入新书名称 (例如: 星落之城)',
+            callback: async (name) => {
+              if (!name) return;
+              const path = `${name}/目录.md`;
+              try {
+                await fetch(`${API_BASE}/library/file`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path, content: '' })
+                });
+                showToast('✅ 书籍创建成功');
+                goToShelf();
+              } catch (e) { showToast('创建失败', true); }
+            }
+          });
+        };
+
+        const renameBook = (book) => {
+          openModal({
+            type: 'prompt', title: '✏️ 重命名书籍', placeholder1: '请输入新的书名',
+            input1: book.name,
+            callback: async (newName) => {
+              if (!newName || newName === book.name) return;
+              try {
+                const res = await fetch(`${API_BASE}/library/rename`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ oldPath: book.name, newName: newName })
+                });
+                const data = await res.json();
+                if(data.success) {
+                  showToast('✅ 书名修改成功');
+                  goToShelf();
+                } else { showToast(data.error, true); }
+              } catch(e) { showToast('重命名失败', true); }
+            }
+          });
+        };
+
+        // 💡 打开导出选项弹窗
+        const openExportModal = (book) => {
+          exportModal.value = { show: true, bookName: book.name };
+        };
+
+        // 💡 执行下载
+        const doExport = (format) => {
+          const bookName = exportModal.value.bookName;
+          exportModal.value.show = false;
+          if (format === 'epub') {
+            window.open(`${API_BASE}/library/export/epub?book=${encodeURIComponent(bookName)}`);
+            showToast('📥 正在生成 EPUB…');
+            return;
+          }
+          window.open(`${API_BASE}/library/export?book=${encodeURIComponent(bookName)}&format=${format}`);
+          showToast(`📥 正在导出 ${format.toUpperCase()} 格式...`);
+        };
+
+        const createChapter = () => {
+          if (!currentBook.value) return;
+          openModal({
+            type: 'prompt', title: '📄 新建章节', placeholder1: '输入章节名称 (例如: 第一章 穿越)',
+            callback: async (name) => {
+              if (!name) return;
+              const path = `${currentBook.value.name}/${name}.md`;
+              try {
+                await fetch(`${API_BASE}/library/file`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path, content: '<div><br></div>' })
+                });
+                showToast('✅ 章节已创建');
+                const tree = await fetchLibrary();
+                currentBook.value = tree.find(b => b.name === currentBook.value.name);
+              } catch (e) { showToast('创建失败', true); }
+            }
+          });
+        };
+
+        const renameChapter = (chapter) => {
+          const oldName = chapter.name.replace('.md', '');
+          openModal({
+            type: 'prompt', title: '✏️ 重命名章节', placeholder1: '请输入新的章节名',
+            input1: oldName,
+            callback: async (newName) => {
+              if (!newName || newName === oldName) return;
+              try {
+                const res = await fetch(`${API_BASE}/library/rename`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ oldPath: chapter.path, newName: newName })
+                });
+                const data = await res.json();
+                if(data.success) {
+                  showToast('✅ 章节名修改成功');
+                  const tree = await fetchLibrary();
+                  currentBook.value = tree.find(b => b.name === currentBook.value.name);
+                } else { showToast(data.error, true); }
+              } catch(e) { showToast('重命名失败', true); }
+            }
+          });
+        };
+
+        const openChapter = async (chapter) => {
+          try {
+            const res = await fetch(`${API_BASE}/library/file?path=${encodeURIComponent(chapter.path)}`);
+            const data = await res.json();
+            
+            content.value = data.content || '<div><br></div>';
+            currentPath.value = chapter.path;
+            viewMode.value = 'editor';
+            
+            await nextTick();
+            const editor = document.getElementById('novel-editor');
+            if(editor) editor.innerHTML = content.value;
+
+            // ↶ 打开新章节：历史栈重置到当前内容
+            undoStack.value = [content.value];
+            redoStack.value = [];
+
+            lastInputLen = totalWords.value;
+          } catch (e) { showToast('读取失败', true); }
+        };
+
+        const deleteChapter = (chapter, index) => {
+          openModal({
+            type: 'confirm', title: '⚠️ 确认删除', message: `确定要删除章节《${chapter.name}》吗？无法恢复！`, isDanger: true,
+            callback: async () => {
+              try {
+                await fetch(`${API_BASE}/library/delete`, {
+                  method: 'POST', headers: { 'Content-Type': 'application/json' },
+                  body: JSON.stringify({ path: chapter.path })
+                });
+                currentBook.value.children.splice(index, 1);
+                showToast('已删除');
+              } catch (e) { showToast('删除失败', true); }
+            }
+          });
+        };
+
+        const onRichInput = (e) => {
+           content.value = e.target.innerHTML;
+           const currentLen = totalWords.value;
+           if (currentLen > lastInputLen) {
+              todayWords.value += (currentLen - lastInputLen);
+              localStorage.setItem(todayKey, todayWords.value);
+              saveDailyStat(todayWords.value);
+           }
+           lastInputLen = currentLen;
+           scheduleSnapshot();
+           // 光标跟随：用真实坐标判断，连续回车也不会把光标留在屏幕外
+           requestAnimationFrame(keepCaretVisible);
+        };
+
+        // ---------- 撤销 / 重做（自己维护历史栈，比浏览器原生可靠） ----------
+        const undoStack = ref([]);
+        const redoStack = ref([]);
+        const canUndo = computed(() => undoStack.value.length > 1);
+        const canRedo = computed(() => redoStack.value.length > 0);
+        let snapshotTimer = null;
+
+        const editorHtml = () => {
+          const el = document.getElementById('novel-editor');
+          return el ? el.innerHTML : '';
+        };
+
+        const pushSnapshot = () => {
+          const html = editorHtml();
+          const st = undoStack.value;
+          if (st.length && st[st.length - 1] === html) return;
+          st.push(html);
+          if (st.length > 120) st.shift();
+          redoStack.value = [];
+        };
+
+        // 输入停下 400ms 再记一笔，避免每敲一个字都存
+        const scheduleSnapshot = () => {
+          clearTimeout(snapshotTimer);
+          snapshotTimer = setTimeout(pushSnapshot, 400);
+        };
+
+        const applyHtml = (html) => {
+          const el = document.getElementById('novel-editor');
+          if (!el) return;
+          el.innerHTML = html;
+          content.value = html;
+          lastInputLen = totalWords.value;
+        };
+
+        const undo = () => {
+          const st = undoStack.value;
+          if (st.length <= 1) return;
+          redoStack.value.push(st.pop());
+          applyHtml(st[st.length - 1]);
+        };
+
+        const redo = () => {
+          const rs = redoStack.value;
+          if (!rs.length) return;
+          const html = rs.pop();
+          undoStack.value.push(html);
+          applyHtml(html);
+        };
+
+        // ---------- 写作统计：把每日字数存成一张表 ----------
+        const saveDailyStat = (words) => {
+          try {
+            const key = 'mw_daily_words';
+            const table = JSON.parse(localStorage.getItem(key) || '{}');
+            const day = new Date().toISOString().split('T')[0];
+            table[day] = Math.max(table[day] || 0, words);
+            // 只留最近 90 天
+            const days = Object.keys(table).sort().slice(-90);
+            const trimmed = {};
+            days.forEach((d) => { trimmed[d] = table[d]; });
+            localStorage.setItem(key, JSON.stringify(trimmed));
+          } catch (e) { /* 忽略 */ }
+        };
+
+        // 📱 网文模式：回车留空行（默认开启，记住上次选择）
+        const webMode = ref((() => {
+          try {
+            const saved = localStorage.getItem('mw_writer_webmode');
+            return saved === null ? true : saved === '1';
+          } catch (e) { return true; }
+        })());
+        const webBlankLines = ref((() => {
+          try {
+            const saved = parseInt(localStorage.getItem('mw_writer_blanklines') || '2', 10);
+            return saved === 1 ? 1 : 2;
+          } catch (e) { return 2; }
+        })());
+        watch(webMode, (val) => {
+          try { localStorage.setItem('mw_writer_webmode', val ? '1' : '0'); } catch (e) {}
+        });
+        watch(webBlankLines, (val) => {
+          try { localStorage.setItem('mw_writer_blanklines', String(val)); } catch (e) {}
+        });
+
+        // 💡 让光标始终留在可视区：用 Range 的真实坐标判断，
+        //    比 scrollHeight 可靠（连续回车时内容高度可能还没更新）
+        const keepCaretVisible = () => {
+          const el = document.getElementById('novel-editor');
+          if (!el) return;
+          const sel = window.getSelection();
+          if (!sel || !sel.rangeCount) return;
+          const range = sel.getRangeAt(0).cloneRange();
+          range.collapse(false);
+          const rect = range.getBoundingClientRect();
+          const box = el.getBoundingClientRect();
+          if (!box.height) return;
+          if (rect.bottom > box.bottom - 28) {
+            el.scrollTop += rect.bottom - box.bottom + 28;
+          } else if (rect.top < box.top + 28 && rect.top > 0) {
+            el.scrollTop -= box.top - rect.top + 28;
+          }
+        };
+
+        const handleRichKeyDown = (e) => {
+          if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            if (webMode.value) {
+              // 网文排版：空 N 行 = N 个 <br>（之前多插了一个，导致"空两行"变成三行）
+              // 注意：换行本身由回车承担，<br> 只负责空出来的那几行
+              const brs = '<br>'.repeat(Math.max(0, webBlankLines.value));
+              document.execCommand('insertHTML', false, brs + '&#12288;&#12288;');
+            } else {
+              document.execCommand('insertHTML', false, '<br>&#12288;&#12288;');
+            }
+            // 插入后两帧再校正滚动（等浏览器把新行排好版）
+            requestAnimationFrame(() => requestAnimationFrame(keepCaretVisible));
+          }
+        };
+
+        const handlePaste = (e) => {
+          e.preventDefault();
+          const text = e.clipboardData.getData('text/plain');
+          const html = text.split('\n').map(line => {
+             if(line.trim() === '') return '<div><br></div>';
+             return `<div>&#12288;&#12288;${line}</div>`;
+          }).join('');
+          document.execCommand('insertHTML', false, html);
+        };
+
+        const formatDoc = (cmd) => { document.execCommand(cmd, false, null); };
+
+        const autoIndent = () => {
+          const editor = document.getElementById('novel-editor');
+          if (!editor) return;
+          let html = editor.innerHTML;
+          html = html.replace(/<(div|p)([^>]*)>/g, '<$1$2>&#12288;&#12288;');
+          html = html.replace(/(&#12288;){2,}/g, '&#12288;&#12288;');
+          editor.innerHTML = html;
+          content.value = html;
+          showToast('已为全文段落添加首行缩进');
+        };
+
+        const saveFile = async (isAuto = false) => {
+          if (typeof isAuto !== 'boolean') isAuto = false;
+          if (!currentPath.value) return;
+          try {
+            await fetch(`${API_BASE}/library/file`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ path: currentPath.value, content: content.value })
+            });
+            if (!isAuto) showToast('✅ 章节已保存');
+            else showToast('⏳ 自动保存成功');
+          } catch (e) { showToast('保存失败', true); }
+        };
+
+        const toggleFocus = () => { isFocus.value = !isFocus.value; };
+
+        const handleGlobalKeydown = (e) => {
+          if (e.ctrlKey && e.key === 's') {
+            e.preventDefault();
+            if (viewMode.value === 'editor') saveFile(false);
+          }
+          if (e.ctrlKey && e.shiftKey && e.key.toLowerCase() === 'f') {
+            e.preventDefault();
+            if (viewMode.value === 'editor') toggleFocus();
+          }
+          // 🔍 Ctrl+F 打开查找替换
+          if (e.ctrlKey && e.key.toLowerCase() === 'f' && !e.shiftKey && viewMode.value === 'editor') {
+            e.preventDefault();
+            openFind();
+            return;
+          }
+          // ↶ 撤销 / ↷ 重做（编辑器里才接管，其它地方保持默认行为）
+          if (e.ctrlKey && viewMode.value === 'editor') {
+            const k = e.key.toLowerCase();
+            if (k === 'z' && !e.shiftKey) { e.preventDefault(); undo(); }
+            else if (k === 'y' || (k === 'z' && e.shiftKey)) { e.preventDefault(); redo(); }
+          }
+        };
+
+        const showToast = (msg, isError = false) => {
+          const oldToast = document.getElementById('custom-toast'); if (oldToast) oldToast.remove();
+          const toast = document.createElement('div'); toast.id = 'custom-toast'; toast.innerText = msg;
+          toast.style = `position:fixed; bottom:30px; right:30px; background:${isError ? '#a82626' : '#2ea043'}; color:#fff; padding:12px 24px; border-radius:6px; z-index:99999; transition: all 0.3s; box-shadow: 0 4px 15px rgba(0,0,0,0.4); font-weight: bold;`;
+          document.body.appendChild(toast);
+          setTimeout(() => toast.remove(), 2500);
+        };
+
+        onMounted(async () => {
+          const savedCount = localStorage.getItem(todayKey);
+          if (savedCount) todayWords.value = parseInt(savedCount);
+          await fetchLibrary();
+          autoSaveTimer = setInterval(() => {
+            if (viewMode.value === 'editor' && currentPath.value && content.value) saveFile(true);
+          }, 60000);
+          window.addEventListener('keydown', handleGlobalKeydown);
+          // 🔤 读取已保存的阅读字体
+          loadReadingFont();
+          // 🔍 从仪表盘搜索点进来时，直接打开对应章节
+          const openPath = new URLSearchParams(location.search).get('open');
+          if (openPath) {
+            const name = openPath.split('/').pop();
+            openChapter({ path: openPath, name: name });
+          }
+        });
+
+        // 🔤 常用字体：本地立即生效，同时写进前台配置，阅读页跟着变
+        const readingFont = ref(localStorage.getItem('mw_writer_font') || 'default');
+        const fontPresets = ref([
+          { key: 'default', label: '系统默认', css: '' },
+          { key: 'songti', label: '宋体', css: '"Source Han Serif SC", "Noto Serif SC", SimSun, "Songti SC", serif' },
+          { key: 'heiti', label: '黑体', css: '"PingFang SC", "Microsoft YaHei", "Hiragino Sans GB", sans-serif' },
+          { key: 'kaiti', label: '楷体', css: 'KaiTi, "Kaiti SC", STKaiti, "楷体", serif' },
+          { key: 'fangsong', label: '仿宋', css: 'FangSong, "FangSong_GB2312", STFangsong, "仿宋", serif' }
+        ]);
+
+        const applyReadingFont = (key) => {
+          const hit = fontPresets.value.find((f) => f.key === key) || fontPresets.value[0];
+          const el = document.getElementById('novel-editor');
+          if (el) el.style.fontFamily = hit.css || '';
+          document.documentElement.style.setProperty('--novel-font', hit.css || '');
+        };
+
+        const changeReadingFont = async (key) => {
+          readingFont.value = key;
+          localStorage.setItem('mw_writer_font', key);
+          applyReadingFont(key);
+          try {
+            await fetch(`${API_BASE}/reading-font`, {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({ key })
+            });
+          } catch (e) { /* 离线时只影响本机预览 */ }
+        };
+
+        const loadReadingFont = async () => {
+          try {
+            const res = await fetch(`${API_BASE}/reading-font?t=${Date.now()}`, { cache: 'no-store' });
+            if (!res.ok) return;
+            const d = await res.json();
+            if (Array.isArray(d.presets) && d.presets.length) fontPresets.value = d.presets;
+            // 以服务端为准（多设备之间保持一致）
+            if (d.key) {
+              readingFont.value = d.key;
+              localStorage.setItem('mw_writer_font', d.key);
+            }
+          } catch (e) { /* 忽略 */ }
+          applyReadingFont(readingFont.value);
+        };
+
+        onUnmounted(() => {
+          if (autoSaveTimer) clearInterval(autoSaveTimer);
+          window.removeEventListener('keydown', handleGlobalKeydown);
+        });
+
+        return {
+          viewMode, books, currentBook, currentPath, content, isFocus, totalWords, todayWords,
+          goToShelf, openBook, goToChapters, createBook, renameBook, deleteBook, openExportModal, doExport, 
+          createChapter, renameChapter, openChapter, deleteChapter,
+          onRichInput, saveFile, toggleFocus, handleRichKeyDown, handlePaste, formatDoc, autoIndent,
+          readingFont, fontPresets, changeReadingFont, webMode, webBlankLines,
+          undo, redo, canUndo, canRedo,
+          importBusy, importDraft, openFind, doReplace, findState, openPreview, moveChapter, syncing, syncToFrontend,
+          modal, closeModal, confirmModal, exportModal
+        };
+      }
+    }).mount('#app');
+  </script>
+</body>
+</html>

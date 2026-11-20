@@ -25,6 +25,7 @@ plugin/protection.html
 plugin/screenplay.html
 plugin/timeline.html
 plugin/world-tree.html
+plugin/writer-preview.html
 plugin/writer.html
 restart.vbs
 server.js
