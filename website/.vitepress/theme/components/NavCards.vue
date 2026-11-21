@@ -57,7 +57,7 @@
       </div>
     </a>
 
-    <a href="/科技树" class="nav-card">
+    <a href="/tech-tree" class="nav-card">
       <div class="nav-icon">🌳</div>
       <div class="nav-content">
         <h3>科技树</h3>

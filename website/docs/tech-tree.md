@@ -1,5 +1,6 @@
 ---
 title: 科技树
+permalink: /tech-tree
 aside: false
 prev: false
 next: false
