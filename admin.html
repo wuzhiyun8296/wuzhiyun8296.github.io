@@ -371,6 +371,16 @@
     @media (max-width: 760px) {
       .nav-group-wrap { display: none; }
     }
+
+    /* 👀 访客横幅 */
+    .guest-banner {
+      display: flex; align-items: center; gap: 10px;
+      padding: 9px 16px; background: rgba(210,153,34,.12);
+      border-bottom: 1px solid rgba(210,153,34,.35); flex-shrink: 0;
+    }
+    .guest-banner .gb-icon { font-size: 15px; }
+    .guest-banner .gb-text { font-size: 12.5px; color: #d8c089; line-height: 1.7; }
+    .guest-banner b { color: #f0d08a; }
 </style>
 </head>
 <body>
@@ -464,6 +474,14 @@
           <button class="m-act danger" @click="navDrawer = false; logout()">退出登录</button>
         </div>
       </aside>
+
+      <!-- 👀 访客横幅 -->
+      <div class="guest-banner" v-if="isGuest">
+        <span class="gb-icon">👀</span>
+        <span class="gb-text">
+          <b>你现在是访客模式</b>：所有内容都能看，但你改的东西<b>不会保存</b>哦～
+        </span>
+      </div>
 
       <div class="top-nav">
         <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
@@ -673,6 +691,9 @@
       setup() {
         const dynamicPlugins = ref([]);
         const isAuthenticated = ref(false);
+        // 👀 访客：先看登录页记下的角色，再用状态接口校正（防止刷新后横幅消失）
+        const isGuest = ref(false);
+        try { isGuest.value = localStorage.getItem('mw_role') === 'guest'; } catch (e) {}
         const password = ref('');
         const showError = ref(false);
         const loginHint = ref(localStorage.getItem('admin_hint') || '默认密码：123456');
@@ -1136,16 +1157,26 @@
         const writerOpenPath = ref('');
         const pluginSrc = computed(() => {
           const id = currentTab.value;
+          let src = '';
+
           if (isPhoneView) {
             const hit = (dynamicPlugins.value || []).find((p) => p.id === id);
             // 💡 只有真的存在 xxx.mobile.html 才跳转，否则会 404
-            if (hit && hit.mobileFile) return `plugin/${id}.mobile.html`;
+            if (hit && hit.mobileFile) src = `plugin/${id}.mobile.html`;
           }
-          // 打开指定章节时带上路径参数，沉浸码字会自己打开
-          if (id === 'writer' && writerOpenPath.value) {
-            return `plugin/writer.html?open=${encodeURIComponent(writerOpenPath.value)}`;
+
+          if (!src) {
+            // 打开指定章节时带上路径参数，沉浸码字会自己打开
+            if (id === 'writer' && writerOpenPath.value) {
+              src = `plugin/writer.html?open=${encodeURIComponent(writerOpenPath.value)}`;
+            } else {
+              src = `plugin/${id}.html`;
+            }
           }
-          return `plugin/${id}.html`;
+
+          // 👀 访客：给插件带上 guest=1，插件里的只读守卫会据此锁定
+          if (isGuest.value) src += (src.indexOf('?') > -1 ? '&' : '?') + 'guest=1';
+          return src;
         });
 
         // 顶栏显示当前插件名
@@ -1413,6 +1444,23 @@
           }
           if (e.data.type === 'REFRESH_PLUGINS') {
             loadDynamicPlugins();
+
+          // 👀 判断是不是访客（只读）
+          fetch(`${API_BASE}/auth/status?t=${Date.now()}`, { cache: 'no-store' })
+            .then((r) => r.json())
+            .then((d) => {
+              const role = (d && d.role) || '';
+              if (role === 'guest') {
+                isGuest.value = true;
+                try { localStorage.setItem('mw_role', 'guest'); } catch (e) {}
+              } else if (role === 'admin') {
+                isGuest.value = false;
+                try { localStorage.setItem('mw_role', 'admin'); } catch (e) {}
+              }
+              // role 为空（未登录/本机免登录）时保持原值，不清掉横幅
+            })
+            .catch(() => {});
+          window.__isGuest = () => isGuest.value;
           }
           // 💡 推送成功（没有 Gitee 提醒时也要给个反馈）
           if (e.data.type === 'PUSH_DONE') {
@@ -1480,7 +1528,7 @@
         });
 
         return { 
-          isAuthenticated, password, showError, handleLogin, loginHint, changePassword, logout,
+          isAuthenticated, isGuest, password, showError, handleLogin, loginHint, changePassword, logout,
           currentTab, tree, content, currentPath, selectedFolder, renderedHtml, 
           loadFile, saveFile, newFile, newFolder, deleteNode,
           mdUndo, mdRedo, canMdUndo, canMdRedo, onMdInput, webMode, webBlankLines, onMdKeydown,

@@ -1207,7 +1207,8 @@ createApp({
       syncFromRouteId(routeId.value);
       await loadBookOptions();
       await loadWorlds();
-      // 🪄 没有世界就弹窗引导（每次都弹，直到建好为止）
+      // 🪄 没有世界就弹窗引导（访客只看，不打扰）
+      if (window.__DSH_GUEST__ || /[?&]guest=1/.test(location.search)) return;
       if (!hasRealWorld.value) openWorldDialog(null);
       loadAll();
       await nextTick();

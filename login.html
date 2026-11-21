@@ -118,6 +118,11 @@
       z-index: 99; max-width: 86vw; text-align: center;
     }
     .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+      .login-tip {
+      margin-top: 10px; font-size: 12px; color: #8a929c; line-height: 1.7;
+      background: rgba(210,153,34,.08); border: 1px solid rgba(210,153,34,.28);
+      border-radius: 8px; padding: 8px 10px;
+    }
   </style>
 </head>
 <body>
@@ -125,7 +130,7 @@
     <div class="brand">
       <div class="logo">📖</div>
       <h1>幻想域设定集</h1>
-      <p>请输入远程访问码</p>
+      <p>请输入访问码</p>
     </div>
 
     <div class="card" id="card">
@@ -140,10 +145,12 @@
           autocapitalize="off"
           autocorrect="off"
           spellcheck="false"
-          placeholder="请输入远程访问码"
+          placeholder="请输入访问码"
         >
         <button class="eye" id="eye" type="button" aria-label="显示或隐藏访问码">👁️</button>
       </div>
+
+      <div class="login-tip">👀 用访客码进来的话是只读模式：能看，但改什么都不保存</div>
 
       <button class="btn-login" id="btn">进 入 系 统</button>
       <div class="error" id="err">访问码不对，再试一次</div>
@@ -258,5 +265,23 @@
       setTimeout(() => { pwdInput.focus(); }, 250);
     });
   </script>
+
+<script>
+// 👀 记录登录角色（访客 = 只读），供后台顶栏判断
+try {
+  const _fetch = window.fetch;
+  window.fetch = async function (...args) {
+    const res = await _fetch.apply(this, args);
+    try {
+      if (String(args[0]).indexOf('/auth/login') > -1) {
+        const clone = res.clone();
+        const d = await clone.json();
+        localStorage.setItem('mw_role', d && d.role === 'guest' ? 'guest' : 'admin');
+      }
+    } catch (e) {}
+    return res;
+  };
+} catch (e) {}
+</script>
 </body>
 </html>

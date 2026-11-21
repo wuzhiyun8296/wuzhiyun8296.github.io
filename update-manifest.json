@@ -1,12 +1,12 @@
 {
-  "version": "20261121-120450",
-  "count": 66,
-  "totalBytes": 1279589,
+  "version": "20261121-153433",
+  "count": 67,
+  "totalBytes": 1292293,
   "files": [
     {
       "path": "admin.html",
-      "size": 75002,
-      "sha256": "ce9afd4f593eef0343525412bb6a75948ad7948f0d55d4e3feded2147269f4e4"
+      "size": 77015,
+      "sha256": "0ec96f225762444f8908e66593c553c9d95fafc03864161f8f3128dd999c6205"
     },
     {
       "path": "announcement.json",
@@ -30,13 +30,18 @@
     },
     {
       "path": "login.html",
-      "size": 9702,
-      "sha256": "445f7f8acb26b127532331eb618b6d370ea2117a412981e0d426df4692d1ebf6"
+      "size": 10542,
+      "sha256": "ecf49fc8ace99f443310c77ddbaaceba76766a7668005e194619dcec42969b0e"
     },
     {
       "path": "package.json",
       "size": 822,
       "sha256": "a48b13e8e59d4de9b8e40654286f216c78b6af7262349c23c3b18de6cfbaeaa5"
+    },
+    {
+      "path": "plugin/_guest-guard.js",
+      "size": 7669,
+      "sha256": "38347f8b076d8cc813467c685c289c3c53348728359150e16e8c3ea43289ebce"
     },
     {
       "path": "plugin/audit.html",
@@ -70,8 +75,8 @@
     },
     {
       "path": "plugin/firewall.html",
-      "size": 30910,
-      "sha256": "a2ae95df1afe4339c652348b37a03ad0633a6d1eea240cd3fc7def9a19f5b934"
+      "size": 30992,
+      "sha256": "6e7fbe28f95f8da288f9ee4aadd750f29ec72a3b4abeb83c0d47d5bff77380ed"
     },
     {
       "path": "plugin/github.html",
@@ -135,8 +140,8 @@
     },
     {
       "path": "plugin/tech-tree.html",
-      "size": 59184,
-      "sha256": "bd50282fdbf2c9b43704ba0e2e64991f015aef0bea43ff345a887c16237d7303"
+      "size": 59254,
+      "sha256": "7a99e333d78bde3e35aaf3daa944b60cfd81348d8729213bc84cca577dda80e6"
     },
     {
       "path": "plugin/timeline.html",
@@ -165,8 +170,8 @@
     },
     {
       "path": "server.js",
-      "size": 245878,
-      "sha256": "76429abc55c4ba658ce5bde87b9b9d080f54767a7ec37f4259051b80185df397"
+      "size": 247884,
+      "sha256": "a8fe14406b2878ef86e0fde4691eea164a91cb1cc17dfa943cea880bcbf27305"
     },
     {
       "path": "start.bat",
@@ -185,8 +190,8 @@
     },
     {
       "path": "version.json",
-      "size": 110,
-      "sha256": "1edeab4ca2e262e623b6de5c3814e4e5150eadd92e40263219e081eadc6bd7db"
+      "size": 122,
+      "sha256": "2edba01a62e55d4728ea584efb9757004d2917b197fc513d7779af42e342040b"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -305,8 +310,8 @@
     },
     {
       "path": "website/docs/public/site-notice.json",
-      "size": 147,
-      "sha256": "0417c7cfbd13c54fbd865cf42bf1b622c83702be4e442bc50151896ac6fc1c0d"
+      "size": 159,
+      "sha256": "44fa34d9e5d44bccd81f8d7f5988885e6b5b36572d1ba2c36392277c11439279"
     },
     {
       "path": "website/docs/tech-tree.md",

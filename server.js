@@ -172,6 +172,34 @@ app.use((req, res, next) => {
   next();
 });
 
+// ================= 👀 访客只读守卫（注入到每个插件页面） =================
+// 为什么在服务端注入：插件有 20 多个，逐个改不现实；
+// 在返回 HTML 时统一塞一个脚本，访客一进来就锁定「只读」
+app.use('/plugin', async (req, res, next) => {
+  try {
+    if (!/\.html$/i.test(req.path)) return next();
+    if (req.path.indexOf('_guest-guard') > -1) return next();
+    const rel = decodeURIComponent(req.path).replace(/^\/+/, '');
+    const file = path.join(__dirname, 'plugin', rel);
+    if (!file.startsWith(path.join(__dirname, 'plugin'))) return next();
+    if (!fs.existsSync(file)) return next();
+    let html = await fs.readFile(file, 'utf-8');
+    if (html.indexOf('_guest-guard.js') === -1) {
+      // 💡 直接把「是不是访客」写进页面：插件不用再等一次请求才知道
+      const isGuestReq = !firewallConfig.localOnly && isAuthed(req) && sessionRole(req) === 'guest';
+      const tag = '<script>window.__DSH_GUEST__=' + (isGuestReq ? 'true' : 'false') + ';</script>\n'
+        + '<script src="/plugin/_guest-guard.js"></script>';
+      html = html.indexOf('</head>') > -1
+        ? html.replace('</head>', tag + '\n</head>')
+        : tag + '\n' + html;
+    }
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    return res.type('html').send(html);
+  } catch (e) {
+    return next();
+  }
+});
+
 app.use(express.static(__dirname, {
   // 💡 HTML/JS 一律不缓存：更新后刷新就能用上新代码，不会被浏览器旧缓存坑
   setHeaders(res, filePath) {
@@ -3656,7 +3684,9 @@ app.get('/api/auth/status', (req, res) => {
   res.json({
     required: !firewallConfig.localOnly,
     authed: firewallConfig.localOnly ? true : isAuthed(req),
-    hasPassword: !!firewallConfig.remotePassHash
+    hasPassword: !!firewallConfig.remotePassHash,
+    // 👀 本机 = 主人；访客码登录的 = guest（只读）
+    role: firewallConfig.localOnly ? 'admin' : (isAuthed(req) ? sessionRole(req) : '')
   });
 });
 
@@ -3670,20 +3700,23 @@ app.post('/api/auth/login', (req, res) => {
   }
 
   const cfg = firewallConfig;
-  if (!cfg.remotePassHash) {
-    return res.status(400).json({ error: '还没设置远程访问码，请在本机「防火墙」页面设置' });
-  }
-  const pw = String((req.body && req.body.password) || '');
-  if (!pw) return res.status(400).json({ error: '请输入远程访问码' });
+  const pw = String((req.body && req.body.password) || '').trim();
+  if (!pw) return res.status(400).json({ error: '请输入访问码' });
 
   // 👀 访客码：只读，能看不能改
-  const guestCode = String(cfg.guestCode || '');
+  //    ⚠️ 必须放在「是否设了远程访问码」之前判断：
+  //       只发访客码、没设主人访问码的情况也要能进
+  const guestCode = String(cfg.guestCode || '').trim();
   if (guestCode && pw === guestCode) {
     AUTH_FAILS.delete(ip);
     const token = crypto.randomBytes(24).toString('hex');
     AUTH_SESSIONS.set(token, { expire: now + AUTH_TTL_MS, role: 'guest' });
     res.setHeader('Set-Cookie', `mw_auth=${token}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${AUTH_TTL_MS / 1000}`);
     return res.json({ success: true, role: 'guest' });
+  }
+
+  if (!cfg.remotePassHash) {
+    return res.status(400).json({ error: '还没设置远程访问码，请在本机「防火墙」页面设置' });
   }
 
   if (hashRemotePassword(pw) !== cfg.remotePassHash) {
@@ -4303,12 +4336,12 @@ app.post('/api/firewall/config', async (req, res) => {
   try {
     const body = req.body || {};
     // 💡 保留已有字段（remotePassHash 等），否则保存开关会把访问码清掉
-    const next = {
-      ...firewallConfig,
-      localOnly: !!body.localOnly,
-      strictCors: body.strictCors !== false,
-      logRequests: body.logRequests !== false
-    };
+    // 💡 只更新「这次真的传了」的字段：
+    //    以前保存访客码时只传 {guestCode}，会把 localOnly 变成 false —— 等于悄悄开了局域网访问
+    const next = { ...firewallConfig };
+    if (body.localOnly !== undefined) next.localOnly = !!body.localOnly;
+    if (body.strictCors !== undefined) next.strictCors = body.strictCors !== false;
+    if (body.logRequests !== undefined) next.logRequests = body.logRequests !== false;
     // 👀 访客只读码：显式传了才改（空字符串 = 关闭访客访问）
     if (body.guestCode !== undefined) next.guestCode = String(body.guestCode || '').trim();
     firewallConfig = next;

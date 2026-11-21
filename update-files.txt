@@ -5,6 +5,7 @@ lib/zip.js
 loading.html
 login.html
 package.json
+plugin/_guest-guard.js
 plugin/audit.html
 plugin/backup.html
 plugin/characters.html
