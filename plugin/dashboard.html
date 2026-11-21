@@ -29,7 +29,7 @@
     /* 普通状态 */
     .notice-board.normal { background: #252526; border: 1px solid #333; border-left: 4px solid #0e639c; }
     .notice-board.normal h2 { color: #fff; font-size: 16px; margin: 0 0 8px 0; }
-    .notice-board.normal .notice-text { color: #d29922; font-size: 15px; font-weight: bold; margin-bottom: 10px; }
+    .notice-board.normal .notice-text { color: #d29922; font-size: 15px; font-weight: bold; margin-bottom: 10px; white-space: pre-wrap; word-break: break-word; }
     .notice-board.normal .progress-info { color: #888; font-size: 13px; display: flex; align-items: center; gap: 15px; }
     /* 📣 独立公告块 */
     .announce {
@@ -203,7 +203,7 @@
       body { padding: 12px 12px 28px; }
       .panel-inner { max-width: 100%; }
       .notice-board { padding: 14px; margin-bottom: 18px; flex-direction: column; align-items: stretch; }
-      .notice-board.normal .notice-text { font-size: 14px; line-height: 1.6; }
+      .notice-board.normal .notice-text { font-size: 14px; line-height: 1.6; white-space: pre-wrap; }
       .progress-info { flex-wrap: wrap; gap: 8px !important; font-size: 12px !important; }
       .version-line { gap: 8px; font-size: 12px; }
       .author-line { font-size: 11.5px; line-height: 1.8; }
@@ -475,24 +475,34 @@
         const pushNotice = ref(null);   // site-notice.json：本机刚推送写完的说明
         const versionInfo = ref(null);  // version.json：随更新下发，含 note（更新说明）
 
-        // 更新说明优先级：本机推送 > 随更新下发的 version.json.note > 手写系统提示
-        const noticeText = computed(() => {
-          if (pushNotice.value && pushNotice.value.text) return pushNotice.value.text;
-          if (versionInfo.value && versionInfo.value.note) return versionInfo.value.note;
-          return '';
+        // 更新说明：两个来源取「更新的那个」
+        //   ① site-notice.json（本机刚推送写的）
+        //   ② version.json.note（随更新包下发，客户端更新后就有了）
+        // 💡 以前是 site-notice 无条件优先，导致客户端拿到新的 version.json.note 也显示旧说明
+        const noticeSource = computed(() => {
+          const a = (pushNotice.value && pushNotice.value.text)
+            ? { text: pushNotice.value.text, at: pushNotice.value.at || '', version: pushNotice.value.version || '', from: 'notice' }
+            : null;
+          const b = (versionInfo.value && versionInfo.value.note)
+            ? { text: versionInfo.value.note, at: versionInfo.value.pushedAt || '', version: versionInfo.value.id || '', from: 'version' }
+            : null;
+          if (a && b) {
+            const ta = Date.parse(a.at) || 0;
+            const tb = Date.parse(b.at) || 0;
+            return ta >= tb ? a : b;
+          }
+          return a || b || null;
         });
-        const noticeFromUpdate = computed(() => !!(
-          (pushNotice.value && pushNotice.value.text) ||
-          (versionInfo.value && versionInfo.value.note)
-        ));
+        const noticeText = computed(() => (noticeSource.value ? String(noticeSource.value.text || '').trim() : ''));
+        const noticeFromUpdate = computed(() => !!noticeText.value);
         const noticeMeta = computed(() => {
-          const src = (pushNotice.value && pushNotice.value.text) ? pushNotice.value : versionInfo.value;
+          const src = noticeSource.value;
           if (!src) return '';
-          const ver = src.version || src.id || '';
-          const at = src.at || src.pushedAt || '';
-          const time = at ? formatNoticeTime(at) : '';
+          const ver = src.version || '';
+          const time = src.at ? formatNoticeTime(src.at) : '';
+          const from = src.from === 'version' ? '随更新下发' : '本机推送';
           if (!ver && !time) return '';
-          return [ver ? '· v' + ver : '', time ? '· ' + time : ''].filter(Boolean).join(' ');
+          return [ver ? '· v' + ver : '', time ? '· ' + time : '', '· ' + from].filter(Boolean).join(' ');
         });
 
         const formatNoticeTime = (iso) => {

@@ -1,7 +1,7 @@
 {
-  "version": "20261121-115816",
-  "count": 65,
-  "totalBytes": 1277710,
+  "version": "20261121-120450",
+  "count": 66,
+  "totalBytes": 1279589,
   "files": [
     {
       "path": "admin.html",
@@ -55,8 +55,8 @@
     },
     {
       "path": "plugin/dashboard.html",
-      "size": 39759,
-      "sha256": "ff685dd1eb82686a81e8971fc7bb0943e1ae845ed8f0945b3c054edf1a219089"
+      "size": 40490,
+      "sha256": "a76fb8dd75c804211db3d0fa54ea4fd78e5b8af6d88a04c8b5566e4b7169e28d"
     },
     {
       "path": "plugin/epoch-map.html",
@@ -165,8 +165,8 @@
     },
     {
       "path": "server.js",
-      "size": 244874,
-      "sha256": "dce254e4df9e2822d7b480e59d687ea8401aff0fcf3a8b61b4837ed55962b07f"
+      "size": 245878,
+      "sha256": "76429abc55c4ba658ce5bde87b9b9d080f54767a7ec37f4259051b80185df397"
     },
     {
       "path": "start.bat",
@@ -185,8 +185,8 @@
     },
     {
       "path": "version.json",
-      "size": 113,
-      "sha256": "b214bf5a6f930cffeba91c75d79bc0d8929db5a9de88ca6949c93bd734b3569e"
+      "size": 110,
+      "sha256": "1edeab4ca2e262e623b6de5c3814e4e5150eadd92e40263219e081eadc6bd7db"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -302,6 +302,11 @@
       "path": "website/docs/novel/index.md",
       "size": 153,
       "sha256": "965698d81248c3e91394a0dc233fb9f17e343c87b138f9b8a63b23a1c5916870"
+    },
+    {
+      "path": "website/docs/public/site-notice.json",
+      "size": 147,
+      "sha256": "0417c7cfbd13c54fbd865cf42bf1b622c83702be4e442bc50151896ac6fc1c0d"
     },
     {
       "path": "website/docs/tech-tree.md",

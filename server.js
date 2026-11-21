@@ -2699,6 +2699,23 @@ client_error.log
     }
     try {
       await fs.writeJson(VERSION_FILE, versionInfo, { spaces: 2 });
+
+      // 📢 更新说明要「跟着这次提交走」：必须在 git add 之前写
+      //    （以前写在 git add 之后，导致仓库里的 site-notice 永远落后一版）
+      try {
+        await fs.ensureDir(PUBLIC_DIR);
+        await fs.writeJson(path.join(PUBLIC_DIR, 'site-notice.json'), {
+          text: updateNote,
+          type: 'info',
+          source: 'push',
+          version: versionInfo.id,
+          at: versionInfo.pushedAt
+        }, { spaces: 2 });
+        logs.push('> 更新说明已写入首页提示\n');
+      } catch (e) {
+        logs.push(`> 更新说明写入失败（不影响推送）: ${e.message}\n`);
+      }
+
       logs.push(`> 版本特征码: ${versionInfo.id}${shouldBumpVersion ? '（已发布新版本）' : '（作者自用，未发布新版本）'}\n`);
     } catch (e) {
       logs.push(`> 版本特征码写入失败（不影响推送）: ${e.message}\n`);
@@ -5088,6 +5105,10 @@ async function collectUpdateFiles() {
     if (p.indexOf('node_modules/') > -1) return true;
     if (p.indexOf('website/.vitepress/cache') === 0) return true;
     if (p.indexOf('website/.vitepress/dist') === 0) return true;
+    // 📢 首页提示（更新说明）要能下发到客户端，否则推送时写的说明只有本机看得到
+    //    ⚠️ 目录本身要放行，否则 walk 根本不进 public/，文件级例外永远走不到
+    if (p === 'website/docs/public') return false;
+    if (p === 'website/docs/public/site-notice.json') return false;
     if (p.indexOf('website/docs/public/') === 0) return true;
     if (p.indexOf('website/docs/novel/chapters/') === 0) return true;
     // 💡 小说「页面壳子」属于程序，要随更新下发（正文 chapters 才是个人的）
