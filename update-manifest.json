@@ -1,12 +1,12 @@
 {
-  "version": "20261121-000325",
-  "count": 61,
-  "totalBytes": 1095503,
+  "version": "20261121-115104",
+  "count": 65,
+  "totalBytes": 1277854,
   "files": [
     {
       "path": "admin.html",
-      "size": 70603,
-      "sha256": "43a0d889ef6e38d74289b2dcba8891949a52ad7a6b3bec6e863c3e352271cc71"
+      "size": 75002,
+      "sha256": "ce9afd4f593eef0343525412bb6a75948ad7948f0d55d4e3feded2147269f4e4"
     },
     {
       "path": "announcement.json",
@@ -115,8 +115,8 @@
     },
     {
       "path": "plugin/plugin-builder.html",
-      "size": 47397,
-      "sha256": "425ba788385ff1f31602b042fda4299bc8b572372f3fc8217dda105437727cf6"
+      "size": 49208,
+      "sha256": "c227cfc85e15946435552ca5828a7a32f3b1f9163d5913afe920ae680ba5e20e"
     },
     {
       "path": "plugin/protection.html",
@@ -127,6 +127,16 @@
       "path": "plugin/screenplay.html",
       "size": 23402,
       "sha256": "09202fb75297dae0b62cfecb9f4f2da3caac7dee3ab9acf14c38b79970764528"
+    },
+    {
+      "path": "plugin/tech-data.js",
+      "size": 90745,
+      "sha256": "5ccc6eb4612947f63257c7af7fe8cbfb0020e04444c3d262bafef3bae853dd89"
+    },
+    {
+      "path": "plugin/tech-tree.html",
+      "size": 59184,
+      "sha256": "bd50282fdbf2c9b43704ba0e2e64991f015aef0bea43ff345a887c16237d7303"
     },
     {
       "path": "plugin/timeline.html",
@@ -145,8 +155,8 @@
     },
     {
       "path": "plugin/writer.html",
-      "size": 54685,
-      "sha256": "776821d8757b220c79f06c474303ebb7915b11b997f6cc159d74a097e0d33e7b"
+      "size": 54544,
+      "sha256": "817cac1da823cfea1faaa256c555ecc99168784698ffa2d0196bb5ab825917b0"
     },
     {
       "path": "restart.vbs",
@@ -155,8 +165,8 @@
     },
     {
       "path": "server.js",
-      "size": 233429,
-      "sha256": "5f79ebd600352f150702c04c65737a3a519b88d17aa8608ea4296b1faf000a60"
+      "size": 244874,
+      "sha256": "dce254e4df9e2822d7b480e59d687ea8401aff0fcf3a8b61b4837ed55962b07f"
     },
     {
       "path": "start.bat",
@@ -175,8 +185,8 @@
     },
     {
       "path": "version.json",
-      "size": 107,
-      "sha256": "ccc4948ecbfce1363e9dd84288170480c6a3a4cc57c0532e99a3b7edf3464285"
+      "size": 279,
+      "sha256": "57f7059de36d7b7f00c8591169704f2a66fa661961f4cd96bad5f6822549d5c1"
     },
     {
       "path": "website/.vitepress/config.mjs",
@@ -200,8 +210,8 @@
     },
     {
       "path": "website/.vitepress/theme/components/NavCards.vue",
-      "size": 2650,
-      "sha256": "d953aba342e7d1ee8bb61e571a987fd7b7951580693e60aa75ecb97a503d8881"
+      "size": 2926,
+      "sha256": "552131b07c2cd6db15de3e5ef9d34bd748c1d6af659bb3324b3bdc108f1584e0"
     },
     {
       "path": "website/.vitepress/theme/custom.css",
@@ -225,8 +235,13 @@
     },
     {
       "path": "website/docs/components/NavCards.vue",
-      "size": 2977,
-      "sha256": "615034f2ceff3c9205eafe7168920c3e5c3fc67cfabb6abfc914c3a0875d413f"
+      "size": 3253,
+      "sha256": "f684e8944570c7b0e9e255e5e9063d8e9e8b14d466fbd4ddda226ec6ceb9c65b"
+    },
+    {
+      "path": "website/docs/components/TechBoard.vue",
+      "size": 14006,
+      "sha256": "506bbd55a027055b9ffd97b530e275326a6e3c363c19fd628ed82bbe84f2a7eb"
     },
     {
       "path": "website/docs/components/TreeNode.vue",
@@ -297,6 +312,11 @@
       "path": "website/docs/world-navigation.md",
       "size": 278,
       "sha256": "62587d3b8707f470f96e3e8010113778f6915cf82f988834a534224c0d63728b"
+    },
+    {
+      "path": "website/docs/科技树.md",
+      "size": 178,
+      "sha256": "25627185bd1d666836ac6aa76a3aec4de7956f30401a9b771d427e50e2814de0"
     },
     {
       "path": "安装与更新.bat",

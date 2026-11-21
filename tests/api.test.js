@@ -138,3 +138,29 @@ test('前端错误上报接口不崩', async () => {
   assert.equal(r.status, 200);
   assert.equal(r.json.ok, true);
 });
+
+test('科技树进度可读写', async () => {
+  const before = JSON.parse((await get('/api/tech/progress')).body);
+  assert.equal(before.success, true);
+
+  const w = await postJson('/api/tech/progress', { progress: { fire: true } });
+  assert.equal(w.json.success, true);
+
+  const after = JSON.parse((await get('/api/tech/progress')).body);
+  assert.equal(after.progress.fire, true);
+
+  await postJson('/api/tech/progress', { progress: before.progress || {} });   // 还原
+});
+
+test('科技树自定义数据可读写', async () => {
+  const before = JSON.parse((await get('/api/tech/data')).body);
+  assert.equal(before.success, true);
+
+  const w = await postJson('/api/tech/data', { custom: { standard: [{ id: 'test_era', name: '测试纪元', nodes: [] }] }, routeId: 'standard' });
+  assert.equal(w.json.success, true);
+
+  const after = JSON.parse((await get('/api/tech/data')).body);
+  assert.ok(Array.isArray(after.custom.standard));
+
+  await postJson('/api/tech/data', { custom: before.custom || {}, routeId: before.routeId || '' });   // 还原
+});

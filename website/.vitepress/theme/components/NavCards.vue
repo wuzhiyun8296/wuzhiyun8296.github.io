@@ -56,6 +56,17 @@
         <p>拖动时间轴滑块，动态查看各大势力版图的扩张与覆灭。</p>
       </div>
     </a>
+
+    <a href="/科技树" class="nav-card">
+      <div class="nav-icon">🌳</div>
+      <div class="nav-content">
+        <h3>科技树</h3>
+        <p>看看你现在走到哪个时代、完成了哪些科技、分别是什么时候完成的。</p>
+      </div>
+    </a>
+
+
+
   </div>
 </template>
 

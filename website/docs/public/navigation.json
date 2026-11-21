@@ -4,11 +4,14 @@
     "title": "插件工厂",
     "icon": "🏭",
     "desc": "自定义",
-    "link": "#",
+    "link": "/plugin-builder",
     "isSystem": true,
+    "isBackendOnly": false,
+    "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "scope": "admin"
+    "featured": true,
+    "group": "system"
   },
   {
     "id": "graph",
@@ -21,7 +24,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "characters",
@@ -34,7 +38,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "finance",
@@ -47,7 +52,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "system"
   },
   {
     "id": "map",
@@ -60,7 +66,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "epoch-map",
@@ -73,7 +80,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "history",
@@ -86,7 +94,8 @@
     "scope": "both",
     "hideBackend": false,
     "hideFrontend": false,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "plotline",
@@ -99,7 +108,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "timeline",
@@ -112,7 +122,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "world-tree",
@@ -125,7 +136,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "world"
   },
   {
     "id": "dashboard",
@@ -138,7 +150,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "system"
   },
   {
     "id": "writer",
@@ -151,7 +164,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "article",
@@ -164,7 +178,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "audit",
@@ -177,7 +192,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "safety"
   },
   {
     "id": "protection",
@@ -190,7 +206,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "safety"
   },
   {
     "id": "home-editor",
@@ -203,7 +220,8 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "publish"
   },
   {
     "id": "github",
@@ -216,63 +234,105 @@
     "scope": "admin",
     "hideBackend": false,
     "hideFrontend": true,
-    "featured": true
+    "featured": true,
+    "group": "publish"
   },
   {
     "id": "novel",
     "title": "小说书架",
-    "desc": "阅读你写下的故事。",
     "icon": "📖",
+    "desc": "阅读你写下的故事。",
     "link": "/novel/",
     "isSystem": true,
+    "isBackendOnly": false,
     "scope": "site",
     "hideBackend": true,
-    "hideFrontend": false
+    "hideFrontend": false,
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "firewall",
     "title": "防火墙",
-    "desc": "控制谁能访问这台电脑上的服务。",
     "icon": "🛡️",
+    "desc": "控制谁能访问这台电脑上的服务。",
     "link": "/firewall",
     "isSystem": true,
+    "isBackendOnly": false,
     "scope": "admin",
     "hideBackend": false,
-    "hideFrontend": true
+    "hideFrontend": true,
+    "featured": true,
+    "group": "safety"
   },
   {
     "id": "backup",
     "title": "数据安全",
-    "desc": "自动注册的插件",
     "icon": "🛟",
-    "link": "#",
+    "desc": "自动注册的插件",
+    "link": "/backup",
     "isSystem": true,
-    "hideFrontend": true,
+    "isBackendOnly": false,
+    "scope": "admin",
     "hideBackend": false,
-    "autoRegistered": true,
-    "scope": "admin"
+    "hideFrontend": true,
+    "featured": true,
+    "group": "safety"
   },
   {
     "id": "screenplay",
     "title": "剧本写作",
-    "desc": "自动注册的插件",
     "icon": "🎬",
-    "link": "#",
+    "desc": "自动注册的插件",
+    "link": "/screenplay",
     "isSystem": true,
-    "hideFrontend": true,
+    "isBackendOnly": false,
+    "scope": "admin",
     "hideBackend": false,
-    "autoRegistered": true,
-    "scope": "admin"
+    "hideFrontend": true,
+    "featured": true,
+    "group": "write"
   },
   {
     "id": "writer-preview",
     "title": "沉浸写书",
-    "desc": "自动注册的插件",
     "icon": "🧩",
-    "link": "#",
+    "desc": "自动注册的插件",
+    "link": "/writer-preview",
     "isSystem": false,
-    "hideFrontend": true,
+    "isBackendOnly": false,
+    "scope": "admin",
     "hideBackend": false,
-    "autoRegistered": true
+    "hideFrontend": true,
+    "featured": true,
+    "group": "write"
+  },
+  {
+    "id": "tech-tree",
+    "title": "科技树",
+    "icon": "🌳",
+    "desc": "自动注册的插件",
+    "link": "/tech-tree",
+    "isSystem": true,
+    "isBackendOnly": false,
+    "scope": "admin",
+    "hideBackend": false,
+    "hideFrontend": true,
+    "featured": true,
+    "group": "world"
+  },
+  {
+    "id": "pb-preview",
+    "title": "插件工厂 & 管理器",
+    "icon": "🧩",
+    "desc": "自动注册的插件",
+    "link": "/pb-preview",
+    "isSystem": false,
+    "isBackendOnly": false,
+    "scope": "admin",
+    "hideBackend": false,
+    "hideFrontend": true,
+    "featured": true,
+    "group": "system"
   }
 ]

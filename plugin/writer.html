@@ -514,12 +514,11 @@
         };
 
         const books = computed(() => {
-          // 💡 不再隐藏剧本/导入目录：它们也是 library 里的文件夹，
-          //    只是界面上区分一下（图标不同、不显示"一键导出本书"）
-          const OTHER = new Set(['剧本', '导入', '素材', '设定集', '设定']);
-          return libraryTree.value
-            .filter((item) => item.type === 'folder' && !item.name.startsWith('_'))
-            .map((item) => ({ ...item, isOther: OTHER.has(item.name) }));
+          // 剧本 / 导入 是别的模块的目录，不在小说书架上显示
+          const HIDE = new Set(['剧本', '导入', '素材', '设定集', '设定']);
+          return libraryTree.value.filter(
+            (item) => item.type === 'folder' && !HIDE.has(item.name) && !item.name.startsWith('_')
+          );
         });
 
         // 🗑 删除整本书（进回收站，可还原）

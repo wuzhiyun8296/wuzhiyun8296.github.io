@@ -3343,6 +3343,7 @@ const systemPluginMap = {
   'plugin-builder': { name: '插件工厂', icon: '🏭' },
   'firewall': { name: '防火墙', icon: '🛡️' },
   'backup': { name: '数据安全', icon: '🛟' },
+  'tech-tree': { name: '科技树', icon: '🌳' },
   'screenplay': { name: '剧本写作', icon: '🎬' },
   'diagnostic': { name: '环境检测', icon: '🩺' },
   'article': { name: '文章编辑', icon: '📝' }
@@ -3851,6 +3852,249 @@ app.get('/api/announcement', async (req, res) => {
 });
 
 // 📢 本机发布公告（改本地文件，随后由推送页发出去）
+// ================= 🌳 科技树 =================
+// ================= 🌳 科技树（多世界） =================
+// 目录结构：
+//   library/科技树/worlds.json        ← 世界清单（名字 + 关联书籍）
+//   library/科技树/<世界>/进度.json    ← 这个世界里点了哪些科技
+//   library/科技树/<世界>/数据.json    ← 这个世界选的路线 / 自定义时代
+const TECH_DIR = path.join(LIBRARY_DIR, '科技树');
+const TECH_WORLDS_FILE = path.join(TECH_DIR, 'worlds.json');
+const DEFAULT_WORLD_ID = 'default';
+
+function techWorldDir(worldId) {
+  const id = String(worldId || DEFAULT_WORLD_ID).replace(/[\\/:*?"<>|.]/g, '-');
+  return path.join(TECH_DIR, id);
+}
+
+async function loadTechWorlds() {
+  await fs.ensureDir(TECH_DIR);
+  let doc = null;
+  if (fs.existsSync(TECH_WORLDS_FILE)) {
+    try { doc = await fs.readJson(TECH_WORLDS_FILE); } catch (e) { doc = null; }
+  }
+  if (!doc || !Array.isArray(doc.worlds) || !doc.worlds.length) {
+    doc = {
+      worlds: [{ id: DEFAULT_WORLD_ID, name: '默认世界', books: [], createdAt: new Date().toISOString() }],
+      current: DEFAULT_WORLD_ID
+    };
+    await fs.writeJson(TECH_WORLDS_FILE, doc, { spaces: 2 });
+  }
+  return doc;
+}
+
+async function saveTechWorlds(doc) {
+  await fs.ensureDir(TECH_DIR);
+  await fs.writeJson(TECH_WORLDS_FILE, doc, { spaces: 2 });
+}
+
+// 旧版单文件 → 迁移到「默认世界」
+async function migrateTechLegacy() {
+  const oldProgress = path.join(TECH_DIR, '进度.json');
+  const oldData = path.join(TECH_DIR, '数据.json');
+  const dir = techWorldDir(DEFAULT_WORLD_ID);
+  if (fs.existsSync(oldProgress) || fs.existsSync(oldData)) {
+    await fs.ensureDir(dir);
+    if (fs.existsSync(oldProgress) && !fs.existsSync(path.join(dir, '进度.json'))) {
+      await fs.move(oldProgress, path.join(dir, '进度.json'), { overwrite: true });
+      console.log('[tech] 旧进度已迁移到「默认世界」');
+    }
+    if (fs.existsSync(oldData) && !fs.existsSync(path.join(dir, '数据.json'))) {
+      await fs.move(oldData, path.join(dir, '数据.json'), { overwrite: true });
+      console.log('[tech] 旧数据已迁移到「默认世界」');
+    }
+  }
+}
+
+// 世界列表
+app.get('/api/tech/worlds', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const doc = await loadTechWorlds();
+    res.json({ success: true, worlds: doc.worlds, current: doc.current || doc.worlds[0].id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message, worlds: [], current: '' });
+  }
+});
+
+// 新建 / 改名 / 关联书籍 / 删除 / 设为当前
+app.post('/api/tech/worlds', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const doc = await loadTechWorlds();
+    const body = req.body || {};
+    const action = String(body.action || 'create');
+
+    if (action === 'create') {
+      const name = String(body.name || '').trim() || '未命名世界';
+      const id = 'w_' + Date.now().toString(36);
+      doc.worlds.push({
+        id, name,
+        books: Array.isArray(body.books) ? body.books.map(String) : [],
+        createdAt: new Date().toISOString()
+      });
+      doc.current = id;
+      await fs.ensureDir(techWorldDir(id));
+      await saveTechWorlds(doc);
+      return res.json({ success: true, worlds: doc.worlds, current: doc.current });
+    }
+
+    if (action === 'update') {
+      const w = doc.worlds.find((x) => x.id === body.id);
+      if (!w) return res.status(404).json({ success: false, error: '世界不存在' });
+      if (body.name !== undefined) w.name = String(body.name).trim() || w.name;
+      if (Array.isArray(body.books)) w.books = body.books.map(String);
+      await saveTechWorlds(doc);
+      return res.json({ success: true, worlds: doc.worlds, current: doc.current });
+    }
+
+    if (action === 'delete') {
+      const id = String(body.id || '');
+      if (id === DEFAULT_WORLD_ID) return res.status(400).json({ success: false, error: '默认世界不能删' });
+      const before = doc.worlds.length;
+      doc.worlds = doc.worlds.filter((x) => x.id !== id);
+      if (doc.worlds.length === before) return res.status(404).json({ success: false, error: '世界不存在' });
+      const dir = techWorldDir(id);
+      if (fs.existsSync(dir)) await fs.remove(dir);
+      if (doc.current === id) doc.current = doc.worlds[0].id;
+      await saveTechWorlds(doc);
+      return res.json({ success: true, worlds: doc.worlds, current: doc.current });
+    }
+
+    if (action === 'current') {
+      const id = String(body.id || '');
+      if (!doc.worlds.some((x) => x.id === id)) return res.status(404).json({ success: false, error: '世界不存在' });
+      doc.current = id;
+      await saveTechWorlds(doc);
+      return res.json({ success: true, worlds: doc.worlds, current: doc.current });
+    }
+
+    res.status(400).json({ success: false, error: '未知操作' });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 读取世界 id（?world= 或当前世界）
+async function resolveTechWorld(req) {
+  const doc = await loadTechWorlds();
+  const q = String((req.query && req.query.world) || '') || String((req.body && req.body.world) || '');
+  const id = q || doc.current || doc.worlds[0].id;
+  return { doc, id, dir: techWorldDir(id) };
+}
+
+app.get('/api/tech/progress', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const { id, dir } = await resolveTechWorld(req);
+    const file = path.join(dir, '进度.json');
+    let progress = {};
+    if (fs.existsSync(file)) {
+      const d = await fs.readJson(file);
+      progress = (d && d.progress) || {};
+    }
+    res.json({ success: true, world: id, progress });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message, progress: {} });
+  }
+});
+
+app.post('/api/tech/progress', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const { id, dir } = await resolveTechWorld(req);
+    const progress = (req.body && req.body.progress) || {};
+    if (typeof progress !== 'object') return res.status(400).json({ success: false, error: '参数不合法' });
+    await fs.ensureDir(dir);
+    await fs.writeJson(path.join(dir, '进度.json'), { progress, updatedAt: new Date().toISOString() }, { spaces: 2 });
+    res.json({ success: true, world: id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 自定义时代 / 当前路线
+app.get('/api/tech/data', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const { id, dir } = await resolveTechWorld(req);
+    const file = path.join(dir, '数据.json');
+    let d = {};
+    if (fs.existsSync(file)) d = await fs.readJson(file);
+    res.json({ success: true, world: id, custom: d.custom || {}, routeId: d.routeId || '', routeIds: d.routeIds || [] });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message, custom: {}, routeId: '' });
+  }
+});
+
+app.post('/api/tech/data', async (req, res) => {
+  try {
+    await migrateTechLegacy();
+    const { id, dir } = await resolveTechWorld(req);
+    const body = req.body || {};
+    const custom = body.custom || {};
+    const routeId = String(body.routeId || '');
+    const routeIds = Array.isArray(body.routeIds) ? body.routeIds.map(String) : [];
+    await fs.ensureDir(dir);
+    await fs.writeJson(path.join(dir, '数据.json'), { custom, routeId, routeIds, updatedAt: new Date().toISOString() }, { spaces: 2 });
+    res.json({ success: true, world: id });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 科技的目录（前台页面用：显示进度/当前路线）
+app.get('/api/tech/catalog', async (req, res) => {
+  try {
+    const dataFile = path.join(__dirname, 'plugin', 'tech-data.js');
+    if (!fs.existsSync(dataFile)) return res.status(404).json({ success: false, error: '缺少 tech-data.js' });
+    const code = fs.readFileSync(dataFile, 'utf-8');
+    const sandbox = { window: {} };
+    // 只执行数据文件（不联网、不碰文件），拿它的 window.TECH_ROUTES
+    new Function('window', code)(sandbox.window);
+    const routes = (sandbox.window.TECH_ROUTES || []).map((r) => ({
+      id: r.id,
+      name: r.name,
+      theme: r.theme,
+      themeName: r.themeName,
+      themeIcon: r.themeIcon,
+      variant: r.variant,
+      traveler: !!r.traveler,
+      eras: (r.eras || []).map((e) => ({
+        id: e.id, name: e.name, icon: e.icon, year: e.year, politics: e.politics,
+        nodes: (e.nodes || []).map((n) => ({ id: n.id, name: n.name, icon: n.icon }))
+      }))
+    }));
+    res.json({ success: true, warning: sandbox.window.TECH_WARNING || '', routes });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
+// 把科技树写成前台站点页面（VitePress 直接渲染 md）
+app.post('/api/tech/export', async (req, res) => {
+  try {
+    const name = String((req.body && req.body.name) || '科技树').slice(0, 60);
+    const markdown = String((req.body && req.body.markdown) || '');
+    if (!markdown.trim()) return res.status(400).json({ success: false, error: '内容是空的' });
+
+    // 统一放进 docs/科技树/ 目录：VitePress 侧边栏按目录自动收录
+    const safe = name.replace(/[\\/:*?"<>|]/g, '-').replace(/\.\./g, '');
+    const shortName = safe.replace(/^科技树-/, '') || safe;
+    const fileName = shortName + '.md';
+    const dir = path.join(DOCS_DIR, '科技树');
+    await fs.ensureDir(dir);
+    const full = path.join(dir, fileName);
+
+    const header = `---\ntitle: ${shortName}\n---\n\n`;
+    await fs.writeFile(full, header + markdown, 'utf-8');
+
+    res.json({ success: true, path: 'website/docs/科技树/' + fileName, file: fileName });
+  } catch (e) {
+    res.status(500).json({ success: false, error: e.message });
+  }
+});
+
 app.get('/api/announcement/default', (req, res) => {
   res.json(emptyAnnouncement());
 });
@@ -4071,10 +4315,37 @@ app.post('/api/firewall/logs/clear', (req, res) => {
 // 1. 获取导航数据
 // 💡 默认导航（含作用范围 scope）：
 //    both=共用 / site=前台专用 / admin=后端专用 / hidden=都隐藏
+// ================= 🗂️ 导航分组 =================
+// 顺序即下拉栏的显示顺序；插件工厂里可以给每个插件改分组
+const NAV_GROUPS = [
+  { id: 'write', name: '写作', icon: '✍️' },
+  { id: 'world', name: '设定', icon: '🌍' },
+  { id: 'safety', name: '安全', icon: '🛡️' },
+  { id: 'publish', name: '发布', icon: '🚀' },
+  { id: 'system', name: '系统', icon: '⚙️' }
+];
+
+// 默认分组：没写 group 的老数据按这里归类
+const NAV_GROUP_DEFAULTS = {
+  write: ['writer', 'writer-preview', 'article', 'screenplay', 'novel', 'plotline', 'timeline'],
+  world: ['world-tree', 'characters', 'graph', 'map', 'epoch-map', 'history', 'tech-tree'],
+  safety: ['firewall', 'backup', 'audit', 'protection'],
+  publish: ['github', 'home-editor'],
+  system: ['plugin-builder', 'dashboard', 'finance']
+};
+
+function groupOfNavId(id) {
+  for (const g of Object.keys(NAV_GROUP_DEFAULTS)) {
+    if (NAV_GROUP_DEFAULTS[g].includes(id)) return g;
+  }
+  return 'system';
+}
+
 function defaultNavigation() {
-  return [
+  const list = [
     { id: 'writer', title: '沉浸码字', desc: '系统内置', icon: '✍️', link: '/writer', isSystem: true, scope: 'both' },
     { id: 'backup', title: '数据安全', desc: '快照备份 / 回收站 / 历史版本', icon: '🛟', link: '/backup', isSystem: true, scope: 'admin' },
+    { id: 'tech-tree', title: '科技树', desc: '石器到信息时代，什么时候该点什么', icon: '🌳', link: '/tech-tree', isSystem: true, scope: 'admin' },
     { id: 'screenplay', title: '剧本写作', desc: '场景 / 对白 / 转场，Fountain 语法', icon: '🎬', link: '/screenplay', isSystem: true, scope: 'both' },
     { id: 'plotline', title: '剧情大纲', desc: '系统内置', icon: '🎬', link: '/plotline', isSystem: true, scope: 'both' },
     { id: 'timeline', title: '时间线', desc: '系统内置', icon: '⏳', link: '/timeline', isSystem: true, scope: 'both' },
@@ -4092,6 +4363,7 @@ function defaultNavigation() {
     { id: 'novel', title: '小说书架', desc: '阅读你写下的故事。', icon: '📖', link: '/novel/', isSystem: true, scope: 'site' },
     { id: 'firewall', title: '防火墙', desc: '控制谁能访问这台电脑上的服务。', icon: '🛡️', link: '/firewall', isSystem: true, scope: 'admin' }
   ];
+  return list.map((n) => ({ ...n, group: n.group || groupOfNavId(n.id) }));
 }
 
 // 💡 把 scope 和 hideBackend/hideFrontend 对齐（老数据只有两个布尔值，这里自动补 scope）
@@ -4108,6 +4380,11 @@ function normalizeNavScopes(list) {
     n.hideBackend = (n.scope === 'site' || n.scope === 'hidden');
     n.hideFrontend = (n.scope === 'admin' || n.scope === 'hidden');
     if (n.id === 'plugin-builder') n.hideBackend = false;   // 工厂永久常驻后台
+    // 🗂️ 分组：老数据没有 group 的按默认表归类
+    if (!n.group || !NAV_GROUPS.some((g) => g.id === n.group)) {
+      n.group = groupOfNavId(n.id);
+      changed = true;
+    }
   });
   return changed;
 }
@@ -4332,6 +4609,7 @@ app.get('/api/plugins/list', async (req, res) => {
         featured: navItem ? (navItem.featured !== false) : true,
         link: navItem ? navItem.link : undefined,
         desc: navItem ? navItem.desc : undefined,
+        group: navItem && navItem.group ? navItem.group : groupOfNavId(id),
         navIdx: navIdx >= 0 ? navIdx : 9999 // 未注册的排在最后
       };
     });
@@ -4352,6 +4630,7 @@ app.get('/api/plugins/list', async (req, res) => {
         featured: n.featured !== false,
         link: n.link,
         desc: n.desc,
+        group: n.group || groupOfNavId(n.id),
         isNavOnly: true,
         navIdx: navList.findIndex((x) => x && x.id === n.id)
       });

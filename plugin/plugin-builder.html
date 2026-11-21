@@ -82,11 +82,11 @@
     .right-panel { flex: 1.2; background: #252526; border: 1px solid #333; border-radius: 8px; display: flex; flex-direction: column; min-height: 0; }
     .panel-header { padding: 15px 20px; background: #2d2d2d; border-bottom: 1px solid #333; display: flex; justify-content: space-between; align-items: center; flex-shrink: 0; border-radius: 8px 8px 0 0; }
     .panel-header h3 { margin: 0; color: #fff; font-size: 15px; }
-    .list-header { display: grid; grid-template-columns: 30px 3fr 118px 96px 56px; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; font-weight: bold; }
+    .list-header { display: grid; grid-template-columns: 28px minmax(150px, 1fr) 110px 116px 76px 70px; padding: 10px 20px; background: #1e1e1e; border-bottom: 1px solid #333; font-size: 12px; color: #888; font-weight: bold; }
     .list-header div:nth-child(3), .list-header div:nth-child(4), .list-header div:nth-child(5) { text-align: center; }
     .list-header div:last-child { text-align: center; }
     .plugin-list { flex: 1; overflow-y: auto; padding: 10px; display: flex; flex-direction: column; gap: 8px; position: relative; }
-    .plugin-item { display: grid; grid-template-columns: 30px 3fr 118px 96px 56px; align-items: center; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px 20px; transition: border-color 0.2s, background-color 0.2s; cursor: grab; }
+    .plugin-item { display: grid; grid-template-columns: 28px minmax(150px, 1fr) 110px 116px 76px 70px; align-items: center; background: #1e1e1e; border: 1px solid #333; border-radius: 6px; padding: 12px 20px; transition: border-color 0.2s, background-color 0.2s; cursor: grab; }
     .plugin-item:active { cursor: grabbing; }
     .plugin-item:hover { border-color: #555; background: #2a2a2a; }
     .plugin-item.dragging { opacity: 0.3; }
@@ -236,6 +236,8 @@
     .dev-doc-body code { background: #141414; padding: 1px 5px; border-radius: 4px; color: #d7ba7d; }
     .dev-doc-body pre { background: #101010; border: 1px solid #2a2a2a; border-radius: 6px; padding: 10px; overflow-x: auto; font-size: 12px; color: #b8c0c8; }
     .dev-doc-body p { margin: 8px 0; }
+
+    .group-select { min-width: 104px; }
 </style>
 </head>
 <body>
@@ -388,8 +390,9 @@
         <div class="list-header">
           <div></div>
           <div>插件名称</div>
+          <div>分类</div>
           <div>作用范围</div>
-          <div>推荐到前端</div>
+          <div>推荐</div>
           <div>操作</div>
         </div>
         
@@ -422,6 +425,16 @@
                 <span class="plugin-id">ID: {{ p.id }}</span>
               </div>
               
+              <!-- 🗂️ 分组：决定它出现在后台顶部哪个下拉栏里 -->
+              <select
+                class="scope-select group-select"
+                :value="p.group || 'system'"
+                title="选择这个插件归到哪个下拉分类"
+                @change="setGroup(p, $event.target.value)"
+              >
+                <option v-for="g in GROUPS" :key="g.id" :value="g.id">{{ g.icon }} {{ g.name }}</option>
+              </select>
+
               <!-- 💡 作用范围：后端专用 / 前台专用 / 共用 / 都隐藏 -->
               <select
                 class="scope-select"
@@ -662,6 +675,35 @@ next: false
 
         // 💡 作用范围：一个 scope 字段同时推导 hideBackend / hideFrontend
         //    共用 = 前后台都出现；前台专用 = 只在网站导航；后端专用 = 只在后台菜单
+        // 🗂️ 分组
+        const GROUPS = [
+          { id: 'write', name: '写作', icon: '✍️' },
+          { id: 'world', name: '设定', icon: '🌍' },
+          { id: 'safety', name: '安全', icon: '🛡️' },
+          { id: 'publish', name: '发布', icon: '🚀' },
+          { id: 'system', name: '系统', icon: '⚙️' }
+        ];
+
+        const setGroup = async (p, gid) => {
+          try {
+            const res = await fetch(`${API_BASE}/navigation?t=${Date.now()}`);
+            const navList = await res.json();
+            const item = navList.find((n) => n.id === p.id);
+            if (!item) { showToast('这个插件还没登记到导航，先保存一次排序', true); return; }
+            item.group = gid;
+            await fetch(`${API_BASE}/navigation`, {
+              method: 'POST', headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify(navList)
+            });
+            p.group = gid;
+            const g = GROUPS.find((x) => x.id === gid);
+            showToast(`✅ ${p.name} → ${g ? g.name : gid}`);
+            notifyParent();
+          } catch (e) {
+            showToast('保存分组失败', true);
+          }
+        };
+
         const scopeOf = (p) => {
           if (p.scope === 'both' || p.scope === 'site' || p.scope === 'admin' || p.scope === 'hidden') return p.scope;
           const hb = !!p.hideBackend, hf = !!p.hideFrontend;
@@ -862,7 +904,7 @@ next: false
           }
         });
 
-        return { scopeOf, setScope, isFeatured, canFeature, setFeatured, saveOrder, savingOrder, mobileTarget, mobileExists, mobileCode, mobileSaving, mobilePrompt, loadMobile, saveMobile, deleteMobile, pluginForm, plugins, loading, copyPrompt, savePlugin, fetchPlugins, toggleStatus, deletePlugin, modal, closeModal, handleConfirm, dragIndex, dragOverIndex, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, onBackendOnlyChange };
+        return { GROUPS, setGroup, scopeOf, setScope, isFeatured, canFeature, setFeatured, saveOrder, savingOrder, mobileTarget, mobileExists, mobileCode, mobileSaving, mobilePrompt, loadMobile, saveMobile, deleteMobile, pluginForm, plugins, loading, copyPrompt, savePlugin, fetchPlugins, toggleStatus, deletePlugin, modal, closeModal, handleConfirm, dragIndex, dragOverIndex, onDragStart, onDragOver, onDragLeave, onDrop, onDragEnd, onBackendOnlyChange };
       }
     }).mount('#app');
   </script>

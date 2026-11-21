@@ -79,5 +79,16 @@
         "link": "/novel/chapters/幻想域/第15章 中间商"
       }
     ]
+  },
+  {
+    "title": "科技树",
+    "type": "folder",
+    "children": [
+      {
+        "title": "default",
+        "type": "folder",
+        "children": []
+      }
+    ]
   }
 ]

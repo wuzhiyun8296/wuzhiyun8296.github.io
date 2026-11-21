@@ -1,0 +1,1231 @@
+<!DOCTYPE html>
+<!-- 文件路径: plugin/tech-tree.html  科技树（多路线 + 政体适配 + 自定义时代） -->
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="mobile" content="ready">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>科技树</title>
+  <script src="/libs/vue/vue.global.prod.js"></script>
+  <style>
+    * { box-sizing: border-box; scrollbar-width: thin; scrollbar-color: #3c3c3c transparent; }
+    ::-webkit-scrollbar { width: 10px; height: 10px; }
+    ::-webkit-scrollbar-thumb { background: #3c3c3c; border-radius: 8px; border: 2px solid transparent; background-clip: content-box; }
+    /* 💡 改成整页滚动：往下滑时工具条和提示一起滚走，不再压住内容 */
+    html, body { min-height: 100%; overflow-x: hidden; overflow-y: auto; }
+    body { margin: 0; background: #16181c; color: #ccd0d6; font-family: 'Microsoft YaHei', system-ui, sans-serif; display: flex; }
+    #app { flex: 1; display: flex; flex-direction: column; min-height: 100vh; min-width: 0; }
+
+    /* ---------- 顶栏 ---------- */
+    .top { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; padding: 10px 16px; background: #1e2126; border-bottom: 1px solid #2c3138; flex-shrink: 0; }
+    .top h1 { font-size: 16px; margin: 0; color: #fff; }
+    .spacer { flex: 1; }
+    .search { background: #14171b; border: 1px solid #343a42; border-radius: 8px; padding: 7px 12px; color: #dfe4ea; font-size: 13px; outline: none; width: 170px; }
+    .search:focus { border-color: #0e639c; }
+    .chip { border: 1px solid #343a42; background: #14171b; color: #98a0aa; border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer; white-space: nowrap; }
+    .chip.on { background: rgba(14,99,156,.28); border-color: #0e639c; color: #cfe6f7; }
+    .chip:hover { border-color: #4a525c; }
+    .chip.gold.on { background: rgba(210,153,34,.22); border-color: #d29922; color: #f0d08a; }
+
+    /* ---------- 路线切换 ---------- */
+    .routes { display: flex; gap: 8px; flex-wrap: wrap; padding: 10px 16px; background: #191c21; border-bottom: 1px solid #242a31; flex-shrink: 0; }
+    .route-tab { display: flex; align-items: center; gap: 7px; border: 1px solid #2f353d; background: #1e2126; border-radius: 10px; padding: 8px 14px; cursor: pointer; transition: .15s; }
+    .route-tab:hover { border-color: #4a525c; }
+    .route-tab.on { border-color: #0e639c; background: rgba(14,99,156,.16); }
+    .route-tab .rt-name { font-size: 13px; color: #e2e7ee; }
+    .route-tab .rt-desc { font-size: 11px; color: #6f7681; margin-top: 1px; }
+    .progress-wrap { width: 140px; }
+    .progress-bar { height: 6px; background: #14171b; border-radius: 99px; overflow: hidden; }
+    .progress-bar > div { height: 100%; background: linear-gradient(90deg,#2f9cde,#1d6fa5); transition: width .3s; }
+    .progress-text { font-size: 11px; color: #6f7681; margin-top: 3px; }
+
+    /* ---------- 主体 ---------- */
+    .main { flex: 1; display: flex; overflow: visible; align-items: flex-start; }
+    .board { flex: 1; min-width: 0; overflow-x: auto; overflow-y: visible; padding: 14px; display: flex; gap: 12px; align-items: flex-start; }
+    .era-col { flex: 0 0 232px; display: flex; flex-direction: column; gap: 8px; background: #1a1d22; border: 1px solid #262b31; border-radius: 12px; padding: 11px; }
+    .era-head { padding-bottom: 8px; border-bottom: 1px solid #262b31; margin-bottom: 3px; }
+    .era-name { font-size: 14px; color: #fff; font-weight: 600; }
+    .era-year { font-size: 11.5px; color: #6f7681; margin-top: 2px; }
+    .era-meta { font-size: 11px; color: #5f6772; margin-top: 4px; }
+    .era-pol { font-size: 11px; color: #c9a227; margin-top: 3px; }
+    .era-btns { display: flex; gap: 5px; margin-top: 7px; flex-wrap: wrap; }
+
+    .node { position: relative; background: #22262c; border: 1px solid #2f353d; border-radius: 9px; padding: 9px 10px; cursor: pointer; transition: .15s; }
+    .node:hover { border-color: #4a525c; transform: translateX(2px); }
+    .node.done { border-color: #2ea043; background: rgba(46,160,67,.12); }
+    .node.done .node-name::after { content: ' ✓'; color: #4bd07a; }
+    .node.hl-pre { border-color: #d29922; box-shadow: 0 0 0 1px rgba(210,153,34,.35); }
+    .node.hl-next { border-color: #0e639c; box-shadow: 0 0 0 1px rgba(14,99,156,.35); }
+    .node.dim { opacity: .35; }
+    .node-top { display: flex; align-items: center; gap: 7px; }
+    .node-icon { font-size: 16px; }
+    .node-name { font-size: 13px; color: #e2e7ee; font-weight: 600; }
+    .node-desc { font-size: 11.5px; color: #7d848e; line-height: 1.55; margin-top: 4px; }
+    .node-need { font-size: 10.5px; color: #6f7681; margin-top: 5px; }
+    .node-need b { color: #d29922; font-weight: 500; }
+
+    /* ---------- 详情 ---------- */
+    .detail { flex: 0 0 320px; background: #1e2126; border-left: 1px solid #2c3138; padding: 16px 18px; }
+    .detail h3 { margin: 0 0 4px; font-size: 15px; color: #fff; }
+    .detail .d-era { font-size: 11.5px; color: #6f7681; margin-bottom: 10px; }
+    .detail .d-label { font-size: 11.5px; color: #6f7681; margin: 12px 0 5px; }
+    .detail .d-text { font-size: 13px; color: #b9c0c9; line-height: 1.8; }
+    .detail .d-impact { font-size: 13px; color: #f0d08a; line-height: 1.8; background: rgba(210,153,34,.08); border-left: 2px solid #d29922; padding: 7px 10px; border-radius: 0 6px 6px 0; }
+    .detail .d-chip { display: inline-block; font-size: 11.5px; padding: 3px 9px; border-radius: 999px; border: 1px solid #343a42; color: #98a0aa; margin: 0 5px 5px 0; cursor: pointer; }
+    .detail .d-chip.pre { border-color: #8a6d2f; color: #e0bb63; }
+    .detail .d-chip.next { border-color: #2f6f9e; color: #7fc4ee; }
+    .detail .d-chip:hover { filter: brightness(1.2); }
+    .detail .d-actions { display: flex; gap: 8px; margin-top: 14px; flex-wrap: wrap; }
+    .btn { border: 1px solid #343a42; background: #262a31; color: #d5dae1; border-radius: 8px; padding: 8px 14px; font-size: 13px; cursor: pointer; }
+    .btn.primary { background: rgba(46,160,67,.25); border-color: #2ea043; color: #a8e6b8; }
+    .btn:disabled { opacity: .45; cursor: not-allowed; }
+    .empty-detail { color: #6f7681; font-size: 13px; line-height: 1.9; }
+
+    /* ---------- 弹窗 ---------- */
+    .mask { position: fixed; inset: 0; background: rgba(0,0,0,.75); z-index: 900; display: flex; align-items: center; justify-content: center; padding: 20px; }
+    .modal { background: #1e2126; border: 1px solid #3a424c; border-radius: 14px; width: 640px; max-width: 94vw; max-height: 86vh; display: flex; flex-direction: column; }
+    .modal-head { padding: 14px 18px; border-bottom: 1px solid #2c3138; display: flex; justify-content: space-between; align-items: center; }
+    .modal-head h3 { margin: 0; font-size: 15px; color: #fff; }
+    .modal-body { padding: 14px 18px; overflow-y: auto; min-height: 0; }
+    .modal-foot { padding: 12px 18px; border-top: 1px solid #2c3138; display: flex; justify-content: flex-end; gap: 8px; }
+
+    .route-item { display: flex; gap: 10px; padding: 8px 0; border-bottom: 1px solid #242a31; }
+    .route-no { width: 22px; height: 22px; border-radius: 50%; background: #0e639c; color: #fff; font-size: 12px; display: flex; align-items: center; justify-content: center; flex: 0 0 22px; }
+    .route-name { font-size: 13px; color: #e2e7ee; }
+    .route-why { font-size: 11.5px; color: #7d848e; margin-top: 2px; line-height: 1.6; }
+
+    /* 政体卡片 */
+    .pol-card { border: 1px solid #2f353d; border-radius: 10px; padding: 12px 14px; margin-bottom: 10px; background: #1a1d22; }
+    .pol-era { font-size: 12px; color: #6f7681; }
+    .pol-name { font-size: 14px; color: #f0d08a; font-weight: 600; margin: 3px 0 7px; }
+    .pol-row { font-size: 12.5px; color: #b0b8c1; line-height: 1.75; margin-top: 4px; }
+    .pol-row b { color: #d5dae1; }
+    .pol-pro { color: #8fd6a3; }
+    .pol-con { color: #f0a0a0; }
+    .pol-shift { color: #7fc4ee; }
+
+    /* 自定义表单 */
+    .form-row { display: flex; gap: 8px; margin-bottom: 10px; flex-wrap: wrap; }
+    .form-row input, .form-row select {
+      flex: 1; min-width: 120px; background: #14171b; border: 1px solid #343a42; border-radius: 8px;
+      padding: 8px 10px; color: #dfe4ea; font-size: 13px; outline: none;
+    }
+    .form-row input:focus, .form-row select:focus { border-color: #0e639c; }
+    .form-label { font-size: 12px; color: #7d848e; margin: 12px 0 6px; }
+
+    .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(10px); background: #262a31; border: 1px solid #3a424c; color: #e8ecf1; padding: 10px 20px; border-radius: 10px; font-size: 13px; opacity: 0; pointer-events: none; transition: .25s; z-index: 999; }
+    .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+    @media (max-width: 760px) {
+      /* 手机上：主题标签换行显示，玻璃开关独占一行 */
+      .routes { flex-wrap: wrap; gap: 7px; padding: 10px 12px; }
+      .theme-tab { flex: 1 1 auto; justify-content: center; padding: 8px 12px; }
+      .routes .spacer { display: none; }
+      .glass-toggle { order: 9; width: 100%; justify-content: center; margin-top: 4px; }
+      .gt-btn { flex: 1; padding: 8px 10px; }
+      .main { flex-direction: column-reverse; overflow: visible; }
+      .board { flex-direction: column; align-items: stretch; padding: 10px; overflow-x: hidden; overflow-y: visible; }
+      .era-col { flex: 0 0 auto; width: auto; min-width: 0; }
+      .node:hover { transform: none; }
+      .detail { flex: 0 0 auto; width: auto; border-left: none; border-bottom: 1px solid #2c3138; }
+      .top { gap: 8px; }
+      .search { width: 100%; }
+      .progress-wrap { width: 100%; }
+      .route-tab { flex: 1 1 45%; }
+    }
+  
+    /* ⚠️ 穿越者警告条 */
+    .tv-warn {
+      display: flex; align-items: flex-start; gap: 10px;
+      margin: 0 14px; padding: 10px 14px;
+      background: rgba(210,153,34,.10); border: 1px solid rgba(210,153,34,.35);
+      border-radius: 10px; flex-shrink: 0;
+    }
+    .tv-warn .tv-icon { font-size: 16px; line-height: 1.4; }
+    .tv-warn b { color: #f0d08a; font-size: 13.5px; }
+    .tv-warn span { display: block; color: #a99a7a; font-size: 11.5px; margin-top: 2px; line-height: 1.7; }
+    .route-tab.traveler.on { border-color: #d29922; background: rgba(210,153,34,.12); }
+    .d-warn {
+      font-size: 12.5px; color: #c9a227; line-height: 1.9;
+      background: rgba(210,153,34,.08); border-left: 2px solid #d29922;
+      padding: 8px 10px; border-radius: 0 6px 6px 0;
+    }
+
+    /* ---------- 🗂️ 主题标签 ---------- */
+    .theme-tab {
+      display: flex; align-items: center; gap: 7px;
+      padding: 9px 16px; border-radius: 10px; cursor: pointer;
+      border: 1px solid #2f353d; background: #1e2126; transition: .15s;
+    }
+    .theme-tab:hover { border-color: #4a525c; }
+    .theme-tab.on { border-color: #0e639c; background: rgba(14,99,156,.16); }
+    .theme-tab.ghost { border-style: dashed; opacity: .8; }
+    .tt-icon { font-size: 16px; }
+    .tt-name { font-size: 13.5px; color: #e2e7ee; }
+
+    /* ---------- 🔀 标准 / 穿越者 分段开关（与整体风格一致） ---------- */
+    .glass-toggle {
+      display: inline-flex; align-items: center; gap: 2px;
+      padding: 3px; border-radius: 9px;
+      background: #14171b; border: 1px solid #343a42;
+    }
+    .gt-btn {
+      border: 1px solid transparent; background: none; cursor: pointer;
+      padding: 6px 14px; border-radius: 7px; font-size: 12.5px;
+      color: #8a929c; transition: .15s; white-space: nowrap;
+    }
+    .gt-btn:hover { color: #d5dae1; background: #1e2126; }
+    .gt-btn.on { background: #0e639c; border-color: #1177bb; color: #fff; }
+    .glass-toggle.single .gt-btn { color: #8a929c; }
+
+    /* 📱 手机：主题标签整齐换行，玻璃开关独占一行（放最后，保证优先级） */
+    @media (max-width: 760px) {
+      .routes { flex-wrap: wrap; gap: 7px; padding: 10px 12px; }
+      .routes .spacer { display: none; }
+      .theme-tab { flex: 1 1 calc(50% - 8px); min-width: 0; justify-content: center; padding: 9px 8px; }
+      .theme-tab .tt-name { font-size: 12.5px; }
+      .glass-toggle { order: 99; width: 100%; justify-content: center; margin-top: 4px; }
+      .gt-btn { flex: 1; padding: 8px 6px; font-size: 12px; }
+    }
+
+    /* 🧊 标准 / 穿越者 切换条 */
+    .variant-bar {
+      display: flex; align-items: center; gap: 12px;
+      padding: 8px 16px; background: #191c21; border-bottom: 1px solid #242a31;
+      flex-shrink: 0;
+    }
+    .vb-label { font-size: 12.5px; color: #7d848e; }
+    .vb-label i { font-style: normal; color: #c5ccd4; margin-left: 6px; }
+    .variant-bar .glass-toggle { margin-left: auto; }
+
+    /* 📱 手机 */
+    @media (max-width: 760px) {
+      .routes { flex-wrap: nowrap; overflow-x: auto; padding: 10px 12px; gap: 7px; -webkit-overflow-scrolling: touch; }
+      .theme-tab { flex: 0 0 auto; padding: 8px 14px; }
+      .variant-bar { flex-direction: column; align-items: stretch; gap: 8px; }
+      .vb-label { text-align: center; }
+      .variant-bar .glass-toggle { margin-left: 0; width: 100%; justify-content: center; }
+      .gt-btn { flex: 1; padding: 9px 8px; }
+    }
+
+    /* ---------- 遮挡处理：滚动提示（不盖内容）+ 详情可收起 ---------- */
+    .scroll-hint {
+      margin-left: auto; margin-right: 10px;
+      background: rgba(14,99,156,.16); border: 1px solid #2f6f9e; color: #7fc4ee;
+      border-radius: 999px; padding: 6px 12px; font-size: 12px; cursor: pointer;
+    }
+    .scroll-hint:hover { background: rgba(14,99,156,.3); color: #cfe6f7; }
+
+    .detail { position: relative; }
+    .detail-collapse {
+      position: absolute; top: 8px; right: 8px;
+      width: 24px; height: 24px; border-radius: 6px; cursor: pointer;
+      background: #262a31; border: 1px solid #343a42; color: #8a929c;
+      font-size: 12px; line-height: 1;
+    }
+    .detail-collapse:hover { background: #2f353d; color: #fff; }
+
+    .detail-open {
+      flex: 0 0 34px; background: #1e2126; border: none; border-left: 1px solid #2c3138;
+      color: #8a929c; cursor: pointer; display: flex; flex-direction: column;
+      align-items: center; justify-content: center; gap: 8px; padding: 0;
+    }
+    .detail-open:hover { background: #23262c; color: #fff; }
+    .detail-open .do-arrow { font-size: 13px; }
+    .detail-open .do-text { writing-mode: vertical-rl; font-size: 11.5px; letter-spacing: 1px; }
+
+    /* 📖 教程弹窗 */
+    .help-body { line-height: 1.85; }
+    .help-lead { font-size: 13px; color: #b9c0c9; background: #1a1d22; border-left: 3px solid #0e639c; padding: 10px 14px; border-radius: 0 8px 8px 0; margin-bottom: 16px; }
+    .help-sec { margin-bottom: 14px; }
+    .help-t { font-size: 13.5px; color: #fff; font-weight: 600; margin-bottom: 4px; }
+    .help-p { font-size: 12.5px; color: #9aa1ab; }
+    .help-p b { color: #d5dae1; }
+    .help-p code { background: #14171b; border: 1px solid #262b31; border-radius: 4px; padding: 1px 5px; color: #d7ba7d; font-size: 11.5px; }
+    .help-tip { margin-top: 16px; font-size: 12px; color: #f0d08a; background: rgba(210,153,34,.10); border: 1px solid rgba(210,153,34,.35); border-radius: 8px; padding: 10px 12px; }
+
+    .d-when { font-size: 12.5px; color: #7fc4ee; background: rgba(14,99,156,.12); border-left: 2px solid #2f6f9e; padding: 7px 10px; border-radius: 0 6px 6px 0; }
+
+    /* 🌐 世界条 */
+    .world-bar {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      padding: 9px 16px; background: #191c21; border-bottom: 1px solid #242a31; flex-shrink: 0;
+    }
+    .wb-label { font-size: 12.5px; color: #7d848e; }
+    .wb-select {
+      background: #14171b; border: 1px solid #343a42; border-radius: 8px;
+      color: #dfe4ea; font-size: 13px; padding: 6px 10px; outline: none; min-width: 130px;
+    }
+    .wb-select:focus { border-color: #0e639c; }
+    .wb-books { font-size: 11.5px; color: #6f7681; margin-left: auto; }
+    .wb-books b {
+      color: #7fc4ee; font-weight: 500; background: rgba(14,99,156,.14);
+      border: 1px solid #2f6f9e; border-radius: 999px; padding: 1px 8px; margin-left: 5px;
+    }
+    .wb-books.empty { color: #5f6772; }
+
+    /* 书籍多选 */
+    .book-picker { display: flex; flex-wrap: wrap; gap: 8px; }
+    .book-item {
+      display: flex; align-items: center; gap: 6px; font-size: 12.5px; color: #c5ccd4;
+      background: #14171b; border: 1px solid #343a42; border-radius: 8px; padding: 6px 10px; cursor: pointer;
+    }
+    .book-item input { accent-color: #0e639c; }
+    .book-item:hover { border-color: #4a525c; }
+
+</style>
+</head>
+<body>
+<div id="app">
+  <div class="top">
+    <h1>🌳 科技树</h1>
+    <span class="search" style="border:none; padding:0; width:auto; color:#6f7681; font-size:12px;">什么时候该点什么</span>
+    <span class="spacer"></span>
+    <input class="search" v-model="keyword" placeholder="搜科技，如：轮子 / 魔晶" />
+    <button class="chip" :class="{ on: onlyTodo }" @click="onlyTodo = !onlyTodo">{{ onlyTodo ? '只看未掌握' : '全部显示' }}</button>
+    <button class="chip gold" @click="politicsOpen = true">🏛️ 政体适配</button>
+    <button class="chip" @click="showHelp = true" title="第一次用？点这里">📖 教程</button>
+    <div class="progress-wrap">
+      <div class="progress-bar"><div :style="{ width: percent + '%' }"></div></div>
+      <div class="progress-text">已掌握 {{ doneCount }} / {{ total }}（{{ percent }}%）</div>
+    </div>
+  </div>
+
+  <!-- 🌐 世界选择（一个世界 = 一套进度，可关联多本书） -->
+  <div class="world-bar">
+    <span class="wb-label">🌐 世界</span>
+    <select class="wb-select" :value="worldId" @change="switchWorld($event.target.value)">
+      <option v-for="w in worlds" :key="w.id" :value="w.id">{{ w.name }}</option>
+    </select>
+    <button class="chip" @click="openWorldDialog(null)">＋ 新建世界</button>
+    <button class="chip" v-if="currentWorld" @click="openWorldDialog(currentWorld)">✏️ 编辑</button>
+    <button class="chip" v-if="currentWorld && currentWorld.id !== 'default'" @click="deleteWorld(currentWorld)">🗑 删除</button>
+
+    <span class="wb-books" v-if="currentWorld && currentWorld.books && currentWorld.books.length">
+      来源书籍：
+      <b v-for="b in currentWorld.books" :key="b">{{ b }}</b>
+    </span>
+    <span class="wb-books empty" v-else-if="currentWorld">还没关联书籍</span>
+  </div>
+
+  <!-- 🗂️ 主题标签 -->
+  <div class="routes">
+    <div class="theme-tab" v-for="th in themes" :key="th.id"
+         :class="{ on: themeId === th.id }" @click="pickTheme(th.id)">
+      <span class="tt-icon">{{ th.icon }}</span>
+      <span class="tt-name">{{ th.name }}</span>
+    </div>
+
+    <div class="theme-tab ghost" @click="customOpen = true" title="自己加一个时代或科技">
+      <span class="tt-icon">➕</span><span class="tt-name">自定义</span>
+    </div>
+  </div>
+
+  <!-- 🧊 标准 / 穿越者 切换（磨砂玻璃） -->
+  <div class="variant-bar">
+    <span class="vb-label">
+      {{ currentRoute.themeIcon }} {{ currentRoute.themeName }}
+      <i v-if="isParallel" style="color:#f0d08a;">标准 + 穿越者 并行</i>
+      <i v-else>{{ variantOn.traveler ? '穿越者发展' : '标准发展' }}</i>
+    </span>
+    <div class="glass-toggle" v-if="hasBoth" :title="'可以只选一条，也可以两条并行'">
+      <button class="gt-btn" :class="{ on: variantOn.native }" @click="pickVariant('native')">
+        {{ variantOn.native ? '✓' : '' }} 🏠 标准
+      </button>
+      <button class="gt-btn" :class="{ on: variantOn.traveler }" @click="pickVariant('traveler')">
+        {{ variantOn.traveler ? '✓' : '' }} 🧭 穿越者
+      </button>
+    </div>
+    <div class="glass-toggle single" v-else>
+      <button class="gt-btn on">{{ variantOn.traveler ? '🧭 只有穿越者线' : '🏠 只有标准线' }}</button>
+    </div>
+  </div>
+
+  <!-- ⚠️ 穿越者警告 -->
+  <div class="tv-warn" v-if="isTraveler">
+    <span class="tv-icon">⚠️</span>
+    <div>
+      <b>{{ warning }}</b>
+      <span>你是外来者：技术可以跳步，但你的一举一动都会被记录。暴露得越早，被盯上的越快。</span>
+    </div>
+  </div>
+
+  <div class="main" :class="{ 'no-detail': !detailOpen }">
+    <div class="board" ref="boardRef" @scroll="onBoardScroll">
+      <div class="era-col" v-for="era in visibleEras" :key="era.id">
+        <div class="era-head">
+          <div class="era-name">{{ era.icon }} {{ era.name }}</div>
+          <div class="era-year">{{ era.year }}</div>
+          <div class="era-meta">{{ era.nodes.length }} 项 · 已掌握 {{ eraDone(era) }}</div>
+          <div class="era-pol" v-if="era.politics">🏛️ 适配政体：{{ era.politics }}</div>
+          <div class="era-btns">
+            <button class="chip" style="font-size:11px; padding:4px 9px;" @click="showRoute(era)">📋 路线</button>
+            <button class="chip" style="font-size:11px; padding:4px 9px;" @click="openPolitics(era)">🏛️ 政体</button>
+          </div>
+        </div>
+
+        <div v-for="n in era.nodes" :key="n.id" class="node"
+             :class="{ done: !!progress[n.id], 'hl-pre': highlight.pre.has(n.id), 'hl-next': highlight.next.has(n.id),
+                       dim: highlight.active && !highlight.pre.has(n.id) && !highlight.next.has(n.id) && !highlight.self.has(n.id) }"
+             @click="select(n)">
+          <div class="node-top"><span class="node-icon">{{ n.icon }}</span><span class="node-name">{{ n.name }}</span></div>
+          <div class="node-desc">{{ n.short }}</div>
+          <div class="node-need" v-if="n.needs && n.needs.length">← 需要：<b>{{ n.needs.map(nameOf).join('、') }}</b></div>
+        </div>
+
+        <div v-if="era.nodes.length === 0" style="font-size:12px; color:#5f6772; text-align:center; padding:12px 0;">
+          这个时代还没有科技<br>
+          <button class="chip" style="margin-top:8px;" @click="openAddNode(era)">＋ 加一个</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="detail" v-if="detailOpen">
+      <button class="detail-collapse" @click="detailOpen = false" title="收起详情，给科技树腾地方">⟩</button>
+      <template v-if="selected">
+        <h3>{{ selected.icon }} {{ selected.name }}</h3>
+        <div class="d-era">{{ eraOf(selected.era).name }} · 现实参考：{{ selected.year || '—' }}</div>
+
+        <div class="d-label">这是什么</div>
+        <div class="d-text">{{ selected.desc }}</div>
+
+        <div class="d-label">为什么这个阶段要做它</div>
+        <div class="d-text">{{ selected.why }}</div>
+
+        <div class="d-label" v-if="selected.impact">对世界的影响</div>
+        <div class="d-impact" v-if="selected.impact">{{ selected.impact }}</div>
+
+        <div class="d-label" v-if="selected.needs && selected.needs.length">前置条件</div>
+        <div v-if="selected.needs && selected.needs.length">
+          <span class="d-chip pre" v-for="id in selected.needs" :key="id" @click="selectById(id)">
+            {{ iconOf(id) }} {{ nameOf(id) }}{{ progress[id] ? ' ✓' : '' }}
+          </span>
+        </div>
+
+        <div class="d-label" v-if="unlocksOf(selected.id).length">解锁</div>
+        <div v-if="unlocksOf(selected.id).length">
+          <span class="d-chip next" v-for="id in unlocksOf(selected.id)" :key="id" @click="selectById(id)">
+            {{ iconOf(id) }} {{ nameOf(id) }}
+          </span>
+        </div>
+
+        <div class="d-label" v-if="isTraveler">穿越者注意</div>
+        <div class="d-warn" v-if="isTraveler">
+          这项技术在你的时代是常识，在这里可能是"神迹"。<br>
+          先想清楚：谁会因此受益、谁会因此受损、你要怎么解释它的来源。
+        </div>
+
+        <div class="d-label" v-if="progress[selected.id] && progress[selected.id].at">完成时间</div>
+        <div class="d-when" v-if="progress[selected.id] && progress[selected.id].at">
+          ⏱ {{ progress[selected.id].at }}
+        </div>
+
+        <div class="d-label">一句话提示</div>
+        <div class="d-text">{{ selected.tip }}</div>
+
+        <div class="d-actions">
+          <button class="btn" :class="{ primary: !progress[selected.id] }" @click="toggleDone(selected.id)">
+            {{ progress[selected.id] ? '↩ 取消已掌握' : '✓ 标记已掌握' }}
+          </button>
+          <button class="btn" @click="showRoute(eraOf(selected.era))">看整条路线</button>
+        </div>
+      </template>
+      <div v-else class="empty-detail">
+        👈 点左边任意科技，这里会显示：<br>
+        · 它是什么<br>
+        · 为什么这个阶段该做它<br>
+        · 对世界的影响<br>
+        · 需要什么前置<br>
+        · 做出来能解锁什么
+      </div>
+    </div>
+
+    <button class="detail-open" v-else @click="detailOpen = true" title="展开详情面板">
+      <span class="do-arrow">⟨</span><span class="do-text">详情</span>
+    </button>
+  </div>
+
+  <!-- 推荐路线 -->
+  <div class="mask" v-if="route" @click.self="route = null">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>📋 {{ route.name }} · 推荐发展顺序</h3>
+        <button class="btn" @click="route = null">关闭</button>
+      </div>
+      <div class="modal-body">
+        <div class="route-item" v-for="(item, i) in routeList" :key="item.id">
+          <div class="route-no">{{ i + 1 }}</div>
+          <div>
+            <div class="route-name">{{ item.icon }} {{ item.name }}
+              <span v-if="progress[item.id]" style="color:#4bd07a; font-size:11px;">（已掌握）</span>
+            </div>
+            <div class="route-why">{{ item.tip }}</div>
+          </div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn primary" @click="route = null">知道了</button></div>
+    </div>
+  </div>
+
+  <!-- 政体适配 -->
+  <div class="mask" v-if="politicsOpen" @click.self="politicsOpen = false">
+    <div class="modal" style="width:700px;">
+      <div class="modal-head">
+        <h3>🏛️ 政体适配 · {{ currentRoute.name }}</h3>
+        <button class="btn" @click="politicsOpen = false">关闭</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:12px; color:#6f7681; margin-bottom:12px; line-height:1.8;">
+          为什么某个时代适合某种治理形式——只作为世界设定参考，不对应任何现实国家。
+        </div>
+        <div class="pol-card" v-for="era in politicsList" :key="era.id">
+          <div class="pol-era">{{ era.icon }} {{ era.name }} · {{ era.year }}</div>
+          <div class="pol-name">{{ era.politics }}</div>
+          <template v-if="polOf(era.politics)">
+            <div class="pol-row"><b>为什么合适：</b>{{ polOf(era.politics).why }}</div>
+            <div class="pol-row"><b>适用范围：</b>{{ polOf(era.politics).fit }}</div>
+            <div class="pol-row pol-pro"><b>优点：</b>{{ polOf(era.politics).pros }}</div>
+            <div class="pol-row pol-con"><b>代价：</b>{{ polOf(era.politics).cons }}</div>
+            <div class="pol-row pol-shift"><b>什么时候该变：</b>{{ polOf(era.politics).shift }}</div>
+          </template>
+          <div class="pol-row" v-else style="color:#6f7681;">暂无该政体的详细说明</div>
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn primary" @click="politicsOpen = false">知道了</button></div>
+    </div>
+  </div>
+
+  <!-- 自定义时代 -->
+  <div class="mask" v-if="customOpen" @click.self="customOpen = false">
+    <div class="modal">
+      <div class="modal-head">
+        <h3>➕ 自定义时代 / 科技</h3>
+        <button class="btn" @click="customOpen = false">关闭</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-label">新增一个时代（会加在当前路线：{{ currentRoute.name }}）</div>
+        <div class="form-row">
+          <input v-model="form.eraName" placeholder="时代名，如：灵力纪元" />
+          <input v-model="form.eraIcon" placeholder="图标，如：🌌" style="max-width:90px;" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.eraYear" placeholder="年代，如：第 200 – 300 年" />
+          <input v-model="form.eraPolitics" placeholder="适配政体（可留空）" />
+        </div>
+        <button class="btn primary" @click="addEra" :disabled="!form.eraName.trim()">创建时代</button>
+
+        <div style="height:1px; background:#262b31; margin:16px 0;"></div>
+
+        <div class="form-label">往某个时代里加科技</div>
+        <div class="form-row">
+          <select v-model="form.targetEra">
+            <option v-for="e in eras" :key="e.id" :value="e.id">{{ e.icon }} {{ e.name }}</option>
+          </select>
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeName" placeholder="科技名，如：灵脉导航" />
+          <input v-model="form.nodeIcon" placeholder="图标" style="max-width:90px;" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeShort" placeholder="一句话：解锁了什么" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeDesc" placeholder="它是什么（详细一点）" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeWhy" placeholder="为什么这个阶段该做它" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeImpact" placeholder="对世界的影响" />
+        </div>
+        <div class="form-row">
+          <input v-model="form.nodeTip" placeholder="什么时候该点（给读者的一句话）" />
+        </div>
+        <button class="btn primary" @click="addNode" :disabled="!form.nodeName.trim()">添加科技</button>
+        <div style="font-size:11.5px; color:#6f7681; margin-top:10px;">
+          自定义内容会保存到 library/科技树/数据.json，换设备也能同步。
+        </div>
+      </div>
+      <div class="modal-foot"><button class="btn" @click="customOpen = false">完成</button></div>
+    </div>
+  </div>
+
+  <!-- 🌐 世界编辑 -->
+  <div class="mask" v-if="worldDialog.show" @click.self="worldDialog.show = false">
+    <div class="modal" style="width: 480px;">
+      <div class="modal-head">
+        <h3>{{ worldDialog.isNew ? '🌐 先建一个世界' : '🌐 编辑世界' }}</h3>
+        <button class="btn" @click="worldDialog.show = false">取消</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:12.5px;color:#b9c0c9;line-height:1.8;margin-bottom:12px;" v-if="worldDialog.isNew">
+          科技树是按「世界」存的：每本书或每个设定世界各有一套进度和时间线。<br>先给它起个名字，再选线。
+        </div>
+        <div class="form-label">世界名称</div>
+        <div class="form-row">
+          <input v-model="worldDialog.name" placeholder="例如：泰拉 / 幻想域 / 星落大陆" />
+        </div>
+
+        <div class="form-label">来源于哪些书（可多选，也可以不选）</div>
+        <div class="book-picker">
+          <label class="book-item" v-for="b in bookOptions" :key="b">
+            <input type="checkbox" :value="b" v-model="worldDialog.books" />
+            <span>{{ b }}</span>
+          </label>
+          <div v-if="!bookOptions.length" style="font-size:12px; color:#6f7681;">
+            书库里还没有书，先去「沉浸码字」建一本。
+          </div>
+        </div>
+
+        <div style="font-size:11.5px; color:#6f7681; margin-top:10px;">
+          一个世界可以被多本书共用；切换世界时，进度与时间线会一起切过去。
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn primary" @click="saveWorld">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ⏱ 完成时间 -->
+  <div class="mask" v-if="timeDialog.show" @click.self="timeDialog.show = false">
+    <div class="modal" style="width: 440px;">
+      <div class="modal-head">
+        <h3>⏱ 什么时候完成的</h3>
+        <button class="btn" @click="timeDialog.show = false">取消</button>
+      </div>
+      <div class="modal-body">
+        <div style="font-size:13px;color:#b9c0c9;line-height:1.8;margin-bottom:12px;">
+          你刚点了「<b style="color:#fff;">{{ timeDialog.name }}</b>」。<br>
+          可以填一个世界内的时间，之后会在前台的时间线上显示。
+        </div>
+        <input
+          v-model="timeDialog.value"
+          placeholder="例如：大陆历 342 年 · 春 / 第 12 年 / 三千年前"
+          style="width:100%;box-sizing:border-box;background:#14171b;border:1px solid #343a42;border-radius:8px;padding:10px 12px;color:#dfe4ea;font-size:13px;outline:none;"
+          @keyup.enter="confirmDone"
+        />
+        <div style="font-size:11.5px;color:#6f7681;margin-top:8px;">留空也行，之后可以在节点详情里补。</div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn" @click="skipDone">跳过</button>
+        <button class="btn primary" @click="confirmDone">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 📖 教程 -->
+  <div class="mask" v-if="showHelp" @click.self="showHelp = false">
+    <div class="modal" style="width: 660px;">
+      <div class="modal-head">
+        <h3>📖 科技树 · 使用说明</h3>
+        <button class="btn" @click="showHelp = false">关闭</button>
+      </div>
+      <div class="modal-body help-body">
+        <div class="help-lead">
+          这是一个「什么阶段该点什么科技」的检查表，不是游戏里的科技树。<br>
+          写世界设定时用它避免「石器时代搞中央集权」「没造纸先有印刷」这类漏洞。
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">① 先选主题</div>
+          <div class="help-p">顶部一行是主题：文明 / 魔法 / 古代中国 / 穿越者通用。
+          点一个，下面的科技列就换成这条线。</div>
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">② 再选「标准」还是「穿越者」</div>
+          <div class="help-p">
+            <b>🏠 标准发展</b>：本地人靠自己摸索，一步都不能跳。<br>
+            <b>🧭 穿越者发展</b>：外来者带着现代常识，可以跳过几百年试错——但会被盯上。
+          </div>
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">③ 看每个时代该做什么</div>
+          <div class="help-p">
+            每个时代的标题下有 <b>🏛️ 适配政体</b>，说明这个阶段什么样的治理撑得住。<br>
+            两个小按钮：<b>📋 路线</b> 按依赖顺序排出「先点什么后点什么」；<b>🏛️ 政体</b> 展开讲讲为什么合适、代价是什么、什么时候该变。
+          </div>
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">④ 点科技看详情</div>
+          <div class="help-p">
+            点任意科技，右侧会显示：它是什么 / 为什么这个阶段做 / 对世界的影响 / 前置条件 / 什么时候该点。<br>
+            同时树上会亮起来：<b style="color:#e0bb63;">黄色</b>是它的前置链，<b style="color:#7fc4ee;">蓝色</b>是它能解锁的东西。
+          </div>
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">⑤ 标记「已掌握」</div>
+          <div class="help-p">
+            详情里点 <b>✓ 标记已掌握</b>，卡片会变绿、右上角进度条往前走。<br>
+            进度存在 <code>library/科技树/进度.json</code>，换设备也能同步。
+          </div>
+        </div>
+
+        <div class="help-sec">
+          <div class="help-t">⑥ 加你自己的时代</div>
+          <div class="help-p">
+            点「➕ 自定义」，可以新建时代、往任意时代里加科技，存在 <code>library/科技树/数据.json</code>。
+          </div>
+        </div>
+
+        <div class="help-tip">
+          💡 穿越者线顶部那句「结合当时环境，小心被发现哦」不是装饰：建议每点一项，都想清楚
+          谁会受益、谁会受损、你怎么解释它的来源。
+        </div>
+      </div>
+      <div class="modal-foot">
+        <button class="btn primary" @click="showHelp = false">知道了，开始看</button>
+      </div>
+    </div>
+  </div>
+
+  <div class="toast" :class="{ show: toast.show }">{{ toast.text }}</div>
+</div>
+
+<script src="/plugin/tech-data.js"></script>
+<script>
+const { createApp, ref, computed, onMounted, watch, nextTick } = Vue;
+const API_BASE = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+  ? 'http://localhost:3001/api'
+  : location.origin + '/api';
+
+const BASE_ROUTES = window.TECH_ROUTES || [];
+const POLITICS = window.TECH_POLITICS || {};
+
+createApp({
+  setup() {
+    const routes = ref(BASE_ROUTES.map((r) => ({ id: r.id, name: r.name, icon: r.icon, desc: r.desc })));
+
+    // 主题（一类）+ 变体（标准/穿越者）
+    const THEME_META = {};
+    BASE_ROUTES.forEach((r) => {
+      if (!r.theme) return;
+      THEME_META[r.theme] = THEME_META[r.theme] || { id: r.theme, name: r.themeName, icon: r.themeIcon, variants: {} };
+      THEME_META[r.theme].variants[r.variant] = r.id;
+    });
+    const themes = ref(
+      (window.TECH_THEMES || Object.keys(THEME_META)).map((id) => THEME_META[id]).filter(Boolean)
+    );
+    const themeId = ref((themes.value[0] || {}).id || 'civ');
+    // 🧭 允许标准 / 穿越者并行：两个开关，至少留一个
+    const variantOn = ref({ native: true, traveler: false });
+    const routeId = ref(BASE_ROUTES.length ? BASE_ROUTES[0].id : 'standard');
+    const hasBoth = computed(() => {
+      const meta = THEME_META[themeId.value];
+      return !!(meta && meta.variants.native && meta.variants.traveler);
+    });
+    // 当前主题下被选中的路线 id（并行时有两个）
+    const activeRouteIds = computed(() => {
+      const meta = THEME_META[themeId.value] || {};
+      const list = [];
+      if (meta.variants.native && variantOn.value.native) list.push(meta.variants.native);
+      if (meta.variants.traveler && variantOn.value.traveler) list.push(meta.variants.traveler);
+      if (!list.length) {
+        const first = meta.variants.native || meta.variants.traveler;
+        if (first) list.push(first);
+      }
+      return list;
+    });
+    const isParallel = computed(() => activeRouteIds.value.length > 1);
+
+    const applyRoutes = () => {
+      const ids = activeRouteIds.value;
+      if (ids.length) routeId.value = ids[0];
+    };
+
+    const pickTheme = (id) => {
+      themeId.value = id;
+      const meta = THEME_META[id] || {};
+      // 没穿越者版的主题，自动关掉穿越者开关
+      if (!meta.variants.traveler) variantOn.value = { native: !!meta.variants.native, traveler: false };
+      if (!meta.variants.native && meta.variants.traveler) variantOn.value = { native: false, traveler: true };
+      applyRoutes();
+    };
+
+    // 点一下 = 勾选/取消（最后一个不能取消）
+    const pickVariant = (v) => {
+      if (!hasBoth.value) return;
+      const next = { ...variantOn.value };
+      if (next[v]) {
+        const other = v === 'native' ? 'traveler' : 'native';
+        if (!next[other]) { showToast('至少要保留一条线', true); return; }
+      }
+      next[v] = !next[v];
+      variantOn.value = next;
+      applyRoutes();
+    };
+
+    // 把 routeId / routeIds 反推回主题与开关（恢复上次选择）
+    const syncFromRouteId = (idOrIds) => {
+      const ids = Array.isArray(idOrIds) ? idOrIds : [idOrIds];
+      const routes = ids.map((x) => BASE_ROUTES.find((r) => r.id === x)).filter(Boolean);
+      if (!routes.length) return;
+      const r = routes[0];
+      if (!r.theme) return;
+      themeId.value = r.theme;
+      variantOn.value = {
+        native: routes.some((x) => x.variant === 'native'),
+        traveler: routes.some((x) => x.variant === 'traveler')
+      };
+      if (!variantOn.value.native && !variantOn.value.traveler) variantOn.value.native = true;
+      applyRoutes();
+    };
+    const custom = ref({});            // { routeId: [era, ...] }
+    const progress = ref({});
+    const keyword = ref('');
+    const onlyTodo = ref(false);
+    const selectedId = ref('');
+    const route = ref(null);
+    const toast = ref({ show: false, text: '' });
+    const politicsOpen = ref(false);
+    const showHelp = ref(false);
+    const detailOpen = ref(true);
+    const boardRef = ref(null);
+    const canScrollMore = ref(false);
+
+    const updateScrollHint = () => {
+      const el = boardRef.value;
+      if (!el) { canScrollMore.value = false; return; }
+      canScrollMore.value = el.scrollWidth - el.scrollLeft - el.clientWidth > 24;
+    };
+    const onBoardScroll = () => updateScrollHint();
+    const scrollBoardRight = () => {
+      const el = boardRef.value;
+      if (!el) return;
+      el.scrollBy({ left: el.clientWidth * 0.8, behavior: 'smooth' });
+    };
+    const customOpen = ref(false);
+    const politicsEra = ref(null);
+    const form = ref({
+      eraName: '', eraIcon: '🌌', eraYear: '', eraPolitics: '',
+      targetEra: '', nodeName: '', nodeIcon: '✨', nodeShort: '',
+      nodeDesc: '', nodeWhy: '', nodeImpact: '', nodeTip: ''
+    });
+
+    const showToast = (text) => {
+      toast.value = { show: true, text };
+      setTimeout(() => { toast.value.show = false; }, 2000);
+    };
+
+    const currentRoute = computed(() => BASE_ROUTES.find((r) => r.id === routeId.value) || BASE_ROUTES[0]);
+    // 并行时只要有一条是穿越者线，就提示风险
+    const isTraveler = computed(() =>
+      activeRouteIds.value.some((id) => {
+        const r = BASE_ROUTES.find((x) => x.id === id);
+        return r && r.traveler;
+      })
+    );
+    const warning = window.TECH_WARNING || '结合当时环境，小心被发现哦';
+    // 合并多条线：时代按 id 合并，节点按 id 去重
+    const eras = computed(() => {
+      const byId = new Map();
+      const order = [];
+      activeRouteIds.value.forEach((rid) => {
+        const r = BASE_ROUTES.find((x) => x.id === rid);
+        if (!r) return;
+        (r.eras || []).forEach((era) => {
+          if (!byId.has(era.id)) {
+            byId.set(era.id, { ...era, nodes: [...era.nodes] });
+            order.push(era.id);
+          } else {
+            const cur = byId.get(era.id);
+            const seen = new Set(cur.nodes.map((n) => n.id));
+            era.nodes.forEach((n) => { if (!seen.has(n.id)) cur.nodes.push(n); });
+          }
+        });
+      });
+      const out = order.map((id) => byId.get(id));
+      // 自定义时代挂在第一条线上
+      const extra = custom.value[routeId.value] || [];
+      return [...out, ...extra];
+    });
+    const total = computed(() => eras.value.reduce((s, e) => s + e.nodes.length, 0));
+    const doneCount = computed(() => {
+      let n = 0;
+      eras.value.forEach((e) => e.nodes.forEach((x) => { if (progress.value[x.id]) n++; }));
+      return n;
+    });
+    const percent = computed(() => (total.value ? Math.round((doneCount.value / total.value) * 100) : 0));
+
+    // 当前路线的节点索引
+    const nodeMap = computed(() => {
+      const m = {};
+      eras.value.forEach((e) => e.nodes.forEach((n) => { m[n.id] = { ...n, era: e.id }; }));
+      return m;
+    });
+    const nameOf = (id) => (nodeMap.value[id] ? nodeMap.value[id].name : id);
+    const iconOf = (id) => (nodeMap.value[id] ? nodeMap.value[id].icon : '');
+    const eraOf = (id) => eras.value.find((e) => e.id === id) || { name: '', icon: '', year: '' };
+    const eraDone = (era) => era.nodes.filter((n) => progress.value[n.id]).length;
+    const unlocksOf = (id) => Object.values(nodeMap.value).filter((n) => (n.needs || []).includes(id)).map((n) => n.id);
+
+    const visibleEras = computed(() => {
+      const kw = keyword.value.trim();
+      const out = [];
+      eras.value.forEach((era) => {
+        let nodes = era.nodes;
+        if (kw) nodes = nodes.filter((n) => (n.name + n.short + n.desc + (n.tip || '') + (n.impact || '')).includes(kw));
+        if (onlyTodo.value) nodes = nodes.filter((n) => !progress.value[n.id]);
+        if (nodes.length || !kw) out.push({ ...era, nodes });
+      });
+      return out;
+    });
+
+    const highlight = computed(() => {
+      const pre = new Set(), next = new Set(), self = new Set();
+      const id = selectedId.value;
+      if (!id) return { pre, next, self, active: false };
+      self.add(id);
+      const walk = (nid, set, dir) => {
+        const node = nodeMap.value[nid];
+        if (!node) return;
+        const list = dir === 'pre' ? (node.needs || []) : unlocksOf(nid);
+        list.forEach((x) => { if (!set.has(x)) { set.add(x); walk(x, set, dir); } });
+      };
+      walk(id, pre, 'pre');
+      walk(id, next, 'next');
+      return { pre, next, self, active: true };
+    });
+
+    const selected = computed(() => (selectedId.value ? nodeMap.value[selectedId.value] : null));
+    const select = (n) => { selectedId.value = n.id; };
+    const selectById = (id) => { selectedId.value = id; };
+
+    const routeList = computed(() => {
+      if (!route.value) return [];
+      const all = new Set();
+      const add = (id) => {
+        if (all.has(id)) return;
+        all.add(id);
+        (nodeMap.value[id] && nodeMap.value[id].needs || []).forEach((p) => { if (nodeMap.value[p]) add(p); });
+      };
+      route.value.nodes.forEach((n) => add(n.id));
+      const visited = new Set(), order = [];
+      const visit = (id) => {
+        if (visited.has(id)) return;
+        visited.add(id);
+        ((nodeMap.value[id] && nodeMap.value[id].needs) || []).filter((p) => all.has(p)).forEach(visit);
+        if (nodeMap.value[id]) order.push(id);
+      };
+      Array.from(all).forEach(visit);
+      return order.map((id) => nodeMap.value[id]);
+    });
+
+    const showRoute = (era) => { route.value = era; };
+    const politicsList = computed(() => eras.value.filter((e) => e.politics));
+    // 政体名可能是「封建分封 / 中央集权」这种组合，拆开逐个找
+    const polOf = (name) => {
+      if (!name) return null;
+      if (POLITICS[name]) return POLITICS[name];
+      const parts = name.split('/').map((s) => s.trim()).filter(Boolean);
+      for (const p of parts) {
+        if (POLITICS[p]) return POLITICS[p];
+      }
+      return null;
+    };
+    const openPolitics = () => { politicsOpen.value = true; };
+
+    // ---------- 自定义 ----------
+    const openAddNode = (era) => { customOpen.value = true; form.value.targetEra = era.id; };
+
+    const addEra = async () => {
+      const name = form.value.eraName.trim();
+      if (!name) return;
+      const id = 'custom_' + Date.now();
+      const list = custom.value[routeId.value] || [];
+      list.push({
+        id, name, icon: form.value.eraIcon || '🌌',
+        year: form.value.eraYear || '自定义', politics: form.value.eraPolitics || '', nodes: []
+      });
+      custom.value = { ...custom.value, [routeId.value]: list };
+      form.value.eraName = ''; form.value.eraYear = ''; form.value.eraPolitics = '';
+      await saveCustom();
+      showToast('✅ 已创建时代：' + name);
+    };
+
+    const addNode = async () => {
+      const name = form.value.nodeName.trim();
+      const eraId = form.value.targetEra || (eras.value[0] && eras.value[0].id);
+      if (!name || !eraId) return;
+      let era = (custom.value[routeId.value] || []).find((e) => e.id === eraId);
+      if (!era) {
+        // 往内置时代加：复制成自定义副本
+        const base = eras.value.find((e) => e.id === eraId);
+        era = JSON.parse(JSON.stringify(base));
+        const list = custom.value[routeId.value] || [];
+        // 移除内置同名时代（避免重复）
+        const idx = list.findIndex((e) => e.id === eraId);
+        if (idx >= 0) list.splice(idx, 1);
+        list.push(era);
+        custom.value = { ...custom.value, [routeId.value]: list };
+      }
+      era.nodes.push({
+        id: 'cnode_' + Date.now(),
+        name, icon: form.value.nodeIcon || '✨',
+        short: form.value.nodeShort || '',
+        desc: form.value.nodeDesc || form.value.nodeShort || name,
+        why: form.value.nodeWhy || '',
+        tip: form.value.nodeTip || '',
+        impact: form.value.nodeImpact || '',
+        year: '自定义', needs: []
+      });
+      custom.value = { ...custom.value };
+      form.value.nodeName = ''; form.value.nodeShort = ''; form.value.nodeDesc = '';
+      form.value.nodeWhy = ''; form.value.nodeImpact = ''; form.value.nodeTip = '';
+      await saveCustom();
+      showToast('✅ 已添加科技：' + name);
+    };
+
+    // ---------- 世界（一个世界 = 一套进度，可以关联多本书） ----------
+    const worlds = ref([]);
+    const worldId = ref('');
+    const worldDialog = ref({ show: false, id: '', name: '', books: [], isNew: false });
+    const currentWorld = computed(() => worlds.value.find((w) => w.id === worldId.value) || null);
+    // 除自动生成的「默认世界」外，还有没有真正建过的世界
+    const hasRealWorld = computed(() => {
+      const list = worlds.value || [];
+      if (list.some((w) => w.id !== 'default')) return true;
+      const def = list.find((w) => w.id === 'default');
+      return !!(def && (def.books || []).length) || Object.keys(progress.value || {}).length > 0;
+    });
+
+    // 书库里的书（用来关联世界）
+    const bookOptions = ref([]);
+    const loadBookOptions = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/library/tree?t=${Date.now()}`);
+        const list = await res.json();
+        bookOptions.value = (Array.isArray(list) ? list : [])
+          .filter((x) => x && x.type === 'folder')
+          .map((x) => x.name)
+          .filter((n) => !['剧本', '导入', '素材', '设定集', '设定', '科技树'].includes(n) && !String(n).startsWith('_'));
+      } catch (e) { bookOptions.value = []; }
+    };
+
+    const loadWorlds = async () => {
+      try {
+        const res = await fetch(`${API_BASE}/tech/worlds?t=${Date.now()}`);
+        const d = await res.json();
+        worlds.value = (d && d.worlds) || [];
+        worldId.value = (d && d.current) || (worlds.value[0] && worlds.value[0].id) || 'default';
+      } catch (e) { worlds.value = []; }
+    };
+
+    const switchWorld = async (id) => {
+      worldId.value = id;
+      await fetch(`${API_BASE}/tech/worlds`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'current', id })
+      });
+      progress.value = {};
+      custom.value = {};
+      await loadAll();
+      showToast('已切换到：' + ((worlds.value.find((w) => w.id === id) || {}).name || id));
+    };
+
+    const openWorldDialog = (w) => {
+      if (w) {
+        worldDialog.value = { show: true, id: w.id, name: w.name, books: [...(w.books || [])], isNew: false };
+      } else {
+        worldDialog.value = { show: true, id: '', name: '', books: [], isNew: true };
+      }
+    };
+
+    const saveWorld = async () => {
+      const f = worldDialog.value;
+      const name = String(f.name || '').trim();
+      if (!name) return showToast('给世界起个名字', true);
+      const action = f.isNew ? 'create' : 'update';
+      const body = f.isNew ? { action, name, books: f.books } : { action, id: f.id, name, books: f.books };
+      const res = await fetch(`${API_BASE}/tech/worlds`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(body)
+      });
+      const d = await res.json();
+      if (d.success) {
+        worlds.value = d.worlds;
+        worldDialog.value.show = false;
+        if (f.isNew) { await switchWorld(d.current); }
+        else { showToast('✅ 已保存'); }
+      } else {
+        showToast('保存失败：' + (d.error || ''), true);
+      }
+    };
+
+    const deleteWorld = async (w) => {
+      if (!w || w.id === 'default') return showToast('默认世界不能删', true);
+      if (!confirm('删除世界「' + w.name + '」？它的进度会一起删掉。')) return;
+      const res = await fetch(`${API_BASE}/tech/worlds`, {
+        method: 'POST', headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', id: w.id })
+      });
+      const d = await res.json();
+      if (d.success) {
+        worlds.value = d.worlds;
+        await switchWorld(d.current);
+        showToast('已删除');
+      }
+    };
+
+    // ---------- 持久化 ----------
+    const wq = () => 'world=' + encodeURIComponent(worldId.value || 'default');
+
+    const loadAll = async () => {
+      try {
+        const [pRes, dRes] = await Promise.all([
+          fetch(`${API_BASE}/tech/progress?${wq()}&t=${Date.now()}`),
+          fetch(`${API_BASE}/tech/data?${wq()}&t=${Date.now()}`)
+        ]);
+        const p = await pRes.json();
+        const d = await dRes.json();
+        progress.value = (p && p.progress) || {};
+        custom.value = (d && d.custom) || {};
+        const savedIds = (d && Array.isArray(d.routeIds) && d.routeIds.length)
+          ? d.routeIds
+          : (d && d.routeId ? [d.routeId] : []);
+        const okIds = savedIds.filter((id) => BASE_ROUTES.some((r) => r.id === id));
+        if (okIds.length) {
+          routeId.value = okIds[0];
+          syncFromRouteId(okIds);
+        }
+      } catch (e) { /* 离线也能看 */ }
+    };
+    const saveProgress = async () => {
+      try {
+        await fetch(`${API_BASE}/tech/progress`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ world: worldId.value, progress: progress.value })
+        });
+      } catch (e) { showToast('进度保存失败（只存在本机）'); }
+    };
+    const saveCustom = async () => {
+      try {
+        await fetch(`${API_BASE}/tech/data`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ world: worldId.value, custom: custom.value, routeId: routeId.value, routeIds: activeRouteIds.value })
+        });
+      } catch (e) { showToast('自定义内容保存失败'); }
+    };
+    // ⏱ 完成时间弹窗
+    const timeDialog = ref({ show: false, id: '', name: '', value: '' });
+
+    const toggleDone = (id) => {
+      if (progress.value[id]) {
+        // 已掌握的，直接取消
+        const next = { ...progress.value };
+        delete next[id];
+        progress.value = next;
+        saveProgress();
+        showToast('↩ 已取消：' + nameOf(id));
+        return;
+      }
+      // 新完成：问一下时间（可留空）
+      const cur = progress.value[id];
+      timeDialog.value = {
+        show: true,
+        id,
+        name: nameOf(id),
+        value: (cur && cur.at) || ''
+      };
+    };
+
+    const confirmDone = async () => {
+      const { id, value } = timeDialog.value;
+      if (!id) return;
+      const next = { ...progress.value };
+      next[id] = { at: String(value || '').trim(), doneAt: new Date().toISOString() };
+      progress.value = next;
+      timeDialog.value.show = false;
+      await saveProgress();
+      showToast('✅ 已掌握：' + nameOf(id) + (value ? '（' + value + '）' : ''));
+    };
+
+    const skipDone = async () => {
+      timeDialog.value.value = '';
+      await confirmDone();
+    };
+
+    // ---------- 导出到前台 ----------
+    const buildMarkdown = () => {
+      const r = currentRoute.value;
+      const lines = [];
+      lines.push(`# ${r.icon} ${r.name}`, '');
+      lines.push(`> ${r.desc}`, '');
+      if (r.traveler) {
+        lines.push(`> ⚠️ **${warning}**`, '');
+        lines.push('> 你是外来者：技术可以跳步，但一举一动都会被记录。暴露得越早，被盯上的越快。', '');
+      }
+      lines.push('## 政体适配', '');
+      politicsList.value.forEach((era) => {
+        const p = polOf(era.politics);
+        lines.push(`### ${era.icon} ${era.name}（${era.year}）`, '');
+        lines.push(`**适配政体：${era.politics}**`, '');
+        if (p) {
+          lines.push(`- **为什么合适**：${p.why}`);
+          lines.push(`- **优点**：${p.pros}`);
+          lines.push(`- **代价**：${p.cons}`);
+          lines.push(`- **什么时候该变**：${p.shift}`);
+        }
+        lines.push('');
+      });
+      lines.push('## 各时代科技', '');
+      eras.value.forEach((era) => {
+        lines.push(`### ${era.icon} ${era.name}（${era.year}）`, '');
+        era.nodes.forEach((n) => {
+          lines.push(`#### ${n.icon} ${n.name}`, '');
+          if (n.short) lines.push(`*${n.short}*`, '');
+          if (n.desc) lines.push(n.desc, '');
+          if (n.why) lines.push(`**为什么这个阶段做**：${n.why}`, '');
+          if (n.impact) lines.push(`**对世界的影响**：${n.impact}`, '');
+          if (n.tip) lines.push(`**什么时候该点**：${n.tip}`, '');
+          if (n.needs && n.needs.length) lines.push(`**前置**：${n.needs.map(nameOf).join('、')}`, '');
+        });
+      });
+      return lines.join('\n');
+    };
+
+    const openExport = async () => {
+      const md = buildMarkdown();
+      const name = '科技树-' + currentRoute.value.name;
+      try {
+        const res = await fetch(`${API_BASE}/tech/export`, {
+          method: 'POST', headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ name, markdown: md })
+        });
+        const d = await res.json();
+        if (d.success) showToast('✅ 已写入前台：' + d.path + '（刷新站点可见）');
+        else showToast('导出失败：' + (d.error || ''), true);
+      } catch (e) { showToast('导出失败：' + e.message); }
+    };
+
+    watch(routeId, () => { selectedId.value = ''; saveCustom(); });
+    onMounted(async () => {
+      syncFromRouteId(routeId.value);
+      await loadBookOptions();
+      await loadWorlds();
+      // 🪄 没有世界就弹窗引导（每次都弹，直到建好为止）
+      if (!hasRealWorld.value) openWorldDialog(null);
+      loadAll();
+      await nextTick();
+      updateScrollHint();
+      window.addEventListener('resize', updateScrollHint);
+    });
+
+    return {
+      routes, routeId, currentRoute, eras, custom, progress, keyword, onlyTodo,
+      themes, themeId, variantOn, hasBoth, pickTheme, pickVariant, isParallel, activeRouteIds,
+      selectedId, selected, route, routeList, toast, politicsOpen, customOpen, form,
+      total, doneCount, percent, visibleEras, highlight, politicsList,
+      nameOf, iconOf, eraOf, eraDone, unlocksOf, select, selectById, showRoute, isTraveler, warning,
+      detailOpen, boardRef, canScrollMore, onBoardScroll, scrollBoardRight, showHelp, timeDialog, confirmDone, skipDone, worlds, worldId, currentWorld, bookOptions, hasRealWorld, switchWorld, openWorldDialog, worldDialog, saveWorld, deleteWorld,
+      toggleDone, openPolitics, polOf, addEra, addNode, openAddNode, openExport
+    };
+  }
+}).mount('#app');
+</script>
+</body>
+</html>

@@ -59,8 +59,8 @@
     .main-ui.hidden { opacity: 0; pointer-events: none; }
 
     /* 💡 顶部导航核心优化 */
-    .top-nav { background: #252526; display: flex; border-bottom: 1px solid #333; flex-shrink: 0; align-items: center; height: 50px; }
-    .nav-group { display: flex; overflow-x: auto; flex: 1; min-width: 0; scrollbar-width: none; -ms-overflow-style: none; height: 100%; padding: 0 5px; scroll-behavior: smooth;}
+    .top-nav { background: #252526; display: flex; border-bottom: 1px solid #333; flex-shrink: 0; align-items: center; height: 50px; overflow: visible; position: relative; z-index: 200; }
+    .nav-group { display: flex; overflow: visible; flex: 1; min-width: 0; height: 100%; padding: 0 5px; gap: 2px;}
     .nav-group::-webkit-scrollbar { display: none; }
     .nav-btn { padding: 0 15px; height: 100%; background: none; border: none; color: #888; font-size: 14px; cursor: pointer; border-bottom: 2px solid transparent; transition: all 0.2s; white-space: nowrap; display: flex; align-items: center; flex-shrink: 0; }
     .nav-btn:hover { color: #fff; background: #2d2d2d; }
@@ -333,7 +333,45 @@
       .md-textarea, .preview-pane { width: 100% !important; height: 50% !important; border-right: none; border-bottom: 1px solid #333; }
       .toolbar { flex-wrap: wrap; gap: 6px; }
     }
-  </style>
+  
+    /* ---------- 🗂️ 分组下拉导航 ---------- */
+    .nav-group-wrap { position: relative; flex-shrink: 0; }
+    .nav-btn.nav-group-btn { display: flex; align-items: center; gap: 5px; }
+    .nav-btn.nav-group-btn.open { background: #2b3138; color: #fff; }
+    .nav-btn.nav-group-btn.is-active-group { color: #7fc4ee; }
+    .ng-count {
+      font-size: 10px; background: rgba(255,255,255,.1); color: #9aa1ab;
+      border-radius: 999px; padding: 1px 6px; line-height: 1.5;
+    }
+    .ng-arrow { font-size: 10px; opacity: .6; }
+    .nav-dropdown {
+      position: absolute; top: calc(100% + 6px); left: 0; z-index: 300;
+      min-width: 210px; background: #1e2126; border: 1px solid #343a42;
+      border-radius: 10px; padding: 6px; box-shadow: 0 12px 32px rgba(0,0,0,.55);
+      max-height: 70vh; overflow-y: auto;
+    }
+    .nav-drop-item {
+      display: flex; align-items: center; gap: 9px; width: 100%;
+      background: none; border: none; color: #c5ccd4; text-align: left;
+      padding: 8px 10px; border-radius: 7px; cursor: pointer; font-size: 13px;
+    }
+    .nav-drop-item:hover { background: #2b3138; color: #fff; }
+    .nav-drop-item.active { background: rgba(14,99,156,.25); color: #cfe6f7; }
+    .nav-drop-item .nd-icon { font-size: 15px; flex: 0 0 18px; text-align: center; }
+    .nav-drop-item .nd-text { display: flex; flex-direction: column; gap: 1px; min-width: 0; }
+    .nav-drop-item .nd-text b { font-weight: 500; }
+    .nav-drop-item .nd-text i { font-style: normal; font-size: 11px; color: #6f7681; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .m-group-title {
+      font-size: 11px; color: #6f7681; padding: 10px 6px 4px;
+      border-top: 1px solid #262b31; margin-top: 6px;
+    }
+    .m-group-title:first-of-type { border-top: none; margin-top: 0; }
+
+    @media (max-width: 760px) {
+      .nav-group-wrap { display: none; }
+    }
+</style>
 </head>
 <body>
   <div id="app">
@@ -408,14 +446,17 @@
             :class="{ active: currentTab === 'dashboard' }"
             @click="goTab('dashboard')"
           >📊 仪表盘</button>
-          <button
-            v-for="p in dynamicPlugins"
-            :key="p.id"
-            v-show="p.id !== 'dashboard'"
-            class="m-item"
-            :class="{ active: currentTab === p.id }"
-            @click="goTab(p.id)"
-          >{{ p.icon || '🧩' }} {{ p.name }}</button>
+
+          <template v-for="g in navGroups" :key="g.id">
+            <div class="m-group-title">{{ g.icon }} {{ g.name }}</div>
+            <button
+              v-for="p in g.items"
+              :key="p.id"
+              class="m-item"
+              :class="{ active: currentTab === p.id }"
+              @click="goTab(p.id)"
+            >{{ p.icon || '🧩' }} {{ p.name }}</button>
+          </template>
         </div>
         <div class="m-drawer-foot">
           <button class="m-act" @click="navDrawer = false; checkUpdate()" :disabled="isCheckingUpdate">🔄 检测更新</button>
@@ -426,21 +467,38 @@
 
       <div class="top-nav">
         <!-- 💡 添加 @wheel 监听，实现鼠标滚轮横向滑动 -->
-        <div class="nav-group" @wheel.prevent="handleNavWheel" ref="navGroupRef">
+        <div class="nav-group" ref="navGroupRef">
           <!-- 仪表盘永远固定在第一位 -->
-          <button class="nav-btn" :class="{ active: currentTab === 'dashboard' }" @click="currentTab = 'dashboard'">📊 仪表盘</button>
-          
-          <!-- 其他所有插件全部由 navigation.json 的顺序动态渲染 -->
-          <template v-for="p in dynamicPlugins" :key="p.id">
-            <button 
-              v-if="p.id !== 'dashboard'"
-              class="nav-btn" 
-              :class="{ active: currentTab === p.id }" 
-              @click="currentTab = p.id"
+          <button class="nav-btn" :class="{ active: currentTab === 'dashboard' }" @click="goTab('dashboard')">📊 仪表盘</button>
+
+          <!-- 🗂️ 其余插件按分组收进下拉栏 -->
+          <div class="nav-group-wrap" v-for="g in navGroups" :key="g.id">
+            <button
+              class="nav-btn nav-group-btn"
+              :class="{ active: isGroupActive(g), open: openGroup === g.id }"
+              @click.stop="toggleGroup(g.id)"
             >
-              {{ p.icon || '🧩' }} {{ p.name }}
+              {{ g.icon }} {{ g.name }}
+              <span class="ng-count">{{ g.items.length }}</span>
+              <span class="ng-arrow">▾</span>
             </button>
-          </template>
+
+            <div class="nav-dropdown" v-show="openGroup === g.id">
+              <button
+                v-for="p in g.items"
+                :key="p.id"
+                class="nav-drop-item"
+                :class="{ active: currentTab === p.id }"
+                @click="goTab(p.id)"
+              >
+                <span class="nd-icon">{{ p.icon || '🧩' }}</span>
+                <span class="nd-text">
+                  <b>{{ p.name }}</b>
+                  <i v-if="showDesc(p)">{{ p.desc }}</i>
+                </span>
+              </button>
+            </div>
+          </div>
         </div>
         
         <div class="nav-actions">
@@ -852,6 +910,11 @@
 
         // 点空白处关闭菜单
         const onDocClick = (e) => {
+          // 🗂️ 点空白处收起分组下拉
+          if (openGroup.value) {
+            const box = e.target.closest && e.target.closest('.nav-group-wrap');
+            if (!box) openGroup.value = '';
+          }
           if (!toolsOpen.value) return;
           const el = toolRef.value;
           if (el && !el.contains(e.target)) closeTools();
@@ -1026,8 +1089,43 @@
         const currentTab = ref('dashboard');
         const navDrawer = ref(false);
 
+        // ---------- 🗂️ 导航分组 ----------
+        const NAV_GROUP_ORDER = [
+          { id: 'write', name: '写作', icon: '✍️' },
+          { id: 'world', name: '设定', icon: '🌍' },
+          { id: 'safety', name: '安全', icon: '🛡️' },
+          { id: 'publish', name: '发布', icon: '🚀' },
+          { id: 'system', name: '系统', icon: '⚙️' }
+        ];
+        const openGroup = ref('');
+
+        const navGroups = computed(() => {
+          const buckets = {};
+          NAV_GROUP_ORDER.forEach((g) => { buckets[g.id] = []; });
+          (dynamicPlugins.value || []).forEach((p) => {
+            if (!p || p.id === 'dashboard') return;
+            const gid = NAV_GROUP_ORDER.some((g) => g.id === p.group) ? p.group : 'system';
+            buckets[gid].push(p);
+          });
+          return NAV_GROUP_ORDER
+            .map((g) => ({ ...g, items: buckets[g.id] }))
+            .filter((g) => g.items.length > 0);
+        });
+
+        const toggleGroup = (id) => {
+          openGroup.value = openGroup.value === id ? '' : id;
+        };
+        const isGroupActive = (g) => g.items.some((p) => p.id === currentTab.value);
+        const closeNavGroups = () => { openGroup.value = ''; };
+        const showDesc = (p) => {
+          const d = String((p && p.desc) || '').trim();
+          if (!d) return false;
+          return !['系统内置', '自定义', '自动注册的插件'].includes(d);
+        };
+
         // 💡 抽屉里点插件：切过去并关掉抽屉
         const goTab = (id) => {
+          openGroup.value = '';
           currentTab.value = id;
           navDrawer.value = false;
         };
@@ -1389,6 +1487,7 @@
           showTableModal, tableRows, tableCols, insertTable,
           modal, closeModal, confirmModal,
           navGroupRef, handleNavWheel, writerOpenPath,
+          navGroups, openGroup, toggleGroup, isGroupActive, closeNavGroups, showDesc,
           dynamicPlugins, checkUpdate, repairFiles, doRepair, toolsOpen, toolRef, toggleTools, pickTool, restartBackend, navDrawer, goTab, currentTitle, pluginSrc
         };
       }
